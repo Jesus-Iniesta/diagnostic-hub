@@ -5,7 +5,9 @@
   "type": "module",
   "packageManager": "pnpm@10.33.4",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "scripts": {
     "dev": "vite",
@@ -14,10 +16,12 @@
   },
   "dependencies": {
     "@mantine/core": "^7.17.0",
+    "@mantine/form": "^7.17.8",
     "@mantine/hooks": "^7.17.0",
     "@tabler/icons-react": "^3.31.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

@@ -1,20 +1,67 @@
-import {
-  API_BASE_URL,
-  AUTH_ME_URL,
-  AUTH_NUMERO_CUENTA_URL,
-  AUTH_TOKEN_URL,
-  HEALTH_URL,
-} from './config';
+import { Center, Loader } from '@mantine/core';
+import { Navigate, Route, Routes } from 'react-router-dom';
+
+import ProtectedRoute from './components/ProtectedRoute';
+import { useAuth } from './contexts/AuthContext';
+import { roleHome } from './lib/roles';
+import AcreditadorHome from './pages/acreditador/AcreditadorHome';
+import AdminHome from './pages/admin/AdminHome';
+import AlumnoHome from './pages/alumno/AlumnoHome';
+import LoginPage from './pages/LoginPage';
+import ProfesorHome from './pages/profesor/ProfesorHome';
+
+function RootIndex() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <Center h="100vh">
+        <Loader />
+      </Center>
+    );
+  }
+
+  return <Navigate to={user ? roleHome(user.role.name) : '/login'} replace />;
+}
 
 export default function App() {
   return (
-    <div style={{ minHeight: '100vh', padding: 24 }}>
-      <h1>TutoNet</h1>
-      <p>Frontend en construcción. API base: {API_BASE_URL}</p>
-      <p>URL de health: {HEALTH_URL}</p>
-      <p>URL de autenticación por token: {AUTH_TOKEN_URL}</p>
-      <p>URL de autenticación por número de cuenta: {AUTH_NUMERO_CUENTA_URL}</p>
-      <p>URL de información del usuario: {AUTH_ME_URL}</p>
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<RootIndex />} />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute roles={['administrador']}>
+            <AdminHome />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profesor"
+        element={
+          <ProtectedRoute roles={['profesor']}>
+            <ProfesorHome />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/acreditador"
+        element={
+          <ProtectedRoute roles={['acreditador']}>
+            <AcreditadorHome />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/alumno"
+        element={
+          <ProtectedRoute roles={['alumno']}>
+            <AlumnoHome />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

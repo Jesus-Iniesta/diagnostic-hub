@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from pathlib import Path
 
 from pydantic import field_validator
@@ -29,6 +29,14 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+
+    jwt_cookie_name: str = "tutonet_token"
+    jwt_cookie_secure: bool = False
+    jwt_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+
+    @property
+    def jwt_cookie_max_age(self) -> int:
+        return self.access_token_expire_minutes * 60
 
     @field_validator("database_url", "jwt_secret")
     @classmethod

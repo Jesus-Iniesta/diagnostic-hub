@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWTError
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError
@@ -17,7 +17,10 @@ from app.models.role import Role
 from app.models.user import User
 
 password_hash = PasswordHash.recommended()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/v1/auth/token",
+    auto_error=False,
+)
 
 credentials_exc = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -70,9 +73,14 @@ def create_access_token(sub: str, minutes: int | None = None) -> str:
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
+    bearer: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    token = request.cookies.get(settings.jwt_cookie_name) or bearer
+    if not token:
+        raise credentials_exc
+
     try:
         payload = decode_token(token)
         sub: Optional[str] = payload.get("sub")
