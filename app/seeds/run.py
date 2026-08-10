@@ -4,6 +4,8 @@ import typer
 
 from app.seeds.service import (
     run_all,
+    run_seed_alumnos,
+    run_seed_ingenierias,
     run_seed_permissions,
     run_seed_roles,
     run_seed_users,
@@ -31,10 +33,22 @@ def roles():
     typer.echo(f"Roles seed completed ({n} created).")
 
 
+@app.command("ingenierias")
+def ingenierias():
+    n = asyncio.run(run_seed_ingenierias())
+    typer.echo(f"Ingenierias seed completed ({n} created).")
+
+
 @app.command("users")
 def users():
     n = asyncio.run(run_seed_users())
     typer.echo(f"Users seed completed ({n} created).")
+
+
+@app.command("alumnos")
+def alumnos():
+    n = asyncio.run(run_seed_alumnos())
+    typer.echo(f"Alumnos seed completed ({n} created).")
 
 
 if __name__ == "__main__":

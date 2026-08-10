@@ -1,15 +1,19 @@
 from contextlib import asynccontextmanager
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.base import Base
 from app.core.database import async_session, engine
 from app.core.security import hash_password
+from app.models.alumno import Alumno
+from app.models.ingenieria import Ingenieria
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.role_permission import role_permissions
 from app.models.user import AuthMethod, User
+from app.seeds.data.alumnos import ALUMNOS
+from app.seeds.data.ingenierias import INGENIERIAS
 from app.seeds.data.permissions import PERMISSIONS
 from app.seeds.data.roles import ROLES
 from app.seeds.data.users import USERS
@@ -92,6 +96,8 @@ async def run_seed_users() -> int:
                     select(User).where(User.correo_personal == data["correo_personal"])
                 )
                 if exists:
+                    if data.get("rfc") and not exists.rfc:
+                        exists.rfc = data["rfc"]
                     continue
                 role = await db.scalar(
                     select(Role).where(Role.name == data["role"])
@@ -102,6 +108,7 @@ async def run_seed_users() -> int:
                     apellido_materno=data["apellido_materno"],
                     correo_personal=data["correo_personal"],
                     correo_institucional=data["correo_institucional"],
+                    rfc=data.get("rfc"),
                     auth_method=AuthMethod(data["auth_method"]),
                     hashed_password=hash_password(data["password"]),
                     role_id=role.id if role else None,
@@ -111,10 +118,69 @@ async def run_seed_users() -> int:
     return created
 
 
+async def run_seed_ingenierias() -> int:
+    async with async_session() as db:
+        created = 0
+        async with atomic_session(db):
+            for data in INGENIERIAS:
+                exists = await db.scalar(
+                    select(Ingenieria).where(Ingenieria.clave == data["clave"])
+                )
+                if not exists:
+                    db.add(
+                        Ingenieria(clave=data["clave"], nombre=data["nombre"])
+                    )
+                    created += 1
+    return created
+
+
+async def run_seed_alumnos() -> int:
+    async with async_session() as db:
+        created = 0
+        async with atomic_session(db):
+            for data in ALUMNOS:
+                user = await db.scalar(
+                    select(User).where(User.correo_personal == data["usuario_correo"])
+                )
+                if not user:
+                    continue
+                exists = await db.scalar(
+                    select(Alumno).where(
+                        or_(
+                            Alumno.numero_cuenta == data["numero_cuenta"],
+                            Alumno.numero_folio == data.get("numero_folio"),
+                        )
+                    )
+                )
+                if exists:
+                    continue
+                ingenieria = await db.scalar(
+                    select(Ingenieria).where(Ingenieria.clave == data["ingenieria_clave"])
+                )
+                alumno = Alumno(
+                    usuario_id=user.id,
+                    ingenieria_id=ingenieria.id if ingenieria else None,
+                    numero_cuenta=data.get("numero_cuenta"),
+                    numero_folio=data.get("numero_folio"),
+                    periodo_ingreso=data["periodo_ingreso"],
+                )
+                db.add(alumno)
+                created += 1
+    return created
+
+
 async def run_all() -> dict:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     p = await run_seed_permissions()
     r = await run_seed_roles()
+    i = await run_seed_ingenierias()
     u = await run_seed_users()
-    return {"permissions": p, "roles": r, "users": u}
+    a = await run_seed_alumnos()
+    return {
+        "permissions": p,
+        "roles": r,
+        "ingenierias": i,
+        "users": u,
+        "alumnos": a,
+    }
