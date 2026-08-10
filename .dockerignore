@@ -13,9 +13,3 @@ postgres-data/
 .dockerignore
 .gitignore
 README.md
-alembic.ini
-alembic/
-Dockerfile
-docker-compose.yml
-requirements.txt
-.env.example
