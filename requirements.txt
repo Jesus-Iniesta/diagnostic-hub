@@ -29,5 +29,8 @@ sentry-sdk==2.60.0
 pandas==2.2.3
 openpyxl==3.1.5
 
+# === CLIs / utilidades ===
+typer==0.27.1
+
 # === Desarrollo ===
 ruff==0.15.18
