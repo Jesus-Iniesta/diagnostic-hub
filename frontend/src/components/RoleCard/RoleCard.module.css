@@ -1,0 +1,74 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 290px;
+  min-height: 300px;
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 12px;
+  padding: 2rem 1.5rem 1.5rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    border-color 200ms ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px -10px rgba(16, 24, 40, 0.16);
+}
+
+.card:focus-within {
+  outline: 2px solid var(--role-button);
+  outline-offset: 2px;
+}
+
+.iconCircle {
+  background-color: var(--role-light) !important;
+  color: var(--role-icon) !important;
+}
+
+.title {
+  color: var(--role-color);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.description {
+  color: #667085;
+  line-height: 1.45;
+}
+
+.button {
+  --button-bg: var(--role-button);
+  --button-hover: var(--role-button-hover);
+  --button-color: #ffffff;
+  margin-top: auto;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.footerIcon {
+  display: inline-flex;
+  color: #667085;
+}
+
+.footerText {
+  color: #667085;
+}
+
+@media (max-width: 480px) {
+  .card {
+    max-width: 100%;
+  }
+}

@@ -9,6 +9,7 @@ import AdminHome from './pages/admin/AdminHome';
 import AlumnoHome from './pages/alumno/AlumnoHome';
 import LoginPage from './pages/LoginPage';
 import ProfesorHome from './pages/profesor/ProfesorHome';
+import WelcomePage from './pages/WelcomePage';
 
 function RootIndex() {
   const { user, loading } = useAuth();
@@ -21,7 +22,11 @@ function RootIndex() {
     );
   }
 
-  return <Navigate to={user ? roleHome(user.role.name) : '/login'} replace />;
+  if (user) {
+    return <Navigate to={roleHome(user.role.name)} replace />;
+  }
+
+  return <WelcomePage />;
 }
 
 export default function App() {

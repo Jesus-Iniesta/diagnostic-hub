@@ -1,0 +1,14 @@
+.notice {
+  width: 100%;
+  max-width: 520px;
+  background: #e8f5ef;
+  border: 1px solid rgba(0, 107, 73, 0.22);
+  padding: 1rem 1.25rem;
+  text-align: left;
+}
+
+.icon {
+  display: inline-flex;
+  margin-top: 2px;
+  color: #006b49;
+}

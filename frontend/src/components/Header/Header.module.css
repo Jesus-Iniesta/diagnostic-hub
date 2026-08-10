@@ -1,0 +1,19 @@
+.header {
+  background: #ffffff;
+  border-bottom: 1px solid #e4e7ec;
+}
+
+.inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 68px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+@media (max-width: 576px) {
+  .inner {
+    min-height: 60px;
+  }
+}

@@ -16,10 +16,16 @@ import { roleHome } from '../../lib/roles';
 
 type LoginTab = 'credenciales' | 'cuenta';
 
-export default function LoginForm() {
+export type { LoginTab };
+
+interface LoginFormProps {
+  initialTab?: LoginTab;
+}
+
+export default function LoginForm({ initialTab = 'credenciales' }: LoginFormProps) {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<LoginTab>('credenciales');
+  const [tab, setTab] = useState<LoginTab>(initialTab);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
