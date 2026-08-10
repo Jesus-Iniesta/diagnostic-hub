@@ -21,6 +21,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
+    swagger_ui_parameters={"persistAuthorization": True} # solo dev
 )
 
 app.add_middleware(

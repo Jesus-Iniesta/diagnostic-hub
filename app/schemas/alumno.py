@@ -51,3 +51,10 @@ class AlumnoRead(AlumnoBase):
     created_at: datetime
     usuario: UserRead
     ingenieria: IngenieriaRead
+
+
+class AlumnoListResponse(BaseModel):
+    items: list[AlumnoRead]
+    total: int
+    limit: int
+    offset: int
