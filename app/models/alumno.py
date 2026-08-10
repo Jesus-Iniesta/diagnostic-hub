@@ -29,6 +29,11 @@ class Alumno(Base):
         nullable=False,
         index=True
     )
+    numero_cuenta: Mapped[str | None] = mapped_column(
+        nullable=True,
+        index=True,
+        unique=True
+    )
     numero_folio: Mapped[str | None] = mapped_column(
         nullable=True,
         index=True,

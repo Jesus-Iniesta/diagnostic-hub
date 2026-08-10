@@ -9,6 +9,7 @@ from app.schemas.user import UserRead
 class AlumnoBase(BaseModel):
     usuario_id: int
     ingenieria_id: int
+    numero_cuenta: str | None = None
     numero_folio: str | None = None
     periodo_ingreso: str
     promedio_bachillerato: float | None = None
@@ -29,6 +30,7 @@ class AlumnoCreate(AlumnoBase):
 class AlumnoUpdate(BaseModel):
     usuario_id: int | None = None
     ingenieria_id: int | None = None
+    numero_cuenta: str | None = None
     numero_folio: str | None = None
     periodo_ingreso: str | None = None
     promedio_bachillerato: float | None = None

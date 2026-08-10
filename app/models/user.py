@@ -41,6 +41,10 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(
         String(255), nullable=True)
 
+    rfc: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, unique=True, index=True
+        )
+
     auth_method: Mapped[AuthMethod] = mapped_column(
         String(50),
         nullable=False,

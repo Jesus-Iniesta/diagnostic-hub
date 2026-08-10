@@ -12,6 +12,7 @@ class UserBase(BaseModel):
     apellido_materno: str
     correo_personal: str
     correo_institucional: str | None = None
+    rfc: str | None = None
     auth_method: AuthMethod = AuthMethod.PASSWORD
 
 
@@ -26,6 +27,7 @@ class UserUpdate(BaseModel):
     apellido_materno: str | None = None
     correo_personal: str | None = None
     correo_institucional: str | None = None
+    rfc: str | None = None
     auth_method: AuthMethod | None = None
     activo: bool | None = None
     role_id: int | None = None

@@ -1,4 +1,5 @@
 from app.schemas.alumno import AlumnoCreate, AlumnoRead, AlumnoUpdate
+from app.schemas.auth import NumeroCuentaLogin, Token
 from app.schemas.asignacion_examen import (
     AsignacionExamenCreate,
     AsignacionExamenRead,
@@ -52,6 +53,7 @@ __all__ = [
     "ModuloCreate",
     "ModuloRead",
     "ModuloUpdate",
+    "NumeroCuentaLogin",
     "PermissionCreate",
     "PermissionRead",
     "PermissionUpdate",
@@ -61,6 +63,7 @@ __all__ = [
     "RoleCreate",
     "RoleRead",
     "RoleUpdate",
+    "Token",
     "UserCreate",
     "UserRead",
     "UserUpdate",
