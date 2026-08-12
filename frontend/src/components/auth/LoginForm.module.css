@@ -1,0 +1,42 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  width: 100%;
+}
+
+.fieldInput {
+  height: 54px;
+  border: 1px solid #dde2e6 !important;
+  border-radius: 9px !important;
+  background: #ffffff;
+  color: #1f2933;
+}
+
+.fieldInput:focus,
+.fieldInput:focus-within {
+  border-color: #006b49 !important;
+  box-shadow: 0 0 0 3px rgba(0, 107, 73, 0.12) !important;
+}
+
+.fieldInput::placeholder {
+  color: #9aa3ad;
+}
+
+.submitButton {
+  height: 54px;
+  font-weight: 600;
+}
+
+.restricted {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  color: #667085;
+  margin-top: 0.25rem;
+}
+
+.restricted svg {
+  flex-shrink: 0;
+}

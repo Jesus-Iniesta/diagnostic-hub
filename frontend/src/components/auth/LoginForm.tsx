@@ -2,30 +2,35 @@ import {
   Alert,
   Button,
   PasswordInput,
-  Stack,
-  Tabs,
+  Text,
   TextInput,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import {
+  IconEye,
+  IconEyeOff,
+  IconLock,
+  IconMail,
+  IconUser,
+} from '@tabler/icons-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { loginWithNumeroCuenta, loginWithPassword } from '../../lib/api';
 import { roleHome } from '../../lib/roles';
+import classes from './LoginForm.module.css';
 
-type LoginTab = 'credenciales' | 'cuenta';
-
-export type { LoginTab };
+export type LoginMode = 'alumno' | 'profesor';
 
 interface LoginFormProps {
-  initialTab?: LoginTab;
+  mode?: LoginMode;
 }
 
-export default function LoginForm({ initialTab = 'credenciales' }: LoginFormProps) {
+export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<LoginTab>(initialTab);
+  const esAlumno = mode === 'alumno';
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,10 +42,10 @@ export default function LoginForm({ initialTab = 'credenciales' }: LoginFormProp
     },
     validate: {
       username: (value) =>
-        tab === 'credenciales' && !value.trim() ? 'Ingresa tu correo o RFC' : null,
-      password: (value) => (tab === 'credenciales' && !value ? 'Ingresa tu contraseña' : null),
+        !esAlumno && !value.trim() ? 'Ingresa tu correo institucional' : null,
+      password: (value) => (!esAlumno && !value ? 'Ingresa tu contraseña' : null),
       numeroCuenta: (value) =>
-        tab === 'cuenta' && !value.trim() ? 'Ingresa tu número de cuenta' : null,
+        esAlumno && !value.trim() ? 'Ingresa tu número de cuenta' : null,
     },
   });
 
@@ -49,7 +54,7 @@ export default function LoginForm({ initialTab = 'credenciales' }: LoginFormProp
     setSubmitting(true);
     try {
       const user = await login(async () => {
-        if (tab === 'cuenta') {
+        if (esAlumno) {
           await loginWithNumeroCuenta(numeroCuenta);
         } else {
           await loginWithPassword(username, password);
@@ -63,57 +68,71 @@ export default function LoginForm({ initialTab = 'credenciales' }: LoginFormProp
     }
   });
 
-  const handleTabChange = (value: string | null) => {
-    if (value === 'credenciales' || value === 'cuenta') {
-      setTab(value);
-      setError(null);
-    }
-  };
-
   return (
-    <form onSubmit={handleSubmit}>
-      <Tabs value={tab} onChange={handleTabChange}>
-        <Tabs.List grow>
-          <Tabs.Tab value="credenciales">Correo / RFC</Tabs.Tab>
-          <Tabs.Tab value="cuenta">Número de cuenta</Tabs.Tab>
-        </Tabs.List>
-
-        <Stack mt="md">
-          {tab === 'credenciales' ? (
-            <>
-              <TextInput
-                label="Usuario"
-                placeholder="correo o RFC"
-                autoComplete="username"
-                {...form.getInputProps('username')}
-              />
-              <PasswordInput
-                label="Contraseña"
-                placeholder="Tu contraseña"
-                autoComplete="current-password"
-                {...form.getInputProps('password')}
-              />
-            </>
-          ) : (
-            <TextInput
-              label="Número de cuenta"
-              placeholder="ej. 1724300"
-              autoComplete="username"
-              {...form.getInputProps('numeroCuenta')}
-            />
-          )}
-        </Stack>
-      </Tabs>
+    <form onSubmit={handleSubmit} className={classes.form}>
+      {esAlumno ? (
+        <TextInput
+          label="Número de cuenta"
+          placeholder="Ingresa tu número de cuenta"
+          size="xl"
+          autoComplete="username"
+          leftSection={<IconUser size={18} aria-hidden="true" />}
+          classNames={{ input: classes.fieldInput }}
+          {...form.getInputProps('numeroCuenta')}
+        />
+      ) : (
+        <>
+          <TextInput
+            label="Correo institucional"
+            placeholder="tu.correo@uaemex.mx"
+            size="xl"
+            autoComplete="username"
+            leftSection={<IconMail size={18} aria-hidden="true" />}
+            classNames={{ input: classes.fieldInput }}
+            {...form.getInputProps('username')}
+          />
+          <PasswordInput
+            label="Contraseña"
+            placeholder="Ingresa tu contraseña"
+            size="xl"
+            autoComplete="current-password"
+            leftSection={<IconLock size={18} aria-hidden="true" />}
+            visibilityToggleIcon={({ reveal }) =>
+              reveal ? (
+                <IconEyeOff size={18} aria-hidden="true" />
+              ) : (
+                <IconEye size={18} aria-hidden="true" />
+              )
+            }
+            classNames={{ input: classes.fieldInput }}
+            {...form.getInputProps('password')}
+          />
+        </>
+      )}
 
       {error && (
-        <Alert color="red" mt="md">
+        <Alert color="red" p="sm">
           {error}
         </Alert>
       )}
 
-      <Button fullWidth mt="lg" type="submit" loading={submitting}>
-        Iniciar sesión
+      <Button
+        type="submit"
+        size="xl"
+        fullWidth
+        color="brand.8"
+        className={classes.submitButton}
+        loading={submitting}
+      >
+        Ingresar
       </Button>
+
+      <div className={classes.restricted}>
+        <IconLock size={14} aria-hidden="true" />
+        <Text component="span" size="sm">
+          {esAlumno ? 'Acceso exclusivo para alumnos' : 'Solo personal autorizado'}
+        </Text>
+      </div>
     </form>
   );
 }

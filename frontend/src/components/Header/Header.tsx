@@ -1,9 +1,12 @@
 import { Button, Container, Group, Stack, Text, ThemeIcon } from '@mantine/core';
 import { IconBuildingCommunity } from '@tabler/icons-react';
+import { useNavigate } from 'react-router-dom';
 
 import classes from './Header.module.css';
 
 export default function Header() {
+  const navigate = useNavigate();
+
   return (
     <header className={classes.header}>
       <Container size="lg" className={classes.inner}>
@@ -25,6 +28,7 @@ export default function Header() {
           variant="subtle"
           color="gray"
           leftSection={<IconBuildingCommunity size={18} aria-hidden="true" />}
+          onClick={() => navigate('/login?modo=institucional')}
         >
           Acceso institucional
         </Button>
