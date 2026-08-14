@@ -1,0 +1,96 @@
+.header {
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 32px;
+  background: #ffffff;
+  border-bottom: 1px solid #e8eaf0;
+}
+
+.burger {
+  color: #475467;
+  flex-shrink: 0;
+}
+
+.period {
+  width: 232px;
+  height: 56px;
+  padding: 0 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.period:hover {
+  background: #fafbfc;
+}
+
+.periodIcon {
+  flex-shrink: 0;
+  color: #475467;
+}
+
+.periodText {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.periodLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #98a2b3;
+}
+
+.periodValue {
+  font-size: 15px;
+  font-weight: 600;
+  color: #17153b;
+}
+
+.periodChevron {
+  flex-shrink: 0;
+  color: #98a2b3;
+}
+
+.bell {
+  position: relative;
+  color: #475467;
+  flex-shrink: 0;
+}
+
+.dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef3e55;
+  border: 2px solid #ffffff;
+}
+
+@media (max-width: 992px) {
+  .period {
+    width: 200px;
+  }
+}
+
+@media (max-width: 576px) {
+  .header {
+    padding: 0 16px;
+  }
+
+  .period {
+    width: 176px;
+  }
+
+  .periodLabel {
+    display: none;
+  }
+}

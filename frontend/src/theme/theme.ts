@@ -1,5 +1,33 @@
 import { createTheme } from '@mantine/core';
 
+export const dashboardColors = {
+  sidebar: '#1C1954',
+  sidebarActive: '#4F46E5',
+
+  background: '#F7F8FC',
+  card: '#FFFFFF',
+
+  textPrimary: '#17153B',
+  textSecondary: '#667085',
+
+  blue: '#2563EB',
+  blueLight: '#E8F1FF',
+
+  green: '#2E9B62',
+  greenLight: '#E7F7EF',
+
+  orange: '#F59E0B',
+  orangeLight: '#FFF3D8',
+
+  purple: '#7C3AED',
+  purpleLight: '#F1E8FF',
+
+  red: '#EF3E55',
+  redLight: '#FFE8EC',
+
+  border: '#E8EAF0',
+} as const;
+
 export const theme = createTheme({
   primaryColor: 'brand',
   fontFamily: 'Inter, sans-serif',

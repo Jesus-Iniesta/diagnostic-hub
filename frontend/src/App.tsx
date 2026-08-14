@@ -5,7 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
 import { roleHome } from './lib/roles';
 import AcreditadorHome from './pages/acreditador/AcreditadorHome';
-import AdminHome from './pages/admin/AdminHome';
+import AdminDashboard from './pages/admin/AdminDashboard';
 import AlumnoHome from './pages/alumno/AlumnoHome';
 import LoginPage from './pages/LoginPage';
 import ProfesorHome from './pages/profesor/ProfesorHome';
@@ -38,7 +38,7 @@ export default function App() {
         path="/admin"
         element={
           <ProtectedRoute roles={['administrador']}>
-            <AdminHome />
+            <AdminDashboard />
           </ProtectedRoute>
         }
       />
