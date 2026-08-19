@@ -6,6 +6,7 @@ from app.models.user import AuthMethod, User
 
 from app.models.ingenieria import Ingenieria
 from app.models.alumno import Alumno
+from app.models.configuracion import Configuracion
 from app.models.examen import Examen
 from app.models.modulo import Modulo
 from app.models.pregunta import Pregunta
@@ -22,6 +23,7 @@ __all__ = [
     "User",
     "Ingenieria",
     "Alumno",
+    "Configuracion",
     "Examen",
     "Modulo",
     "Pregunta",
