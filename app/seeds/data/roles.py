@@ -11,6 +11,7 @@ ROLES = [
             "consultar_estadisticas",
             "consultar_resultados_grupo",
             "consultar_mis_resultados",
+            "gestionar_registro",
         ],
     },
     {

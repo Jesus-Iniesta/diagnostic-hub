@@ -31,4 +31,8 @@ PERMISSIONS = [
         "name": "consultar_mis_resultados",
         "description": "Consultar sus propios resultados",
     },
+    {
+        "name": "gestionar_registro",
+        "description": "Habilitar o deshabilitar el formulario de registro de alumnos",
+    },
 ]
