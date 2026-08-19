@@ -1,0 +1,23 @@
+.welcome {
+  padding-top: 6px;
+}
+
+.welcomeTitle {
+  margin: 0;
+  color: #17153b;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.welcomeSubtitle {
+  color: #667085;
+  font-size: 15px;
+  margin-top: 6px;
+}
+
+@media (max-width: 576px) {
+  .welcomeTitle {
+    font-size: 24px;
+  }
+}

@@ -3,23 +3,20 @@ import { useNavigate } from 'react-router-dom';
 
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import ResumenAlumno from '../../components/ResumenAlumno/ResumenAlumno';
-import { useAuth } from '../../contexts/AuthContext';
-import classes from './AlumnoHome.module.css';
+import classes from './AlumnoContacto.module.css';
 
-export default function AlumnoHome() {
-  const { user } = useAuth();
+export default function AlumnoContacto() {
   const navigate = useNavigate();
-
-  const nombre = user?.nombre ?? '';
 
   return (
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          ¡Hola, {nombre}! 👋
+          Mis datos de contacto
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Antes de consultar tus resultados, completa tus datos de contacto.
+          Mantén actualizada tu información para relacionar correctamente tus
+          evaluaciones.
         </Text>
       </div>
 

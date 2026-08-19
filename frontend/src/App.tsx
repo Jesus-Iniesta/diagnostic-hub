@@ -6,7 +6,10 @@ import { useAuth } from './contexts/AuthContext';
 import { roleHome } from './lib/roles';
 import AcreditadorHome from './pages/acreditador/AcreditadorHome';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AlumnoContacto from './pages/alumno/AlumnoContacto';
 import AlumnoHome from './pages/alumno/AlumnoHome';
+import AlumnoLayout from './pages/alumno/AlumnoLayout';
+import AlumnoResultados from './pages/alumno/AlumnoResultados';
 import LoginPage from './pages/LoginPage';
 import ProfesorHome from './pages/profesor/ProfesorHome';
 import WelcomePage from './pages/WelcomePage';
@@ -62,10 +65,14 @@ export default function App() {
         path="/alumno"
         element={
           <ProtectedRoute roles={['alumno']}>
-            <AlumnoHome />
+            <AlumnoLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<AlumnoHome />} />
+        <Route path="contacto" element={<AlumnoContacto />} />
+        <Route path="resultados" element={<AlumnoResultados />} />
+      </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -1,0 +1,97 @@
+.welcome {
+  padding-top: 6px;
+}
+
+.welcomeTitle {
+  margin: 0;
+  color: #17153b;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.welcomeSubtitle {
+  color: #667085;
+  font-size: 15px;
+  margin-top: 6px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #eef0f4;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.03);
+  border-radius: 16px;
+  max-width: 720px;
+}
+
+.iconBox {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #e8f1ff;
+}
+
+.title {
+  color: #17153b;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.subtitle {
+  color: #98a2b3;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.scoreRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.scoreLabel {
+  color: #667085;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.scoreValue {
+  color: #17153b;
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.levelBadge {
+  font-size: 14px;
+  padding: 6px 14px;
+}
+
+.feedbackTitle {
+  color: #17153b;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.feedbackText {
+  color: #475467;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+@media (max-width: 576px) {
+  .welcomeTitle {
+    font-size: 24px;
+  }
+
+  .scoreValue {
+    font-size: 34px;
+  }
+}
