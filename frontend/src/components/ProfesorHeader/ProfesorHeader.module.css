@@ -1,0 +1,30 @@
+.header {
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 32px;
+  background: #ffffff;
+  border-bottom: 1px solid #e8eaf0;
+}
+
+.burger {
+  color: #475467;
+  flex-shrink: 0;
+}
+
+.userName {
+  color: #17153b;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 576px) {
+  .header {
+    padding: 0 16px;
+  }
+
+  .userName {
+    display: none;
+  }
+}

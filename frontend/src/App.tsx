@@ -5,13 +5,18 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
 import { roleHome } from './lib/roles';
 import AcreditadorHome from './pages/acreditador/AcreditadorHome';
+import AdminConfiguracion from './pages/admin/AdminConfiguracion';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminLayout from './pages/admin/AdminLayout';
 import AlumnoContacto from './pages/alumno/AlumnoContacto';
 import AlumnoHome from './pages/alumno/AlumnoHome';
 import AlumnoLayout from './pages/alumno/AlumnoLayout';
 import AlumnoResultados from './pages/alumno/AlumnoResultados';
 import LoginPage from './pages/LoginPage';
+import ProfesorGrupo from './pages/profesor/ProfesorGrupo';
 import ProfesorHome from './pages/profesor/ProfesorHome';
+import ProfesorLayout from './pages/profesor/ProfesorLayout';
+import ProfesorResultados from './pages/profesor/ProfesorResultados';
 import WelcomePage from './pages/WelcomePage';
 
 function RootIndex() {
@@ -41,18 +46,25 @@ export default function App() {
         path="/admin"
         element={
           <ProtectedRoute roles={['administrador']}>
-            <AdminDashboard />
+            <AdminLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<AdminDashboard />} />
+        <Route path="configuracion" element={<AdminConfiguracion />} />
+      </Route>
       <Route
         path="/profesor"
         element={
           <ProtectedRoute roles={['profesor']}>
-            <ProfesorHome />
+            <ProfesorLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<ProfesorHome />} />
+        <Route path="grupo" element={<ProfesorGrupo />} />
+        <Route path="resultados" element={<ProfesorResultados />} />
+      </Route>
       <Route
         path="/acreditador"
         element={

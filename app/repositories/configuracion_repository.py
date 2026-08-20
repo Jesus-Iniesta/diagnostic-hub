@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.configuracion import Configuracion
 
 REGISTRO_HABILITADO_KEY = "registro_habilitado"
+CONTACTO_HABILITADO_KEY = "contacto_habilitado"
 
 
 class ConfiguracionRepository:
@@ -30,4 +31,8 @@ class ConfiguracionRepository:
 
     async def is_registro_habilitado(self) -> bool:
         value = await self.get(REGISTRO_HABILITADO_KEY)
+        return (value or "false").lower() == "true"
+
+    async def is_contacto_habilitado(self) -> bool:
+        value = await self.get(CONTACTO_HABILITADO_KEY)
         return (value or "false").lower() == "true"

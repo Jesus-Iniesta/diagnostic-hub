@@ -1,5 +1,4 @@
-import { AppShell, Box, Grid, SimpleGrid, Text } from '@mantine/core';
-import { useDisclosure, useMediaQuery } from '@mantine/hooks';
+import { Box, Grid, SimpleGrid, Text } from '@mantine/core';
 import {
   IconFileText,
   IconReport,
@@ -7,10 +6,7 @@ import {
   IconUsersGroup,
 } from '@tabler/icons-react';
 import type { ReactElement } from 'react';
-import { useState } from 'react';
 
-import DashboardHeader from '../../components/DashboardHeader/DashboardHeader';
-import DashboardSidebar from '../../components/DashboardSidebar/DashboardSidebar';
 import QuickSummary from '../../components/QuickSummary/QuickSummary';
 import StatCard from '../../components/StatCard/StatCard';
 import StudentsLevelChart from '../../components/StudentsLevelChart/StudentsLevelChart';
@@ -53,82 +49,45 @@ const STAT_CONFIG: Record<StatMock['id'], StatConfig> = {
 };
 
 export default function AdminDashboard() {
-  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
-  const [mobileOpened, { toggle: toggleMobile, close: closeMobile }] =
-    useDisclosure(false);
-  const isMobile = useMediaQuery('(max-width: 62em)');
-
-  const handleToggle = () => {
-    if (isMobile) {
-      toggleMobile();
-    } else {
-      setDesktopCollapsed((v) => !v);
-    }
-  };
-
   return (
-    <AppShell
-      layout="alt"
-      header={{ height: 88 }}
-      navbar={{
-        width: desktopCollapsed ? 88 : 326,
-        breakpoint: 'md',
-        collapsed: { mobile: !mobileOpened },
-      }}
-      padding={0}
-    >
-      <AppShell.Navbar className={classes.navbar}>
-        <DashboardSidebar
-          collapsed={desktopCollapsed}
-          onNavigate={closeMobile}
-        />
-      </AppShell.Navbar>
+    <>
+      <div className={classes.welcome}>
+        <Text component="h1" className={classes.welcomeTitle}>
+          {welcome.title}
+        </Text>
+        <Text className={classes.welcomeSubtitle}>{welcome.subtitle}</Text>
+      </div>
 
-      <AppShell.Header className={classes.header}>
-        <DashboardHeader onToggle={handleToggle} />
-      </AppShell.Header>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mt="xl">
+        {adminStats.map((stat) => {
+          const config = STAT_CONFIG[stat.id];
+          return (
+            <StatCard
+              key={stat.id}
+              title={stat.title}
+              value={stat.value}
+              description={stat.description}
+              color={config.color}
+              lightColor={config.lightColor}
+              icon={config.icon}
+              chartData={stat.trend}
+            />
+          );
+        })}
+      </SimpleGrid>
 
-      <AppShell.Main className={classes.mainArea}>
-        <Box className={classes.main}>
-          <div className={classes.welcome}>
-            <Text component="h1" className={classes.welcomeTitle}>
-              {welcome.title}
-            </Text>
-            <Text className={classes.welcomeSubtitle}>{welcome.subtitle}</Text>
-          </div>
+      <Grid gutter="lg" mt="xl" align="stretch">
+        <Grid.Col span={{ base: 12, lg: 9 }}>
+          <StudentsLevelChart />
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, lg: 3 }}>
+          <QuickSummary />
+        </Grid.Col>
+      </Grid>
 
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mt="xl">
-            {adminStats.map((stat) => {
-              const config = STAT_CONFIG[stat.id];
-              return (
-                <StatCard
-                  key={stat.id}
-                  title={stat.title}
-                  value={stat.value}
-                  description={stat.description}
-                  color={config.color}
-                  lightColor={config.lightColor}
-                  icon={config.icon}
-                  chartData={stat.trend}
-                />
-              );
-            })}
-          </SimpleGrid>
-
-          <Grid gutter="lg" mt="xl" align="stretch">
-            <Grid.Col span={{ base: 12, lg: 9 }}>
-              <StudentsLevelChart />
-            </Grid.Col>
-            <Grid.Col span={{ base: 12, lg: 3 }}>
-              <QuickSummary />
-            </Grid.Col>
-          </Grid>
-
-          <Box mt="xl">
-            <SystemAlert />
-          </Box>
-        </Box>
-      </AppShell.Main>
-    </AppShell>
+      <Box mt="xl">
+        <SystemAlert />
+      </Box>
+    </>
   );
 }

@@ -1,0 +1,144 @@
+.welcome {
+  padding-top: 6px;
+}
+
+.welcomeTitle {
+  margin: 0;
+  color: #17153b;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.welcomeSubtitle {
+  color: #667085;
+  font-size: 15px;
+  margin-top: 6px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #eef0f4;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.03);
+  border-radius: 16px;
+  max-width: 720px;
+}
+
+.title {
+  color: #17153b;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.subtitle {
+  color: #667085;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 36px 20px;
+  border: 2px dashed #c7cbd9;
+  border-radius: 16px;
+  background: #fafbfe;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  text-align: center;
+}
+
+.dropzone:hover {
+  border-color: #4f46e5;
+  background: #f5f6ff;
+}
+
+.dropzoneActive {
+  border-color: #4f46e5;
+  background: #f5f6ff;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.dropIcon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.dropText {
+  color: #17153b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dropHint {
+  color: #98a2b3;
+  font-size: 13px;
+}
+
+.fileRow {
+  padding: 12px 14px;
+  border: 1px solid #eef0f4;
+  border-radius: 12px;
+  background: #fafbfe;
+}
+
+.fileIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+.fileName {
+  color: #17153b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.fileMeta {
+  color: #667085;
+  font-size: 12.5px;
+}
+
+.resultValue {
+  color: #17153b;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.resultLabel {
+  color: #667085;
+  font-size: 13px;
+}
+
+.actionButton {
+  height: 46px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+@media (max-width: 576px) {
+  .welcomeTitle {
+    font-size: 24px;
+  }
+}

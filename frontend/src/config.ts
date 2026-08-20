@@ -13,3 +13,4 @@ export const AUTH_TOKEN_URL = `${API_BASE_URL}/auth/token`;
 export const AUTH_NUMERO_CUENTA_URL = `${API_BASE_URL}/auth/numero-cuenta`;
 export const AUTH_ME_URL = `${API_BASE_URL}/auth/me`;
 export const AUTH_LOGOUT_URL = `${API_BASE_URL}/auth/logout`;
+export const CONFIG_CONTACTO_URL = `${API_BASE_URL}/configuracion/contacto`;

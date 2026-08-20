@@ -20,23 +20,35 @@ import {
   IconUserSearch,
   IconUsers,
 } from '@tabler/icons-react';
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
 import classes from './DashboardSidebar.module.css';
 
 const NAV_ITEMS = [
-  { id: 'inicio', label: 'Inicio', icon: IconHome },
+  { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/admin' },
   { id: 'carga', label: 'Carga y procesamiento', icon: IconUpload },
   { id: 'resultados', label: 'Resultados', icon: IconUserSearch },
-  { id: 'configuracion', label: 'Configuración', icon: IconSettings },
+  { id: 'configuracion', label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
   { id: 'reportes', label: 'Reportes', icon: IconReport },
   { id: 'usuarios', label: 'Usuarios', icon: IconUsers },
   { id: 'seguridad', label: 'Seguridad', icon: IconShield },
 ] as const;
 
 export type SidebarItemId = (typeof NAV_ITEMS)[number]['id'];
+
+interface SidebarNavItem {
+  id: SidebarItemId;
+  label: string;
+  icon: typeof IconHome;
+  to?: string;
+}
+
+function initialActiveFromPath(pathname: string): SidebarItemId {
+  if (pathname.startsWith('/admin/configuracion')) return 'configuracion';
+  return 'inicio';
+}
 
 interface DashboardSidebarProps {
   collapsed?: boolean;
@@ -49,11 +61,26 @@ export default function DashboardSidebar({
 }: DashboardSidebarProps) {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const [active, setActive] = useState<SidebarItemId>('inicio');
+  const location = useLocation();
+  const [active, setActive] = useState<SidebarItemId>(() =>
+    initialActiveFromPath(location.pathname),
+  );
+
+  useEffect(() => {
+    setActive(initialActiveFromPath(location.pathname));
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login', { replace: true });
+  };
+
+  const handleNavigate = (item: SidebarNavItem) => {
+    setActive(item.id);
+    onNavigate?.();
+    if (item.to) {
+      navigate(item.to);
+    }
   };
 
   return (
@@ -79,37 +106,34 @@ export default function DashboardSidebar({
         </Group>
 
         <nav className={classes.menu}>
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
-            <Tooltip
-              key={id}
-              label={label}
-              position="right"
-              disabled={!collapsed}
-              withArrow
-            >
-              <NavLink
-                className={classes.link}
-                active={active === id}
-                label={
-                  <span
-                    className={classes.linkLabel}
-                    onClick={() => {
-                      setActive(id);
-                      onNavigate?.();
-                    }}
-                  >
-                    {label}
-                  </span>
-                }
-                leftSection={<Icon size={20} className={classes.linkIcon} aria-hidden="true" />}
-                onClick={() => {
-                  setActive(id);
-                  onNavigate?.();
-                }}
-                variant="filled"
-              />
-            </Tooltip>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const { id, label, icon: Icon } = item;
+            return (
+              <Tooltip
+                key={id}
+                label={label}
+                position="right"
+                disabled={!collapsed}
+                withArrow
+              >
+                <NavLink
+                  className={classes.link}
+                  active={active === id}
+                  label={
+                    <span
+                      className={classes.linkLabel}
+                      onClick={() => handleNavigate(item)}
+                    >
+                      {label}
+                    </span>
+                  }
+                  leftSection={<Icon size={20} className={classes.linkIcon} aria-hidden="true" />}
+                  onClick={() => handleNavigate(item)}
+                  variant="filled"
+                />
+              </Tooltip>
+            );
+          })}
         </nav>
       </div>
 

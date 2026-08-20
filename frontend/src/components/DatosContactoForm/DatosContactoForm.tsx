@@ -2,17 +2,20 @@ import {
   Alert,
   Button,
   Card,
+  Divider,
+  Loader,
   Stack,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconCircleCheck, IconMail, IconUser } from '@tabler/icons-react';
-import { useState } from 'react';
+import { IconCircleCheck, IconInfoCircle, IconMail, IconUser } from '@tabler/icons-react';
+import { useEffect, useState } from 'react';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { guardarDatosContacto } from '../../lib/alumnoApi';
+import { fetchEstadoFormularioContacto } from '../../lib/configuracionApi';
 import { contactoInicialMock } from '../../mocks/alumno';
 import classes from './DatosContactoForm.module.css';
 
@@ -24,14 +27,33 @@ interface DatosContactoFormProps {
 
 export default function DatosContactoForm({ onContinuar }: DatosContactoFormProps) {
   const { user } = useAuth();
+  const [habilitado, setHabilitado] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const correoWebassignInicial =
+    user?.correo_personal ?? contactoInicialMock.correo_webassign ?? '';
+  const correoInstitucionalInicial = user?.correo_institucional ?? '';
+
+  useEffect(() => {
+    let mounted = true;
+    void fetchEstadoFormularioContacto()
+      .then(({ habilitado: hab }) => {
+        if (mounted) setHabilitado(hab);
+      })
+      .catch(() => {
+        if (mounted) setHabilitado(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const form = useForm({
     initialValues: {
-      correoWebassign: user?.correo_personal ?? contactoInicialMock.correo_webassign ?? '',
-      correoInstitucional: user?.correo_institucional ?? '',
+      correoWebassign: correoWebassignInicial,
+      correoInstitucional: correoInstitucionalInicial,
     },
     validate: {
       correoWebassign: (value) => {
@@ -63,6 +85,75 @@ export default function DatosContactoForm({ onContinuar }: DatosContactoFormProp
     }
   });
 
+  if (habilitado === null) {
+    return (
+      <Card className={classes.card} padding="xl" radius="lg">
+        <Stack align="center" py="xl">
+          <Loader size="sm" />
+        </Stack>
+      </Card>
+    );
+  }
+
+  if (!habilitado) {
+    return (
+      <Card className={classes.card} padding="xl" radius="lg">
+        <Stack gap="lg">
+          <div>
+            <Title order={3} className={classes.title}>
+              Datos de contacto
+            </Title>
+            <Text className={classes.subtitle}>
+              Completa tus datos para continuar.
+            </Text>
+          </div>
+
+          <Alert
+            color="orange"
+            variant="light"
+            radius="md"
+            icon={<IconInfoCircle size={18} aria-hidden="true" />}
+          >
+            El formulario de datos de contacto no se encuentra disponible en este
+            momento.
+            <Text component="span" className={classes.notice}>
+              Cuando sea habilitado por la Coordinación, podrás registrar o
+              actualizar tu información.
+            </Text>
+          </Alert>
+
+          {(correoWebassignInicial || correoInstitucionalInicial) && (
+            <>
+              <Divider color="#F0F1F5" />
+              <Stack gap="sm">
+                {correoWebassignInicial && (
+                  <div>
+                    <Text className={classes.readonlyLabel}>
+                      Correo utilizado en WebAssign
+                    </Text>
+                    <Text className={classes.readonlyValue}>
+                      {correoWebassignInicial}
+                    </Text>
+                  </div>
+                )}
+                {correoInstitucionalInicial && (
+                  <div>
+                    <Text className={classes.readonlyLabel}>
+                      Correo institucional UAEMéx
+                    </Text>
+                    <Text className={classes.readonlyValue}>
+                      {correoInstitucionalInicial}
+                    </Text>
+                  </div>
+                )}
+              </Stack>
+            </>
+          )}
+        </Stack>
+      </Card>
+    );
+  }
+
   return (
     <Card className={classes.card} padding="xl" radius="lg">
       <Stack gap="lg">
@@ -71,7 +162,7 @@ export default function DatosContactoForm({ onContinuar }: DatosContactoFormProp
             Datos de contacto
           </Title>
           <Text className={classes.subtitle}>
-            Completa la información para poder relacionar tus evaluaciones.
+            Completa tus datos para continuar.
           </Text>
         </div>
 
