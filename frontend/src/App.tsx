@@ -13,6 +13,7 @@ import AlumnoHome from './pages/alumno/AlumnoHome';
 import AlumnoLayout from './pages/alumno/AlumnoLayout';
 import AlumnoResultados from './pages/alumno/AlumnoResultados';
 import LoginPage from './pages/LoginPage';
+import RegistroAlumnoPage from './pages/RegistroAlumnoPage';
 import ProfesorGrupo from './pages/profesor/ProfesorGrupo';
 import ProfesorHome from './pages/profesor/ProfesorHome';
 import ProfesorLayout from './pages/profesor/ProfesorLayout';
@@ -41,6 +42,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/registro" element={<RegistroAlumnoPage />} />
       <Route path="/" element={<RootIndex />} />
       <Route
         path="/admin"

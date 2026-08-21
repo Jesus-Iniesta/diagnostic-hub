@@ -72,7 +72,7 @@ export default function DashboardSidebar({
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login', { replace: true });
+    navigate('/', { replace: true });
   };
 
   const handleNavigate = (item: SidebarNavItem) => {

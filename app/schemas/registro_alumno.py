@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 NUMERO_CUENTA_PATTERN = r"^\d{7}$"
 NUMERO_FOLIO_PATTERN = r"^\d{9}$"
@@ -13,8 +13,8 @@ class RegistroAlumnoBase(BaseModel):
     correo_personal: EmailStr
 
     # --- Datos del formulario (Alumno) ---
-    numero_cuenta: str = Field(pattern=NUMERO_CUENTA_PATTERN)
-    numero_folio: str = Field(pattern=NUMERO_FOLIO_PATTERN)
+    numero_cuenta: str | None = Field(default=None, pattern=NUMERO_CUENTA_PATTERN)
+    numero_folio: str | None = Field(default=None, pattern=NUMERO_FOLIO_PATTERN)
     ingenieria_id: int
     periodo_ingreso: str = Field(pattern=PERIODO_INGRESO_PATTERN)
     promedio_bachillerato: float | None = Field(default=None, ge=5.9, le=10.0)
@@ -26,6 +26,14 @@ class RegistroAlumnoBase(BaseModel):
     es_foraneo: bool
     convivencia: str | None = None
     vulnerabilidad_economica: bool
+
+    @model_validator(mode="after")
+    def atleast_one_identificacion(self):
+        if not self.numero_cuenta and not self.numero_folio:
+            raise ValueError(
+                "Debes proporcionar al menos un número de cuenta o número de folio"
+            )
+        return self
 
 
 class RegistroAlumnoCreate(RegistroAlumnoBase):

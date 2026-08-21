@@ -53,7 +53,7 @@ export default function ProfesorSidebar({
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login', { replace: true });
+    navigate('/', { replace: true });
   };
 
   return (

@@ -1,10 +1,4 @@
-import {
-  Alert,
-  Button,
-  PasswordInput,
-  Text,
-  TextInput,
-} from '@mantine/core';
+import { Alert, Anchor, Button, PasswordInput, Text, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
   IconEye,
@@ -14,7 +8,7 @@ import {
   IconUser,
 } from '@tabler/icons-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { loginWithNumeroCuenta, loginWithPassword } from '../../lib/api';
@@ -126,6 +120,15 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
       >
         Ingresar
       </Button>
+
+      {esAlumno && (
+        <Text ta="center" size="sm" mt="xs">
+          ¿Es tu primera vez en el sistema?{' '}
+          <Anchor component={Link} to="/registro" fw={600}>
+            Da click aquí
+          </Anchor>
+        </Text>
+      )}
 
       <div className={classes.restricted}>
         <IconLock size={14} aria-hidden="true" />

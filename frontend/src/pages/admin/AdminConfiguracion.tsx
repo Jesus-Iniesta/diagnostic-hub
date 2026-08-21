@@ -12,13 +12,18 @@ import { useEffect, useState } from 'react';
 
 import {
   actualizarEstadoFormularioContacto,
+  actualizarEstadoFormularioRegistro,
   fetchEstadoFormularioContacto,
+  fetchEstadoFormularioRegistro,
 } from '../../lib/configuracionApi';
 import classes from './AdminConfiguracion.module.css';
 
 type EstadoFormulario = 'activo' | 'inactivo';
 
-export default function AdminConfiguracion() {
+function useToggleCard(
+  fetcher: () => Promise<{ habilitado: boolean }>,
+  saver: (habilitado: boolean) => Promise<{ habilitado: boolean }>,
+) {
   const [estado, setEstado] = useState<EstadoFormulario>('activo');
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -27,7 +32,7 @@ export default function AdminConfiguracion() {
 
   useEffect(() => {
     let mounted = true;
-    void fetchEstadoFormularioContacto()
+    void fetcher()
       .then(({ habilitado }) => {
         if (mounted) setEstado(habilitado ? 'activo' : 'inactivo');
       })
@@ -40,7 +45,7 @@ export default function AdminConfiguracion() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [fetcher]);
 
   const activo = estado === 'activo';
 
@@ -49,7 +54,7 @@ export default function AdminConfiguracion() {
     setGuardado(false);
     setGuardando(true);
     try {
-      const { habilitado } = await actualizarEstadoFormularioContacto(activo);
+      const { habilitado } = await saver(activo);
       setEstado(habilitado ? 'activo' : 'inactivo');
       setGuardado(true);
     } catch (err) {
@@ -58,6 +63,13 @@ export default function AdminConfiguracion() {
       setGuardando(false);
     }
   };
+
+  return { estado, setEstado, cargando, guardando, guardado, error, activo, handleGuardar };
+}
+
+export default function AdminConfiguracion() {
+  const contacto = useToggleCard(fetchEstadoFormularioContacto, actualizarEstadoFormularioContacto);
+  const registro = useToggleCard(fetchEstadoFormularioRegistro, actualizarEstadoFormularioRegistro);
 
   return (
     <>
@@ -85,25 +97,25 @@ export default function AdminConfiguracion() {
           <div className={classes.fieldRow}>
             <Text className={classes.fieldLabel}>Estado</Text>
             <SegmentedControl
-              value={estado}
-              onChange={(value) => setEstado(value as EstadoFormulario)}
+              value={contacto.estado}
+              onChange={(value) => contacto.setEstado(value as EstadoFormulario)}
               data={[
                 { label: '🟢 ACTIVO', value: 'activo' },
                 { label: '⚪ INACTIVO', value: 'inactivo' },
               ]}
               size="md"
               radius="md"
-              disabled={cargando}
+              disabled={contacto.cargando}
             />
           </div>
 
           <Text className={classes.fieldHelp}>
-            {activo
+            {contacto.activo
               ? 'Los alumnos pueden registrar o actualizar sus datos de contacto.'
               : 'Los alumnos no pueden modificar sus datos de contacto mientras el formulario esté cerrado. Los datos ya guardados se conservan.'}
           </Text>
 
-          {guardado && (
+          {contacto.guardado && (
             <Alert
               color="green"
               variant="light"
@@ -114,9 +126,9 @@ export default function AdminConfiguracion() {
             </Alert>
           )}
 
-          {error && (
+          {contacto.error && (
             <Alert color="red" variant="light" radius="md">
-              {error}
+              {contacto.error}
             </Alert>
           )}
 
@@ -124,9 +136,71 @@ export default function AdminConfiguracion() {
             size="md"
             color="indigo"
             className={classes.submitButton}
-            loading={guardando}
-            disabled={cargando}
-            onClick={handleGuardar}
+            loading={contacto.guardando}
+            disabled={contacto.cargando}
+            onClick={contacto.handleGuardar}
+          >
+            Guardar cambios
+          </Button>
+        </Stack>
+      </Card>
+
+      <Card className={classes.card} padding="xl" radius="lg" mt="lg">
+        <Stack gap="lg">
+          <div>
+            <Title order={3} className={classes.title}>
+              Formulario de registro de alumnos
+            </Title>
+            <Text className={classes.subtitle}>
+              Controla si los alumnos nuevos pueden crear su cuenta en el sistema.
+            </Text>
+          </div>
+
+          <div className={classes.fieldRow}>
+            <Text className={classes.fieldLabel}>Estado</Text>
+            <SegmentedControl
+              value={registro.estado}
+              onChange={(value) => registro.setEstado(value as EstadoFormulario)}
+              data={[
+                { label: '🟢 ACTIVO', value: 'activo' },
+                { label: '⚪ INACTIVO', value: 'inactivo' },
+              ]}
+              size="md"
+              radius="md"
+              disabled={registro.cargando}
+            />
+          </div>
+
+          <Text className={classes.fieldHelp}>
+            {registro.activo
+              ? 'Los alumnos nuevos pueden crear su cuenta desde el login.'
+              : 'El formulario de registro está cerrado. Los alumnos no pueden crear cuentas nuevas.'}
+          </Text>
+
+          {registro.guardado && (
+            <Alert
+              color="green"
+              variant="light"
+              radius="md"
+              icon={<IconCircleCheck size={18} aria-hidden="true" />}
+            >
+              Los cambios se guardaron correctamente.
+            </Alert>
+          )}
+
+          {registro.error && (
+            <Alert color="red" variant="light" radius="md">
+              {registro.error}
+            </Alert>
+          )}
+
+          <Button
+            size="md"
+            color="indigo"
+            className={classes.submitButton}
+            loading={registro.guardando}
+            disabled={registro.cargando}
+            onClick={registro.handleGuardar}
           >
             Guardar cambios
           </Button>
