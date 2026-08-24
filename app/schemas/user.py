@@ -44,3 +44,10 @@ class UserRead(UserBase):
     updated_at: datetime
     role_id: int
     role: RoleRead
+
+
+class UserListResponse(BaseModel):
+    items: list[UserRead]
+    total: int
+    limit: int
+    offset: int

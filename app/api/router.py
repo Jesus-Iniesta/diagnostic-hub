@@ -7,6 +7,8 @@ from app.api.v1 import (
     health,
     ingenierias,
     registro_alumno,
+    upload_alumnos,
+    users,
 )
 
 api_router = APIRouter()
@@ -22,3 +24,7 @@ api_router.include_router(
 api_router.include_router(
     configuracion.router, prefix="/configuracion", tags=["configuracion"]
 )
+api_router.include_router(
+    upload_alumnos.router, prefix="/alumnos", tags=["alumnos"]
+)
+api_router.include_router(users.router, prefix="/users", tags=["users"])

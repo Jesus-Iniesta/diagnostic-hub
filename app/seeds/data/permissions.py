@@ -35,4 +35,8 @@ PERMISSIONS = [
         "name": "gestionar_registro",
         "description": "Habilitar o deshabilitar el formulario de registro de alumnos",
     },
+    {
+        "name": "consultar_usuarios",
+        "description": "Consultar la lista de usuarios del sistema",
+    },
 ]
