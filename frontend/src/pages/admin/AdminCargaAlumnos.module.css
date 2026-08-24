@@ -1,0 +1,190 @@
+.welcome {
+  padding-top: 6px;
+}
+
+.welcomeTitle {
+  margin: 0;
+  color: #17153b;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.welcomeSubtitle {
+  color: #667085;
+  font-size: 15px;
+  margin-top: 6px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #eef0f4;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.03);
+  border-radius: 16px;
+  max-width: 800px;
+}
+
+.title {
+  color: #17153b;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.subtitle {
+  color: #667085;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.dropzone {
+  border: 2px dashed #d0d5dd;
+  border-radius: 12px;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: #fafbfa;
+}
+
+.dropzone:hover {
+  border-color: #006b49;
+  background: #f0faf5;
+}
+
+.dropzoneActive {
+  border-color: #006b49;
+  background: #f0faf5;
+}
+
+.dropzoneLabel {
+  color: #344054;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dropzoneHint {
+  color: #667085;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.statsRow {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.statBox {
+  flex: 1;
+  min-width: 120px;
+  padding: 1rem;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.statBoxGreen {
+  background: #ecfdf3;
+  border: 1px solid #a6f4c5;
+}
+
+.statBoxYellow {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+}
+
+.statBoxRed {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+}
+
+.statBoxGray {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.statNumber {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.statLabel {
+  font-size: 13px;
+  color: #667085;
+  margin-top: 2px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 2px solid #e5e7eb;
+  color: #667085;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: #344054;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badgeExitoso {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.badgeDuplicado {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.badgeError {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.scrollTable {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.submitButton {
+  height: 46px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+@media (max-width: 576px) {
+  .welcomeTitle {
+    font-size: 24px;
+  }
+
+  .statBox {
+    min-width: 100px;
+  }
+
+  .statNumber {
+    font-size: 22px;
+  }
+}

@@ -28,11 +28,11 @@ import classes from './DashboardSidebar.module.css';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/admin' },
-  { id: 'carga', label: 'Carga y procesamiento', icon: IconUpload },
+  { id: 'carga', label: 'Carga y procesamiento', icon: IconUpload, to: '/admin/carga' },
   { id: 'resultados', label: 'Resultados', icon: IconUserSearch },
   { id: 'configuracion', label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
   { id: 'reportes', label: 'Reportes', icon: IconReport },
-  { id: 'usuarios', label: 'Usuarios', icon: IconUsers },
+  { id: 'usuarios', label: 'Usuarios', icon: IconUsers, to: '/admin/usuarios' },
   { id: 'seguridad', label: 'Seguridad', icon: IconShield },
 ] as const;
 
@@ -47,6 +47,8 @@ interface SidebarNavItem {
 
 function initialActiveFromPath(pathname: string): SidebarItemId {
   if (pathname.startsWith('/admin/configuracion')) return 'configuracion';
+  if (pathname.startsWith('/admin/carga')) return 'carga';
+  if (pathname.startsWith('/admin/usuarios')) return 'usuarios';
   return 'inicio';
 }
 

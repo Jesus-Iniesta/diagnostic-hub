@@ -6,8 +6,10 @@ import { useAuth } from './contexts/AuthContext';
 import { roleHome } from './lib/roles';
 import AcreditadorHome from './pages/acreditador/AcreditadorHome';
 import AdminConfiguracion from './pages/admin/AdminConfiguracion';
+import AdminCargaAlumnos from './pages/admin/AdminCargaAlumnos';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminLayout from './pages/admin/AdminLayout';
+import AdminUsuarios from './pages/admin/AdminUsuarios';
 import AlumnoContacto from './pages/alumno/AlumnoContacto';
 import AlumnoHome from './pages/alumno/AlumnoHome';
 import AlumnoLayout from './pages/alumno/AlumnoLayout';
@@ -53,7 +55,9 @@ export default function App() {
         }
       >
         <Route index element={<AdminDashboard />} />
+        <Route path="carga" element={<AdminCargaAlumnos />} />
         <Route path="configuracion" element={<AdminConfiguracion />} />
+        <Route path="usuarios" element={<AdminUsuarios />} />
       </Route>
       <Route
         path="/profesor"

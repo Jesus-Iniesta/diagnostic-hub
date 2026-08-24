@@ -22,6 +22,7 @@ export interface User {
   rfc: string | null;
   auth_method: 'password' | 'numero_cuenta';
   activo: boolean;
+  created_at: string;
   role_id: number;
   role: Role;
 }
@@ -29,4 +30,11 @@ export interface User {
 export interface Token {
   access_token: string;
   token_type: string;
+}
+
+export interface UserListResponse {
+  items: User[];
+  total: number;
+  limit: number;
+  offset: number;
 }
