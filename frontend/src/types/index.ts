@@ -23,6 +23,7 @@ export interface User {
   auth_method: 'password' | 'numero_cuenta';
   activo: boolean;
   created_at: string;
+  last_login: string | null;
   role_id: number;
   role: Role;
 }

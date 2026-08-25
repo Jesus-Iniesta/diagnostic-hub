@@ -2,8 +2,10 @@ import {
   Button,
   Card,
   Group,
+  Modal,
   Select,
   SegmentedControl,
+  SimpleGrid,
   Stack,
   Text,
   TextInput,
@@ -50,6 +52,7 @@ export default function AdminUsuarios() {
   const [activoFilter, setActivoFilter] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [busquedaInput, setBusquedaInput] = useState('');
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,7 +191,7 @@ export default function AdminUsuarios() {
                   </thead>
                   <tbody>
                     {items.map((u) => (
-                      <tr key={u.id}>
+                      <tr key={u.id} onClick={() => setSelectedUser(u)} className={classes.clickableRow}>
                         <td>{u.nombre} {u.apellido_paterno} {u.apellido_materno}</td>
                         <td>{u.correo_personal}</td>
                         <td className={classes.hideOnMobile}>{u.correo_institucional ?? '—'}</td>
@@ -240,6 +243,99 @@ export default function AdminUsuarios() {
           )}
         </Stack>
       </Card>
+
+      <Modal
+        opened={selectedUser !== null}
+        onClose={() => setSelectedUser(null)}
+        title="Detalle de usuario"
+        size="md"
+        centered
+      >
+        {selectedUser && (
+          <Stack gap="xs">
+            <Text className={classes.sectionTitle}>Datos personales</Text>
+            <SimpleGrid cols={2}>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Nombre</span>
+                <span className={classes.modalValue}>
+                  {selectedUser.nombre} {selectedUser.apellido_paterno} {selectedUser.apellido_materno}
+                </span>
+              </div>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>RFC</span>
+                <span className={classes.modalValue}>{selectedUser.rfc ?? '—'}</span>
+              </div>
+            </SimpleGrid>
+
+            <Text className={classes.sectionTitle}>Correos</Text>
+            <SimpleGrid cols={2}>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Personal</span>
+                <span className={classes.modalValue}>{selectedUser.correo_personal}</span>
+              </div>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Institucional</span>
+                <span className={classes.modalValue}>{selectedUser.correo_institucional ?? '—'}</span>
+              </div>
+            </SimpleGrid>
+
+            <Text className={classes.sectionTitle}>Rol y acceso</Text>
+            <SimpleGrid cols={3}>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Rol</span>
+                <span className={classes.modalValue}>
+                  <span className={`${classes.badge} ${ROLE_BADGE[selectedUser.role.name] ?? ''}`}>
+                    {selectedUser.role.name}
+                  </span>
+                </span>
+              </div>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Auth</span>
+                <span className={classes.modalValue}>
+                  {selectedUser.auth_method === 'password' ? 'Correo' : 'Nº Cuenta'}
+                </span>
+              </div>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Estado</span>
+                <span className={classes.modalValue}>
+                  <span className={`${classes.badge} ${selectedUser.activo ? classes.badgeActivo : classes.badgeInactivo}`}>
+                    {selectedUser.activo ? 'Activo' : 'Inactivo'}
+                  </span>
+                </span>
+              </div>
+            </SimpleGrid>
+
+            <Text className={classes.sectionTitle}>Fechas</Text>
+            <SimpleGrid cols={2}>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Creado</span>
+                <span className={classes.modalValue}>
+                  {new Date(selectedUser.created_at).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </span>
+              </div>
+              <div className={classes.modalRow}>
+                <span className={classes.modalLabel}>Último acceso</span>
+                <span className={classes.modalValue}>
+                  {selectedUser.last_login
+                    ? new Date(selectedUser.last_login).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })
+                    : 'Nunca'}
+                </span>
+              </div>
+            </SimpleGrid>
+
+            <Text className={classes.sectionTitle}>Permisos del rol</Text>
+            <div className={classes.permissionsList}>
+              {selectedUser.role.permissions.length > 0 ? (
+                selectedUser.role.permissions.map((p) => (
+                  <span key={p.id} className={classes.permissionBadge}>{p.name}</span>
+                ))
+              ) : (
+                <Text size="sm" c="dimmed">Sin permisos asignados</Text>
+              )}
+            </div>
+          </Stack>
+        )}
+      </Modal>
     </>
   );
 }
