@@ -39,4 +39,8 @@ PERMISSIONS = [
         "name": "consultar_usuarios",
         "description": "Consultar la lista de usuarios del sistema",
     },
+    {
+        "name": "gestionar_ligas",
+        "description": "Gestionar ligas de exámenes diagnóstico",
+    },
 ]

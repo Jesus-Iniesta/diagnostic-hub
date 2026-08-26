@@ -6,6 +6,7 @@ from app.api.v1 import (
     configuracion,
     health,
     ingenierias,
+    liga_examen_diagnostico,
     registro_alumno,
     upload_alumnos,
     users,
@@ -28,3 +29,8 @@ api_router.include_router(
     upload_alumnos.router, prefix="/alumnos", tags=["alumnos"]
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(
+    liga_examen_diagnostico.router,
+    prefix="/ligas-examenes",
+    tags=["ligas-examenes"],
+)
