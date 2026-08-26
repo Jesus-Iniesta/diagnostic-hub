@@ -34,7 +34,15 @@ import classes from './RegistroAlumnoPage.module.css';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function calcularPeriodoAutomatico(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const semestre = now.getMonth() < 7 ? 'A' : 'B';
+  return `${year}${semestre}`;
+}
+
 export default function RegistroAlumnoPage() {
+  const periodoAutomatico = calcularPeriodoAutomatico();
   const [habilitado, setHabilitado] = useState<boolean | null>(null);
   const [ingenierias, setIngenierias] = useState<Ingenieria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +84,7 @@ export default function RegistroAlumnoPage() {
       numeroFolio: '',
       numeroFolioConfirmacion: '',
       ingenieriaId: '',
-      periodoIngreso: '',
+      periodoIngreso: periodoAutomatico,
       promedioBachillerato: '',
       indiceUaem: '',
       lugarAdmision: '',
@@ -114,11 +122,21 @@ export default function RegistroAlumnoPage() {
         return null;
       },
       numeroFolio: (v) => {
+        if (tieneCuenta === 'si') {
+          if (!v.trim()) return null;
+          if (!/^\d{9}$/.test(v.trim())) return 'Debe ser exactamente 9 dígitos';
+          return null;
+        }
         if (!v.trim()) return 'Ingresa tu número de folio';
         if (!/^\d{9}$/.test(v.trim())) return 'Debe ser exactamente 9 dígitos';
         return null;
       },
       numeroFolioConfirmacion: (v, values) => {
+        if (tieneCuenta === 'si') {
+          if (!v.trim()) return null;
+          if (v.trim() !== values.numeroFolio.trim()) return 'Los números de folio no coinciden';
+          return null;
+        }
         if (!v.trim()) return 'Confirma tu número de folio';
         if (v.trim() !== values.numeroFolio.trim()) return 'Los números de folio no coinciden';
         return null;
@@ -153,8 +171,10 @@ export default function RegistroAlumnoPage() {
   const stepFields: Record<number, string[]> = {
     0: ['nombre', 'apellidoPaterno', 'apellidoMaterno'],
     1: ['correoPersonal', 'correoPersonalConfirmacion'],
-    2: ['numeroFolio', 'numeroFolioConfirmacion', 'numeroCuenta', 'numeroCuentaConfirmacion'],
-    3: ['ingenieriaId', 'periodoIngreso', 'promedioBachillerato', 'indiceUaem', 'lugarAdmision', 'escuelaProcedencia'],
+    2: tieneCuenta === 'no'
+      ? ['numeroFolio', 'numeroFolioConfirmacion']
+      : ['numeroCuenta', 'numeroCuentaConfirmacion'],
+    3: ['ingenieriaId', 'promedioBachillerato', 'indiceUaem', 'lugarAdmision', 'escuelaProcedencia'],
     4: [],
   };
 
@@ -354,21 +374,6 @@ export default function RegistroAlumnoPage() {
             {activeStep === 2 && (
               <Stack gap="md">
                 <Text className={classes.stepTitle}>Identificación</Text>
-                <TextInput
-                  label="Número de folio"
-                  placeholder="123456789"
-                  description="9 dígitos — requerido"
-                  withAsterisk
-                  size="md"
-                  {...form.getInputProps('numeroFolio')}
-                />
-                <TextInput
-                  label="Confirmar número de folio"
-                  placeholder="Repite tu número de folio"
-                  withAsterisk
-                  size="md"
-                  {...form.getInputProps('numeroFolioConfirmacion')}
-                />
 
                 <div className={classes.toggleRow}>
                   <Text className={classes.toggleLabel}>¿Tienes número de cuenta?</Text>
@@ -382,6 +387,12 @@ export default function RegistroAlumnoPage() {
                         form.clearFieldError('numeroCuenta');
                         form.clearFieldError('numeroCuentaConfirmacion');
                       }
+                      if (v === 'si') {
+                        form.setFieldValue('numeroFolio', '');
+                        form.setFieldValue('numeroFolioConfirmacion', '');
+                        form.clearFieldError('numeroFolio');
+                        form.clearFieldError('numeroFolioConfirmacion');
+                      }
                     }}
                     data={[
                       { label: 'Sí', value: 'si' },
@@ -392,12 +403,30 @@ export default function RegistroAlumnoPage() {
                   />
                 </div>
 
-                {tieneCuenta === 'si' && (
+                {tieneCuenta === 'no' ? (
+                  <>
+                    <TextInput
+                      label="Número de folio"
+                      placeholder="123456789"
+                      description="9 dígitos — requerido"
+                      withAsterisk
+                      size="md"
+                      {...form.getInputProps('numeroFolio')}
+                    />
+                    <TextInput
+                      label="Confirmar número de folio"
+                      placeholder="Repite tu número de folio"
+                      withAsterisk
+                      size="md"
+                      {...form.getInputProps('numeroFolioConfirmacion')}
+                    />
+                  </>
+                ) : (
                   <>
                     <TextInput
                       label="Número de cuenta"
                       placeholder="1234567"
-                      description="7 dígitos"
+                      description="7 dígitos — requerido"
                       withAsterisk
                       size="md"
                       {...form.getInputProps('numeroCuenta')}
@@ -408,6 +437,19 @@ export default function RegistroAlumnoPage() {
                       withAsterisk
                       size="md"
                       {...form.getInputProps('numeroCuentaConfirmacion')}
+                    />
+                    <TextInput
+                      label="Número de folio"
+                      placeholder="123456789"
+                      description="9 dígitos — opcional si ya tienes cuenta"
+                      size="md"
+                      {...form.getInputProps('numeroFolio')}
+                    />
+                    <TextInput
+                      label="Confirmar número de folio"
+                      placeholder="Repite tu número de folio"
+                      size="md"
+                      {...form.getInputProps('numeroFolioConfirmacion')}
                     />
                   </>
                 )}
@@ -428,11 +470,11 @@ export default function RegistroAlumnoPage() {
                 />
                 <TextInput
                   label="Periodo de ingreso"
-                  placeholder="2026B"
-                  description="Formato: YYYYA o YYYYB (ej. 2026A, 2026B)"
+                  value={periodoAutomatico}
+                  disabled
+                  description="Calculado automáticamente según la fecha actual"
                   withAsterisk
                   size="md"
-                  {...form.getInputProps('periodoIngreso')}
                 />
                 <NumberInput
                   label="Promedio de bachillerato"

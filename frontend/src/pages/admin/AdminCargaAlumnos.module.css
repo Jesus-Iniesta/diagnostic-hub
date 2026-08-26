@@ -168,6 +168,32 @@
   border-radius: 12px;
 }
 
+.clickableRow {
+  cursor: pointer;
+}
+
+.errorFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.errorFieldBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #fef2f2;
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+.expandCard {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
 .submitButton {
   height: 46px;
   font-size: 15px;

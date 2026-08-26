@@ -17,16 +17,20 @@ class RegistroAlumnoRepository:
         self.db = db
 
     async def _existe_numero_cuenta(
-        self, numero: str, exclude_alumno_id: int | None = None
+        self, numero: str | None, exclude_alumno_id: int | None = None
     ) -> bool:
+        if numero is None:
+            return False
         stmt = select(Alumno.id).where(Alumno.numero_cuenta == numero)
         if exclude_alumno_id is not None:
             stmt = stmt.where(Alumno.id != exclude_alumno_id)
         return (await self.db.execute(stmt)).scalars().first() is not None
 
     async def _existe_numero_folio(
-        self, folio: str, exclude_alumno_id: int | None = None
+        self, folio: str | None, exclude_alumno_id: int | None = None
     ) -> bool:
+        if folio is None:
+            return False
         stmt = select(Alumno.id).where(Alumno.numero_folio == folio)
         if exclude_alumno_id is not None:
             stmt = stmt.where(Alumno.id != exclude_alumno_id)
@@ -86,7 +90,7 @@ class RegistroAlumnoRepository:
             raise HTTPException(
                 status_code=409, detail="El número de cuenta ya está registrado"
             )
-        if await self._existe_numero_folio(data.numero_folio):
+        if data.numero_folio and await self._existe_numero_folio(data.numero_folio):
             raise HTTPException(
                 status_code=409, detail="El número de folio ya está registrado"
             )
