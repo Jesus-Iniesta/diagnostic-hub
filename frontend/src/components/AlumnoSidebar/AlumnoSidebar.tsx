@@ -14,6 +14,7 @@ import {
   IconHome,
   IconLogout,
   IconMail,
+  IconLink,
   IconReport,
 } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/alumno' },
   { id: 'contacto', label: 'Mis datos de contacto', icon: IconMail, to: '/alumno/contacto' },
   { id: 'resultados', label: 'Mis resultados', icon: IconReport, to: '/alumno/resultados' },
+  { id: 'ligas', label: 'Exámenes diagnóstico', icon: IconLink, to: '/alumno/ligas' },
 ] as const;
 
 export type AlumnoSidebarItemId = (typeof NAV_ITEMS)[number]['id'];

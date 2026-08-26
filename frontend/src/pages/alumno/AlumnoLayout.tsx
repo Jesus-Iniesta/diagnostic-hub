@@ -12,6 +12,7 @@ import classes from './AlumnoLayout.module.css';
 function sidebarItemFromPath(pathname: string): AlumnoSidebarItemId {
   if (pathname.startsWith('/alumno/contacto')) return 'contacto';
   if (pathname.startsWith('/alumno/resultados')) return 'resultados';
+  if (pathname.startsWith('/alumno/ligas')) return 'ligas';
   return 'inicio';
 }
 

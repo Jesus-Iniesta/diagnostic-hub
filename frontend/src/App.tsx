@@ -9,10 +9,12 @@ import AdminConfiguracion from './pages/admin/AdminConfiguracion';
 import AdminCargaAlumnos from './pages/admin/AdminCargaAlumnos';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminLayout from './pages/admin/AdminLayout';
+import AdminLigasExamenes from './pages/admin/AdminLigasExamenes';
 import AdminUsuarios from './pages/admin/AdminUsuarios';
 import AlumnoContacto from './pages/alumno/AlumnoContacto';
 import AlumnoHome from './pages/alumno/AlumnoHome';
 import AlumnoLayout from './pages/alumno/AlumnoLayout';
+import AlumnoLigasExamenes from './pages/alumno/AlumnoLigasExamenes';
 import AlumnoResultados from './pages/alumno/AlumnoResultados';
 import LoginPage from './pages/LoginPage';
 import RegistroAlumnoPage from './pages/RegistroAlumnoPage';
@@ -58,6 +60,7 @@ export default function App() {
         <Route path="carga" element={<AdminCargaAlumnos />} />
         <Route path="configuracion" element={<AdminConfiguracion />} />
         <Route path="usuarios" element={<AdminUsuarios />} />
+        <Route path="ligas" element={<AdminLigasExamenes />} />
       </Route>
       <Route
         path="/profesor"
@@ -89,6 +92,7 @@ export default function App() {
       >
         <Route index element={<AlumnoHome />} />
         <Route path="contacto" element={<AlumnoContacto />} />
+        <Route path="ligas" element={<AlumnoLigasExamenes />} />
         <Route path="resultados" element={<AlumnoResultados />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

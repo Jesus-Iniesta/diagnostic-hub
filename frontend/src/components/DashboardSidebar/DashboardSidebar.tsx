@@ -16,6 +16,7 @@ import {
   IconReport,
   IconSettings,
   IconShield,
+  IconLink,
   IconUpload,
   IconUserSearch,
   IconUsers,
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { id: 'configuracion', label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
   { id: 'reportes', label: 'Reportes', icon: IconReport },
   { id: 'usuarios', label: 'Usuarios', icon: IconUsers, to: '/admin/usuarios' },
+  { id: 'ligas', label: 'Ligas exámenes', icon: IconLink, to: '/admin/ligas' },
   { id: 'seguridad', label: 'Seguridad', icon: IconShield },
 ] as const;
 
@@ -49,6 +51,7 @@ function initialActiveFromPath(pathname: string): SidebarItemId {
   if (pathname.startsWith('/admin/configuracion')) return 'configuracion';
   if (pathname.startsWith('/admin/carga')) return 'carga';
   if (pathname.startsWith('/admin/usuarios')) return 'usuarios';
+  if (pathname.startsWith('/admin/ligas')) return 'ligas';
   return 'inicio';
 }
 

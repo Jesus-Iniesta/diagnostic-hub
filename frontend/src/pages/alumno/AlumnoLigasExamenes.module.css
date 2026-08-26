@@ -1,0 +1,89 @@
+.welcome {
+  padding-top: 6px;
+}
+
+.welcomeTitle {
+  margin: 0;
+  color: #17153b;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.welcomeSubtitle {
+  color: #667085;
+  font-size: 15px;
+  margin-top: 6px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #eef0f4;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.03);
+  border-radius: 16px;
+  width: 100%;
+}
+
+.title {
+  color: #17153b;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.subtitle {
+  color: #667085;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.ligaCard {
+  border: 1px solid #eef0f4;
+  border-radius: 12px;
+  padding: 20px;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ligaCard:hover {
+  border-color: #c1c8f7;
+  box-shadow: 0 4px 12px rgba(78, 87, 192, 0.12);
+}
+
+.ligaName {
+  margin: 0;
+  color: #17153b;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.ligaDescription {
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #667085;
+}
+
+@media (max-width: 768px) {
+  .welcomeTitle {
+    font-size: 24px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
