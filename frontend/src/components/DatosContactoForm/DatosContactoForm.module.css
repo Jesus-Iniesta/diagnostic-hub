@@ -28,22 +28,12 @@
   color: inherit;
 }
 
-.readonlyLabel {
+.sectionLabel {
   color: #667085;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.readonlyValue {
-  color: #17153b;
-  font-size: 15px;
-  font-weight: 600;
-  margin-top: 2px;
-  word-break: break-word;
-}
-
-.fieldInput {
-  background: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .submitButton {

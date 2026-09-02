@@ -20,3 +20,4 @@ export const REGISTRO_URL = `${API_BASE_URL}/alumnos/registro`;
 export const UPLOAD_ALUMNOS_URL = `${API_BASE_URL}/alumnos/upload`;
 export const USERS_URL = `${API_BASE_URL}/users`;
 export const LIGAS_EXAMENES_URL = `${API_BASE_URL}/ligas-examenes`;
+export const ALUMNO_ME_URL = `${API_BASE_URL}/alumnos/me`;

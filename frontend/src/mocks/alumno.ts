@@ -1,27 +1,33 @@
-import type { AlumnoPerfil, DatosContacto, ResultadoAlumno } from '../types/alumno';
-
-/**
- * Datos simulados del módulo de alumno.
- *
- * Separación mock/real:
- * - `alumnoPerfilMock`: información que en producción proviene de `GET /alumnos/me`
- *   (se identifica al alumno por número de cuenta).
- * - `contactoInicialMock`: datos de contacto precargados. En producción se leen de
- *   `User.correo_personal` (WebAssign) y `User.correo_institucional` vía `/auth/me`.
- * - `resultadoMock`: puntaje y retroalimentación que en producción provienen de
- *   `IntentoPresentacion` + `FeedbackResultado`.
- */
+import type { AlumnoPerfil, ResultadoAlumno } from '../types/alumno';
 
 export const alumnoPerfilMock: AlumnoPerfil = {
+  id: 1,
   numero_cuenta: '1724300',
-  nombre_completo: 'Alumno Demo Integrativa',
-  licenciatura: 'Ingeniería en Computación',
-  grupo: null,
-};
-
-export const contactoInicialMock: DatosContacto = {
-  correo_webassign: '',
-  correo_institucional: null,
+  numero_folio: null,
+  periodo_ingreso: '2025A',
+  promedio_bachillerato: 8.5,
+  indice_uaem: null,
+  lugar_admision: null,
+  escuela_procedencia: null,
+  tiene_internet: true,
+  tiene_computadora: true,
+  vulnerabilidad_economica: null,
+  es_foraneo: false,
+  convivencia: null,
+  created_at: '2025-08-01T00:00:00',
+  usuario: {
+    id: 1,
+    nombre: 'Alumno',
+    apellido_paterno: 'Demo',
+    apellido_materno: 'Integrativa',
+    correo_personal: 'alumno@demo.com',
+    correo_institucional: null,
+    rfc: null,
+    auth_method: 'numero_cuenta',
+    activo: true,
+    role: { id: 4, name: 'alumno' },
+  },
+  ingenieria: { id: 1, nombre: 'Ingeniería en Computación', clave: 'ICO' },
 };
 
 export const resultadoMock: ResultadoAlumno = {

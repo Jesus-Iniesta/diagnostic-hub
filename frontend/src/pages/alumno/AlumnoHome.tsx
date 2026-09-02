@@ -1,5 +1,4 @@
 import { Grid, Text } from '@mantine/core';
-import { useNavigate } from 'react-router-dom';
 
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import ResumenAlumno from '../../components/ResumenAlumno/ResumenAlumno';
@@ -8,7 +7,6 @@ import classes from './AlumnoHome.module.css';
 
 export default function AlumnoHome() {
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   const nombre = user?.nombre ?? '';
 
@@ -25,7 +23,7 @@ export default function AlumnoHome() {
 
       <Grid gutter="lg" mt="lg" align="stretch">
         <Grid.Col span={{ base: 12, lg: 8 }}>
-          <DatosContactoForm onContinuar={() => navigate('/alumno/resultados')} />
+          <DatosContactoForm />
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 4 }}>
           <ResumenAlumno />

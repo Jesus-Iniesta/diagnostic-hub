@@ -1,13 +1,10 @@
 import { Grid, Text } from '@mantine/core';
-import { useNavigate } from 'react-router-dom';
 
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import ResumenAlumno from '../../components/ResumenAlumno/ResumenAlumno';
 import classes from './AlumnoContacto.module.css';
 
 export default function AlumnoContacto() {
-  const navigate = useNavigate();
-
   return (
     <>
       <div className={classes.welcome}>
@@ -22,7 +19,7 @@ export default function AlumnoContacto() {
 
       <Grid gutter="lg" mt="lg" align="stretch">
         <Grid.Col span={{ base: 12, lg: 8 }}>
-          <DatosContactoForm onContinuar={() => navigate('/alumno/resultados')} />
+          <DatosContactoForm />
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 4 }}>
           <ResumenAlumno />

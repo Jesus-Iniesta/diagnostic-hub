@@ -7,7 +7,7 @@ import { CONFIG_CONTACTO_URL, CONFIG_REGISTRO_URL } from '../config';
  * - Registro: conectado al backend real.
  */
 
-const CONFIG_USE_MOCK = true;
+const CONFIG_USE_MOCK = false;
 
 export interface EstadoFormularioContacto {
   habilitado: boolean;
