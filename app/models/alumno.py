@@ -9,6 +9,7 @@ from app.core.base import Base
 if TYPE_CHECKING:
     from app.models.asignacion_examen import AsignacionExamen
     from app.models.ingenieria import Ingenieria
+    from app.models.resultado_diagnostico import ResultadoDiagnostico
     from app.models.user import User
 
 
@@ -88,5 +89,8 @@ class Alumno(Base):
     usuario: Mapped["User"] = relationship(back_populates="alumnos")
     ingenieria: Mapped["Ingenieria"] = relationship(back_populates="alumnos")
     asignaciones_examen: Mapped[list["AsignacionExamen"]] = relationship(
+        back_populates="alumno"
+    )
+    resultado_diagnostico: Mapped[list["ResultadoDiagnostico"]] = relationship(
         back_populates="alumno"
     )

@@ -14,6 +14,7 @@ ROLES = [
             "gestionar_registro",
             "consultar_usuarios",
             "gestionar_ligas",
+            "cargar_diagnostico",
         ],
     },
     {

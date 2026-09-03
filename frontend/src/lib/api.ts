@@ -42,7 +42,7 @@ async function handle<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { credentials: 'include', ...init });
   return handle<T>(response);
 }

@@ -43,4 +43,8 @@ PERMISSIONS = [
         "name": "gestionar_ligas",
         "description": "Gestionar ligas de exámenes diagnóstico",
     },
+    {
+        "name": "cargar_diagnostico",
+        "description": "Cargar y procesar exámenes diagnóstico",
+    },
 ]

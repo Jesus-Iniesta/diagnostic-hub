@@ -15,13 +15,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import {
-  IconEdit,
-  IconInfoCircle,
-  IconLink,
-  IconPlus,
-  IconTrash,
-} from '@tabler/icons-react';
+import { IconEdit, IconInfoCircle, IconLink, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -151,10 +145,10 @@ export default function AdminLigasExamenes() {
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          Ligas de exámenes diagnóstico
+          Ligas de exámenes
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Administra los enlaces a exámenes diagnóstico que verán los alumnos.
+          Administra los enlaces a exámenes que verán los alumnos.
         </Text>
       </div>
 
@@ -169,11 +163,7 @@ export default function AdminLigasExamenes() {
                 {items.length} liga{items.length !== 1 ? 's' : ''} en total
               </Text>
             </div>
-            <Button
-              leftSection={<IconPlus size={16} />}
-              color="indigo"
-              onClick={openCreate}
-            >
+            <Button leftSection={<IconPlus size={16} />} color="indigo" onClick={openCreate}>
               Nueva liga
             </Button>
           </Group>
@@ -191,7 +181,9 @@ export default function AdminLigasExamenes() {
           )}
 
           {loading ? (
-            <Text c="dimmed" ta="center" py="xl">Cargando ligas...</Text>
+            <Text c="dimmed" ta="center" py="xl">
+              Cargando ligas...
+            </Text>
           ) : items.length === 0 ? (
             <div className={classes.emptyState}>
               <IconLink size={40} color="#667085" stroke={1.5} />
@@ -219,9 +211,7 @@ export default function AdminLigasExamenes() {
                           {item.url}
                         </span>
                       </Table.Td>
-                      <Table.Td c="dimmed">
-                        {item.descripcion ?? '—'}
-                      </Table.Td>
+                      <Table.Td c="dimmed">{item.descripcion ?? '—'}</Table.Td>
                       <Table.Td>{item.orden}</Table.Td>
                       <Table.Td>
                         <Switch
@@ -232,11 +222,7 @@ export default function AdminLigasExamenes() {
                       </Table.Td>
                       <Table.Td>
                         <span className={classes.actionsCell}>
-                          <ActionIcon
-                            variant="subtle"
-                            color="blue"
-                            onClick={() => openEdit(item)}
-                          >
+                          <ActionIcon variant="subtle" color="blue" onClick={() => openEdit(item)}>
                             <IconEdit size={16} />
                           </ActionIcon>
                           <ActionIcon
@@ -317,11 +303,7 @@ export default function AdminLigasExamenes() {
         centered
       >
         <Stack gap="md">
-          <Alert
-            color="red"
-            variant="light"
-            icon={<IconInfoCircle size={18} />}
-          >
+          <Alert color="red" variant="light" icon={<IconInfoCircle size={18} />}>
             ¿Estás seguro de que deseas eliminar esta liga? Esta acción no se puede deshacer.
           </Alert>
           <Group justify="flex-end" gap="sm">

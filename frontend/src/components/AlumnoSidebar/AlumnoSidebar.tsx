@@ -1,13 +1,4 @@
-import {
-  Avatar,
-  Button,
-  Divider,
-  Group,
-  NavLink,
-  Stack,
-  Text,
-  Tooltip,
-} from '@mantine/core';
+import { Avatar, Button, Divider, Group, NavLink, Stack, Text, Tooltip } from '@mantine/core';
 import {
   IconCapStraight,
   IconChevronRight,
@@ -26,7 +17,7 @@ const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/alumno' },
   { id: 'contacto', label: 'Mis datos de contacto', icon: IconMail, to: '/alumno/contacto' },
   { id: 'resultados', label: 'Mis resultados', icon: IconReport, to: '/alumno/resultados' },
-  { id: 'ligas', label: 'Exámenes diagnóstico', icon: IconLink, to: '/alumno/ligas' },
+  { id: 'ligas', label: 'Exámenes', icon: IconLink, to: '/alumno/ligas' },
 ] as const;
 
 export type AlumnoSidebarItemId = (typeof NAV_ITEMS)[number]['id'];
@@ -67,12 +58,7 @@ export default function AlumnoSidebar({
       <div>
         <Group className={classes.brand} gap="sm" wrap="nowrap">
           <div className={classes.brandIcon}>
-            <IconCapStraight
-              size={22}
-              color="#1C1954"
-              stroke={2}
-              aria-hidden="true"
-            />
+            <IconCapStraight size={22} color="#1C1954" stroke={2} aria-hidden="true" />
           </div>
           <div className={classes.brandText}>
             <Text className={classes.brandTitle}>TutoNet</Text>
@@ -82,13 +68,7 @@ export default function AlumnoSidebar({
 
         <nav className={classes.menu}>
           {NAV_ITEMS.map(({ id, label, icon: Icon, to }) => (
-            <Tooltip
-              key={id}
-              label={label}
-              position="right"
-              disabled={!collapsed}
-              withArrow
-            >
+            <Tooltip key={id} label={label} position="right" disabled={!collapsed} withArrow>
               <NavLink
                 className={classes.link}
                 active={active === id}
@@ -118,12 +98,7 @@ export default function AlumnoSidebar({
       <div className={classes.footer}>
         <Divider className={classes.divider} variant="dashed" />
         <Group className={classes.userCard} gap="sm" wrap="nowrap">
-          <Avatar
-            src={null}
-            alt="Perfil del alumno"
-            color="#4F46E5"
-            radius="xl"
-          >
+          <Avatar src={null} alt="Perfil del alumno" color="#4F46E5" radius="xl">
             {nombreIniciales(nombre, apellidoPaterno)}
           </Avatar>
           <div className={classes.userText}>

@@ -14,6 +14,9 @@ from app.models.asignacion_examen import AsignacionExamen
 from app.models.intento_presentacion import IntentoPresentacion
 from app.models.asignacion_modulo import AsignacionModulo
 from app.models.feedback_resultado import FeedbackResultado
+from app.models.resultado_diagnostico import ResultadoDiagnostico
+from app.models.respuesta_correcta_diagnostico import RespuestaCorrectaDiagnostico
+from app.models.liga_examen_diagnostico import LigaExamenDiagnostico
 
 __all__ = [
     "role_permissions",
@@ -31,4 +34,7 @@ __all__ = [
     "IntentoPresentacion",
     "AsignacionModulo",
     "FeedbackResultado",
+    "ResultadoDiagnostico",
+    "RespuestaCorrectaDiagnostico",
+    "LigaExamenDiagnostico",
 ]

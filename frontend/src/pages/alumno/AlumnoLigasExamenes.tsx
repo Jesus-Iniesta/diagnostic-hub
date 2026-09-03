@@ -31,10 +31,10 @@ export default function AlumnoLigasExamenes() {
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          Exámenes diagnóstico
+          Exámenes
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Accede a los enlaces de los exámenes diagnóstico de tu nivel.
+          Accede a los enlaces de los exámenes de tu nivel.
         </Text>
       </div>
 
@@ -44,9 +44,7 @@ export default function AlumnoLigasExamenes() {
             <Title order={3} className={classes.title}>
               Enlaces disponibles
             </Title>
-            <Text className={classes.subtitle}>
-              Haz clic en un examen para abrirlo.
-            </Text>
+            <Text className={classes.subtitle}>Haz clic en un examen para abrirlo.</Text>
           </div>
 
           {error && (
@@ -88,9 +86,7 @@ export default function AlumnoLigasExamenes() {
                       <IconExternalLink size={18} color="#667085" />
                     </Group>
                     {item.descripcion && (
-                      <Text className={classes.ligaDescription}>
-                        {item.descripcion}
-                      </Text>
+                      <Text className={classes.ligaDescription}>{item.descripcion}</Text>
                     )}
                   </div>
                 </a>

@@ -4,6 +4,7 @@ from app.api.v1 import (
     alumnos,
     auth,
     configuracion,
+    diagnostico,
     health,
     ingenierias,
     liga_examen_diagnostico,
@@ -33,4 +34,9 @@ api_router.include_router(
     liga_examen_diagnostico.router,
     prefix="/ligas-examenes",
     tags=["ligas-examenes"],
+)
+api_router.include_router(
+    diagnostico.router,
+    prefix="/diagnostico",
+    tags=["diagnostico"],
 )
