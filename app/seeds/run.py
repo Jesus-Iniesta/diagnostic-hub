@@ -7,6 +7,7 @@ from app.seeds.service import (
     run_seed_alumnos,
     run_seed_ingenierias,
     run_seed_permissions,
+    run_seed_respuestas_diagnostico,
     run_seed_roles,
     run_seed_users,
 )
@@ -49,6 +50,14 @@ def users():
 def alumnos():
     n = asyncio.run(run_seed_alumnos())
     typer.echo(f"Alumnos seed completed ({n} created).")
+
+
+@app.command("respuestas-diagnostico")
+def respuestas_diagnostico(
+    periodo: str = typer.Option("2022B", help="Periodo para las respuestas"),
+):
+    n = asyncio.run(run_seed_respuestas_diagnostico(periodo))
+    typer.echo(f"Respuestas diagnóstico seed completed ({n} created for {periodo}).")
 
 
 if __name__ == "__main__":

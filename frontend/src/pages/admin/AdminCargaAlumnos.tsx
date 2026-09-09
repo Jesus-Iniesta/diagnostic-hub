@@ -20,7 +20,7 @@ import {
   IconSearch,
   IconUpload,
 } from '@tabler/icons-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { corregirFilas, uploadAlumnosExcel } from '../../lib/uploadApi';
 import {
@@ -31,6 +31,7 @@ import {
   saveRespuestasCorrectas,
   buscarAlumno,
   crearAlumnoDiagnostico,
+  getRespuestaKeyStatus,
   type BuscarAlumnoResult,
   type CrearAlumnoPayload,
 } from '../../lib/diagnosticoApi';
@@ -57,13 +58,6 @@ const INGENIERIA_OPTIONS = [
   { value: 'ISES', label: 'ISES - Ingeniería en Sistemas Económicos y de Salud' },
   { value: 'ICI', label: 'ICI - Ingeniería en Ciencias de la Información' },
   { value: 'IIA', label: 'IIA - Ingeniería en Inteligencia Artificial' },
-];
-
-const MATERIAS_OPTIONS = [
-  { value: 'algebra', label: 'Álgebra' },
-  { value: 'trigonometria', label: 'Trigonometría' },
-  { value: 'geometria', label: 'Geometría' },
-  { value: 'calculo', label: 'Cálculo Diferencial' },
 ];
 
 const FORM_FIELDS: { key: string; label: string; type?: string; options?: { value: string; label: string }[] }[] = [
@@ -99,9 +93,12 @@ function getCurrentPeriodo(): string {
 }
 
 function DiagnosticoSection() {
-  const [materia, setMateria] = useState<string | null>(null);
   const [periodo, setPeriodo] = useState(getCurrentPeriodo());
-  const [viewState, setViewState] = useState<ViewState>('idle');
+  const [step, setStep] = useState(0);
+  const [materiasConfig, setMateriasConfig] = useState<Record<string, { configurada: boolean; total_preguntas: number }>>({});
+  const [loadingStatus, setLoadingStatus] = useState(true);
+
+  const [uploadingMateria, setUploadingMateria] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoProcesamientoDiagnostico | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -110,9 +107,6 @@ function DiagnosticoSection() {
 
   const [noEncontrados, setNoEncontrados] = useState<DiagnosticoNoEncontrado[]>([]);
   const [correcciones, setCorrecciones] = useState<Map<number, number>>(new Map());
-  const [showRespuestasModal, setShowRespuestasModal] = useState(false);
-  const [respuestas, setRespuestas] = useState<RespuestaCorrecta[]>([]);
-  const [respuestasLoading, setRespuestasLoading] = useState(false);
 
   const [corrigiendoIdx, setCorrigiendoIdx] = useState<number | null>(null);
   const [correccionTab, setCorreccionTab] = useState<'buscar' | 'crear'>('buscar');
@@ -120,57 +114,101 @@ function DiagnosticoSection() {
   const [searchResults, setSearchResults] = useState<BuscarAlumnoResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [createForm, setCreateForm] = useState<CrearAlumnoPayload>({
-    nombre: '',
-    apellido_paterno: '',
-    apellido_materno: '',
-    correo_personal: '',
-    numero_cuenta: null,
-    numero_folio: null,
-    ingenieria_clave: null,
-    periodo: '',
+    nombre: '', apellido_paterno: '', apellido_materno: '',
+    correo_personal: '', numero_cuenta: null, numero_folio: null,
+    ingenieria_clave: null, periodo: '',
   });
   const [createLoading, setCreateLoading] = useState(false);
   const [correccionError, setCorreccionError] = useState<string | null>(null);
 
+  const [showRespuestasModal, setShowRespuestasModal] = useState(false);
+  const [respuestas, setRespuestas] = useState<RespuestaCorrecta[]>([]);
+  const [respuestasLoading, setRespuestasLoading] = useState(false);
+  const [editingMateria, setEditingMateria] = useState<string | null>(null);
+
+  const [wizardResults, setWizardResults] = useState<Map<string, ResultadoProcesamientoDiagnostico>>(new Map());
+
+  const MATERIAS_ORDER = ['algebra', 'trigonometria', 'geometria', 'calculo'];
+  const MATERIAS_LABELS: Record<string, string> = {
+    algebra: 'Álgebra',
+    trigonometria: 'Trigonometría',
+    geometria: 'Geometría',
+    calculo: 'Cálculo Diferencial',
+  };
+
+  const currentMateria = step >= 1 && step <= 4 ? MATERIAS_ORDER[step - 1] : null;
   const noEncontradoActual = corrigiendoIdx !== null ? noEncontrados.find((n) => n.indice === corrigiendoIdx) : null;
 
-  const handleFile = useCallback(async (file: File) => {
-    if (!materia) {
-      setError('Selecciona una materia primero');
-      setViewState('error');
-      return;
+  const loadStatus = useCallback(async () => {
+    setLoadingStatus(true);
+    try {
+      const keys = await getRespuestaKeyStatus(periodo);
+      setMateriasConfig(keys);
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingStatus(false);
     }
+  }, [periodo]);
+
+  useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  const allKeysConfigured = MATERIAS_ORDER.every((m) => materiasConfig[m]?.configurada);
+  const allDone = MATERIAS_ORDER.every((m) => wizardResults.has(m));
+
+  const goToStep = (newStep: number) => {
+    setStep(newStep);
+    setResultado(null);
+    setError(null);
+    setNoEncontrados([]);
+    setCorrecciones(new Map());
+    setCurrentFile(null);
+    setUploadingMateria(null);
+  };
+
+  const handleNext = () => {
+    if (step === 0) {
+      goToStep(1);
+    } else if (step >= 1 && step <= 4) {
+      goToStep(step + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (step >= 1 && step <= 5) {
+      goToStep(step - 1);
+    }
+  };
+
+  const handleFile = useCallback(async (file: File) => {
+    if (!currentMateria) return;
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
       setError('Solo se permiten archivos .xlsx o .xls');
-      setViewState('error');
       return;
     }
-
-    setViewState('uploading');
     setError(null);
     setResultado(null);
     setCurrentFile(file);
+    setUploadingMateria(currentMateria);
 
     try {
-      const result = await uploadDiagnostico(materia, periodo, file);
+      const result = await uploadDiagnostico(currentMateria, periodo, file);
       setResultado(result);
       setNoEncontrados(result.no_encontrados_detalle);
-      setViewState('result');
+      setWizardResults((prev) => new Map(prev).set(currentMateria, result));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al procesar el archivo');
-      setViewState('error');
+    } finally {
+      setUploadingMateria(null);
     }
-  }, [materia, periodo]);
+  }, [currentMateria, periodo]);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile],
-  );
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  }, [handleFile]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -179,26 +217,13 @@ function DiagnosticoSection() {
 
   const handleDragLeave = useCallback(() => setDragging(false), []);
 
-  const handleInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
-      e.target.value = '';
-    },
-    [handleFile],
-  );
-
-  const handleReset = () => {
-    setViewState('idle');
-    setResultado(null);
-    setError(null);
-    setNoEncontrados([]);
-    setCorrecciones(new Map());
-    setCurrentFile(null);
-  };
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = '';
+  }, [handleFile]);
 
   const handleExport = async () => {
-    if (!materia) return;
     try {
       const blob = await exportarResultados(periodo);
       const url = URL.createObjectURL(blob);
@@ -212,27 +237,8 @@ function DiagnosticoSection() {
     }
   };
 
-  const handleCorregirMatching = async () => {
-    if (!currentFile || !materia || correcciones.size === 0) return;
-    setSearchLoading(true);
-    try {
-      const correccionesArray = Array.from(correcciones.entries()).map(([indice, alumno_id]) => ({
-        indice,
-        alumno_id,
-      }));
-      const result = await corregirMatching(materia, periodo, currentFile, correccionesArray);
-      setResultado(result);
-      setNoEncontrados(result.no_encontrados_detalle);
-      setCorrecciones(new Map());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al corregir matching');
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleLoadRespuestas = async () => {
-    if (!materia) return;
+  const handleLoadRespuestas = async (materia: string) => {
+    setEditingMateria(materia);
     setRespuestasLoading(true);
     try {
       const result = await getRespuestasCorrectas(materia, periodo);
@@ -246,27 +252,38 @@ function DiagnosticoSection() {
   };
 
   const handleSaveRespuestas = async () => {
-    if (!materia) return;
+    if (!editingMateria) return;
     try {
-      await saveRespuestasCorrectas({
-        materia,
-        periodo,
-        respuestas,
-      });
+      await saveRespuestasCorrectas({ materia: editingMateria, periodo, respuestas });
       setShowRespuestasModal(false);
+      loadStatus();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar respuestas');
+    }
+  };
+
+  const handleCorregirMatching = async () => {
+    if (!currentFile || !currentMateria || correcciones.size === 0) return;
+    setSearchLoading(true);
+    try {
+      const correccionesArray = Array.from(correcciones.entries()).map(([indice, alumno_id]) => ({ indice, alumno_id }));
+      const result = await corregirMatching(currentMateria, periodo, currentFile, correccionesArray);
+      setResultado(result);
+      setNoEncontrados(result.no_encontrados_detalle);
+      setWizardResults((prev) => new Map(prev).set(currentMateria, result));
+      setCorrecciones(new Map());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al corregir matching');
+    } finally {
+      setSearchLoading(false);
     }
   };
 
   const toggleCorreccion = (indice: number, alumnoId: number) => {
     setCorrecciones((prev) => {
       const next = new Map(prev);
-      if (next.has(indice)) {
-        next.delete(indice);
-      } else {
-        next.set(indice, alumnoId);
-      }
+      if (next.has(indice)) next.delete(indice);
+      else next.set(indice, alumnoId);
       return next;
     });
   };
@@ -279,9 +296,7 @@ function DiagnosticoSection() {
     setCorreccionError(null);
     const item = noEncontrados.find((n) => n.indice === indice);
     if (item) {
-      const nombreCompleto = item.nombre_original || '';
-      setSearchQuery(nombreCompleto);
-      const parts = nombreCompleto.split(' ');
+      const parts = (item.nombre_original || '').split(' ');
       setCreateForm({
         nombre: parts[0] || '',
         apellido_paterno: parts.length > 2 ? parts[parts.length - 2] : parts[1] || '',
@@ -290,7 +305,7 @@ function DiagnosticoSection() {
         numero_cuenta: item.cuenta || null,
         numero_folio: item.folio || null,
         ingenieria_clave: null,
-        periodo: periodo,
+        periodo,
       });
     }
   };
@@ -299,8 +314,7 @@ function DiagnosticoSection() {
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
     try {
-      const results = await buscarAlumno(searchQuery.trim());
-      setSearchResults(results);
+      setSearchResults(await buscarAlumno(searchQuery.trim()));
     } catch {
       setCorreccionError('Error al buscar alumnos');
     } finally {
@@ -323,9 +337,7 @@ function DiagnosticoSection() {
     setCorreccionError(null);
     try {
       const nuevo = await crearAlumnoDiagnostico(createForm);
-      if (corrigiendoIdx !== null) {
-        toggleCorreccion(corrigiendoIdx, nuevo.id);
-      }
+      if (corrigiendoIdx !== null) toggleCorreccion(corrigiendoIdx, nuevo.id);
       setCorrigiendoIdx(null);
     } catch (err) {
       setCorreccionError(err instanceof Error ? err.message : 'Error al crear alumno');
@@ -334,18 +346,239 @@ function DiagnosticoSection() {
     }
   };
 
+  const renderProgressBar = () => (
+    <div className={classes.wizardProgress}>
+      {['Config', ...MATERIAS_ORDER.map((m) => MATERIAS_LABELS[m]), 'Resumen'].map((label, i) => {
+        const isActive = i === step;
+        const isDone = i < step || (i > 0 && i <= 4 && wizardResults.has(MATERIAS_ORDER[i - 1]));
+        return (
+          <div
+            key={i}
+            className={`${classes.wizardStep} ${isActive ? classes.wizardStepActive : ''} ${isDone ? classes.wizardStepDone : ''}`}
+            onClick={() => {
+              if (i === 0) goToStep(0);
+              else if (i >= 1 && i <= 4 && isDone) goToStep(i);
+              else if (i === 5 && allDone) goToStep(5);
+            }}
+          >
+            <div className={classes.wizardStepCircle}>
+              {isDone ? '✓' : i + 1}
+            </div>
+            <span className={classes.wizardStepLabel}>{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderStep0Config = () => (
+    <Stack gap="md">
+      <Text size="sm" c="dimmed">
+        Verifica que las respuestas correctas estén configuradas para cada materia antes de subir los exámenes.
+      </Text>
+      <div className={classes.configGrid}>
+        {MATERIAS_ORDER.map((m) => {
+          const config = materiasConfig[m];
+          const configured = config?.configurada;
+          return (
+            <div key={m} className={`${classes.configCard} ${configured ? classes.configCardOk : classes.configCardMissing}`}>
+              <Group justify="space-between">
+                <div>
+                  <Text fw={600} size="sm">{MATERIAS_LABELS[m]}</Text>
+                  <Text size="xs" c="dimmed">
+                    {configured ? `${config.total_preguntas} preguntas configuradas` : 'Sin configurar'}
+                  </Text>
+                </div>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color={configured ? 'green' : 'orange'}
+                  loading={respuestasLoading && editingMateria === m}
+                  onClick={() => handleLoadRespuestas(m)}
+                >
+                  {configured ? 'Ver / Editar' : 'Configurar'}
+                </Button>
+              </Group>
+            </div>
+          );
+        })}
+      </div>
+      {allKeysConfigured ? (
+        <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
+          Todas las respuestas correctas están configuradas. Puedes continuar.
+        </Alert>
+      ) : (
+        <Alert color="orange" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+          Hay materias sin respuestas configuradas. Los scores serán 0 si no configuras las respuestas.
+        </Alert>
+      )}
+    </Stack>
+  );
+
+  const renderStepUpload = () => {
+    if (!currentMateria) return null;
+    const isUploading = uploadingMateria === currentMateria;
+    const res = wizardResults.get(currentMateria);
+
+    return (
+      <Stack gap="md">
+        {res && !resultado && (
+          <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
+            {MATERIAS_LABELS[currentMateria]} ya fue procesado — {res.encontrados} alumnos, {res.no_encontrados} no encontrados.
+            Puedes subir otro archivo para reemplazar.
+          </Alert>
+        )}
+
+        {isUploading && (
+          <Stack align="center" py="xl">
+            <Text c="dimmed">Procesando {MATERIAS_LABELS[currentMateria]}...</Text>
+          </Stack>
+        )}
+
+        {!isUploading && !resultado && (
+          <div
+            className={`${classes.dropzone} ${dragging ? classes.dropzoneActive : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => fileInputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+          >
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleInputChange} style={{ display: 'none' }} />
+            <IconUpload size={36} color="#667085" stroke={1.5} />
+            <Text className={classes.dropzoneLabel} mt="sm">
+              Arrastra el examen de {MATERIAS_LABELS[currentMateria]} aquí o haz clic
+            </Text>
+            <Text className={classes.dropzoneHint}>Formatos: .xlsx, .xls</Text>
+          </div>
+        )}
+
+        {error && (
+          <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+            {error}
+            <Group mt="md">
+              <Button size="xs" variant="light" onClick={() => { setError(null); setResultado(null); }}>
+                Intentar de nuevo
+              </Button>
+            </Group>
+          </Alert>
+        )}
+
+        {resultado && (
+          <Stack gap="md">
+            <div className={classes.statsRow}>
+              <div className={`${classes.statBox} ${classes.statBoxGray}`}>
+                <div className={classes.statNumber}>{resultado.total_filas}</div>
+                <div className={classes.statLabel}>Total filas</div>
+              </div>
+              <div className={`${classes.statBox} ${classes.statBoxGreen}`}>
+                <div className={classes.statNumber}>{resultado.encontrados}</div>
+                <div className={classes.statLabel}>Encontrados</div>
+              </div>
+              <div className={`${classes.statBox} ${classes.statBoxRed}`}>
+                <div className={classes.statNumber}>{resultado.no_encontrados}</div>
+                <div className={classes.statLabel}>No encontrados</div>
+              </div>
+            </div>
+
+            {noEncontrados.length > 0 && (
+              <Card padding="md" radius="md" className={classes.expandCard}>
+                <Group justify="space-between" mb="sm">
+                  <Text fw={600} size="sm">
+                    Alumnos no encontrados ({noEncontrados.length})
+                  </Text>
+                  {correcciones.size > 0 && (
+                    <Button size="xs" variant="filled" color="blue" loading={searchLoading} onClick={handleCorregirMatching}>
+                      Aplicar correcciones ({correcciones.size})
+                    </Button>
+                  )}
+                </Group>
+                <div className={classes.scrollTable}>
+                  <table className={classes.table}>
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Email</th>
+                        <th>Cuenta</th>
+                        <th>Folio</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {noEncontrados.map((item, idx) => (
+                        <tr key={idx}>
+                          <td className={classes.wrapCell}>{item.nombre_original}</td>
+                          <td>{item.correo || '—'}</td>
+                          <td>{item.cuenta || '—'}</td>
+                          <td>{item.folio || '—'}</td>
+                          <td>
+                            {correcciones.has(item.indice) ? (
+                              <Text size="xs" c="green" fw={600}>Asignado</Text>
+                            ) : (
+                              <Button size="compact-xs" variant="filled" color="blue" onClick={() => openCorreccionModal(item.indice)}>
+                                Corregir
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+
+            {noEncontrados.length > 0 && (
+              <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+                <Text size="sm" fw={600}>Hay {noEncontrados.length} alumno(s) sin encontrar</Text>
+                <Text size="xs" c="dimmed">
+                  Puedes corregir uno por uno, o continuar a la siguiente materia. Los errores quedarán marcados para después.
+                </Text>
+              </Alert>
+            )}
+          </Stack>
+        )}
+      </Stack>
+    );
+  };
+
+  const renderStep5Summary = () => (
+    <Stack gap="md">
+      <Text size="sm" c="dimmed">Resumen del proceso de diagnóstico para el periodo {periodo}.</Text>
+      <div className={classes.configGrid}>
+        {MATERIAS_ORDER.map((m) => {
+          const res = wizardResults.get(m);
+          const config = materiasConfig[m];
+          return (
+            <div key={m} className={`${classes.configCard} ${res ? classes.configCardOk : ''}`}>
+              <Group justify="space-between">
+                <div>
+                  <Text fw={600} size="sm">{MATERIAS_LABELS[m]}</Text>
+                  <Text size="xs" c="dimmed">
+                    {res
+                      ? `${res.encontrados} alumnos · ${res.no_encontrados} no encontrados`
+                      : config?.configurada ? 'No procesado' : 'Sin respuestas'}
+                  </Text>
+                </div>
+                {res && <IconCircleCheck size={20} color="green" />}
+              </Group>
+            </div>
+          );
+        })}
+      </div>
+      <Group justify="flex-end">
+        <Button color="green" onClick={handleExport} leftSection={<IconFileSpreadsheet size={18} />}>
+          Exportar Excel consolidado
+        </Button>
+      </Group>
+    </Stack>
+  );
+
   return (
     <Stack gap="lg">
       <Group gap="md" wrap="wrap">
-        <Select
-          label="Materia"
-          placeholder="Selecciona materia"
-          data={MATERIAS_OPTIONS}
-          value={materia}
-          onChange={setMateria}
-          style={{ minWidth: 220 }}
-          size="sm"
-        />
         <TextInput
           label="Periodo"
           value={periodo}
@@ -353,188 +586,41 @@ function DiagnosticoSection() {
           style={{ width: 140 }}
           size="sm"
         />
-        <Button
-          variant="outline"
-          color="blue"
-          size="sm"
-          mt="auto"
-          loading={respuestasLoading}
-          onClick={handleLoadRespuestas}
-          disabled={!materia}
-        >
-          Ver respuestas correctas
-        </Button>
       </Group>
 
-      {viewState === 'idle' && (
-        <div
-          className={`${classes.dropzone} ${dragging ? classes.dropzoneActive : ''}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              fileInputRef.current?.click();
-            }
-          }}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleInputChange}
-            style={{ display: 'none' }}
-          />
-          <IconUpload size={36} color="#667085" stroke={1.5} />
-          <Text className={classes.dropzoneLabel} mt="sm">
-            Arrastra el examen diagnóstico aquí o haz clic para seleccionar
-          </Text>
-          <Text className={classes.dropzoneHint}>
-            Formatos aceptados: .xlsx, .xls
-          </Text>
-        </div>
-      )}
+      {renderProgressBar()}
 
-      {viewState === 'uploading' && (
+      {loadingStatus ? (
         <Stack align="center" py="xl">
-          <Text c="dimmed">Procesando examen diagnóstico...</Text>
+          <Text c="dimmed">Cargando estado...</Text>
         </Stack>
+      ) : (
+        <>
+          {step === 0 && renderStep0Config()}
+          {step >= 1 && step <= 4 && renderStepUpload()}
+          {step === 5 && renderStep5Summary()}
+        </>
       )}
 
-      {viewState === 'error' && error && (
-        <Alert
-          color="red"
-          variant="light"
-          radius="md"
-          icon={<IconInfoCircle size={18} />}
-        >
-          {error}
-          <Group mt="md">
-            <Button size="xs" variant="light" onClick={handleReset}>
-              Intentar de nuevo
-            </Button>
-          </Group>
-        </Alert>
-      )}
-
-      {viewState === 'result' && resultado && (
-        <Stack gap="lg">
-          <Alert
-            color="green"
-            variant="light"
-            radius="md"
-            icon={<IconCircleCheck size={18} />}
-          >
-            Examen procesado correctamente — {resultado.materia}
-          </Alert>
-
-          <div className={classes.statsRow}>
-            <div className={`${classes.statBox} ${classes.statBoxGray}`}>
-              <div className={classes.statNumber}>{resultado.total_filas}</div>
-              <div className={classes.statLabel}>Total filas</div>
-            </div>
-            <div className={`${classes.statBox} ${classes.statBoxGreen}`}>
-              <div className={classes.statNumber}>{resultado.encontrados}</div>
-              <div className={classes.statLabel}>Encontrados</div>
-            </div>
-            <div className={`${classes.statBox} ${classes.statBoxRed}`}>
-              <div className={classes.statNumber}>{resultado.no_encontrados}</div>
-              <div className={classes.statLabel}>No encontrados</div>
-            </div>
-          </div>
-
-          {noEncontrados.length > 0 && (
-            <Card padding="md" radius="md" className={classes.expandCard}>
-              <Group justify="space-between" mb="sm">
-                <Text fw={600} size="sm">
-                  Alumnos no encontrados ({noEncontrados.length})
-                </Text>
-                {correcciones.size > 0 && (
-                  <Button
-                    size="xs"
-                    variant="filled"
-                    color="blue"
-                    loading={searchLoading}
-                    onClick={handleCorregirMatching}
-                  >
-                    Aplicar correcciones ({correcciones.size})
-                  </Button>
-                )}
-              </Group>
-              <div className={classes.scrollTable}>
-                <table className={classes.table}>
-                  <thead>
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Email</th>
-                      <th>Cuenta</th>
-                      <th>Folio</th>
-                      <th>Motivo</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {noEncontrados.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className={classes.wrapCell}>{item.nombre_original}</td>
-                        <td>{item.correo || '—'}</td>
-                        <td>{item.cuenta || '—'}</td>
-                        <td>{item.folio || '—'}</td>
-                        <td className={classes.wrapCell}>{item.motivo}</td>
-                        <td>
-                          {correcciones.has(item.indice) ? (
-                            <Text size="xs" c="green" fw={600}>
-                              Asignado (ID: {correcciones.get(item.indice)})
-                            </Text>
-                          ) : (
-                            <Button
-                              size="compact-xs"
-                              variant="filled"
-                              color="blue"
-                              onClick={() => openCorreccionModal(item.indice)}
-                            >
-                              Corregir
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-
-          <div className={classes.actionRow}>
-            <Button
-              size="md"
-              color="indigo"
-              className={classes.submitButton}
-              onClick={handleReset}
-            >
-              Subir otro examen
-            </Button>
-            <Button
-              size="md"
-              color="green"
-              className={classes.submitButton}
-              onClick={handleExport}
-            >
-              <IconFileSpreadsheet size={18} style={{ marginRight: 8 }} />
-              Exportar Excel consolidado
-            </Button>
-          </div>
-        </Stack>
-      )}
+      <Group justify="space-between" mt="md">
+        <Button variant="default" onClick={handleBack} disabled={step === 0}>
+          Atrás
+        </Button>
+        {step === 0 ? (
+          <Button onClick={handleNext}>
+            Comenzar carga
+          </Button>
+        ) : step >= 1 && step <= 4 ? (
+          <Button onClick={handleNext}>
+            {step === 4 ? 'Ver resumen' : `Siguiente: ${MATERIAS_LABELS[MATERIAS_ORDER[step]]}`}
+          </Button>
+        ) : null}
+      </Group>
 
       <Modal
         opened={showRespuestasModal}
         onClose={() => setShowRespuestasModal(false)}
-        title={`Respuestas correctas — ${materia || ''}`}
+        title={`Respuestas correctas — ${editingMateria ? MATERIAS_LABELS[editingMateria] : ''}`}
         size="lg"
         centered
       >
@@ -575,12 +661,8 @@ function DiagnosticoSection() {
             </table>
           </div>
           <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={() => setShowRespuestasModal(false)}>
-              Cancelar
-            </Button>
-            <Button color="green" onClick={handleSaveRespuestas}>
-              Guardar
-            </Button>
+            <Button variant="default" onClick={() => setShowRespuestasModal(false)}>Cancelar</Button>
+            <Button color="green" onClick={handleSaveRespuestas}>Guardar</Button>
           </Group>
         </Stack>
       </Modal>
@@ -595,32 +677,16 @@ function DiagnosticoSection() {
         <Stack gap="md">
           {noEncontradoActual && (
             <div className={classes.correccionForm}>
-              <Text size="xs" c="dimmed">
-                <strong>Email:</strong> {noEncontradoActual.correo || '—'}
-              </Text>
-              <Text size="xs" c="dimmed">
-                <strong>Cuenta:</strong> {noEncontradoActual.cuenta || '—'}
-              </Text>
+              <Text size="xs" c="dimmed"><strong>Email:</strong> {noEncontradoActual.correo || '—'}</Text>
+              <Text size="xs" c="dimmed"><strong>Cuenta:</strong> {noEncontradoActual.cuenta || '—'}</Text>
             </div>
           )}
 
           <Group gap={0} mb="xs">
-            <Button
-              size="xs"
-              variant={correccionTab === 'buscar' ? 'filled' : 'outline'}
-              color="blue"
-              radius={0}
-              onClick={() => setCorreccionTab('buscar')}
-            >
+            <Button size="xs" variant={correccionTab === 'buscar' ? 'filled' : 'outline'} color="blue" radius={0} onClick={() => setCorreccionTab('buscar')}>
               Buscar existente
             </Button>
-            <Button
-              size="xs"
-              variant={correccionTab === 'crear' ? 'filled' : 'outline'}
-              color="blue"
-              radius={0}
-              onClick={() => setCorreccionTab('crear')}
-            >
+            <Button size="xs" variant={correccionTab === 'crear' ? 'filled' : 'outline'} color="blue" radius={0} onClick={() => setCorreccionTab('crear')}>
               Crear nuevo
             </Button>
           </Group>
@@ -636,14 +702,7 @@ function DiagnosticoSection() {
                   style={{ flex: 1 }}
                   size="sm"
                 />
-                <Button
-                  size="sm"
-                  variant="filled"
-                  color="blue"
-                  loading={searchLoading}
-                  onClick={handleSearchAlumno}
-                  leftSection={<IconSearch size={14} />}
-                >
+                <Button size="sm" variant="filled" color="blue" loading={searchLoading} onClick={handleSearchAlumno} leftSection={<IconSearch size={14} />}>
                   Buscar
                 </Button>
               </Group>
@@ -651,11 +710,7 @@ function DiagnosticoSection() {
                 <div className={classes.scrollTable} style={{ maxHeight: 250 }}>
                   <Stack gap={4}>
                     {searchResults.map((r) => (
-                      <div
-                        key={r.id}
-                        className={classes.searchResult}
-                        onClick={() => handleSelectExisting(r.id)}
-                      >
+                      <div key={r.id} className={classes.searchResult} onClick={() => handleSelectExisting(r.id)}>
                         <div className={classes.searchResultName}>
                           {r.nombre} {r.apellido_paterno} {r.apellido_materno}
                         </div>
@@ -682,59 +737,14 @@ function DiagnosticoSection() {
           {correccionTab === 'crear' && (
             <Stack gap="sm">
               <div className={classes.correccionForm}>
-                <TextInput
-                  label="Nombre"
-                  value={createForm.nombre}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, nombre: e.currentTarget.value }))}
-                  size="sm"
-                  required
-                />
-                <TextInput
-                  label="Apellido paterno"
-                  value={createForm.apellido_paterno}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, apellido_paterno: e.currentTarget.value }))}
-                  size="sm"
-                  required
-                />
-                <TextInput
-                  label="Apellido materno"
-                  value={createForm.apellido_materno}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, apellido_materno: e.currentTarget.value }))}
-                  size="sm"
-                />
-                <TextInput
-                  label="Correo personal"
-                  value={createForm.correo_personal}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, correo_personal: e.currentTarget.value }))}
-                  size="sm"
-                  required
-                />
-                <TextInput
-                  label="Nº Cuenta (7 dígitos)"
-                  value={createForm.numero_cuenta || ''}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, numero_cuenta: e.currentTarget.value || null }))}
-                  size="sm"
-                />
-                <TextInput
-                  label="Nº Folio (9 dígitos)"
-                  value={createForm.numero_folio || ''}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, numero_folio: e.currentTarget.value || null }))}
-                  size="sm"
-                />
-                <Select
-                  label="Ingeniería"
-                  data={INGENIERIA_OPTIONS}
-                  value={createForm.ingenieria_clave}
-                  onChange={(v) => setCreateForm((p) => ({ ...p, ingenieria_clave: v }))}
-                  size="sm"
-                  clearable
-                />
-                <TextInput
-                  label="Periodo"
-                  value={createForm.periodo}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, periodo: e.currentTarget.value }))}
-                  size="sm"
-                />
+                <TextInput label="Nombre" value={createForm.nombre} onChange={(e) => setCreateForm((p) => ({ ...p, nombre: e.currentTarget.value }))} size="sm" required />
+                <TextInput label="Apellido paterno" value={createForm.apellido_paterno} onChange={(e) => setCreateForm((p) => ({ ...p, apellido_paterno: e.currentTarget.value }))} size="sm" required />
+                <TextInput label="Apellido materno" value={createForm.apellido_materno} onChange={(e) => setCreateForm((p) => ({ ...p, apellido_materno: e.currentTarget.value }))} size="sm" />
+                <TextInput label="Correo personal" value={createForm.correo_personal} onChange={(e) => setCreateForm((p) => ({ ...p, correo_personal: e.currentTarget.value }))} size="sm" required />
+                <TextInput label="Nº Cuenta (7 dígitos)" value={createForm.numero_cuenta || ''} onChange={(e) => setCreateForm((p) => ({ ...p, numero_cuenta: e.currentTarget.value || null }))} size="sm" />
+                <TextInput label="Nº Folio (9 dígitos)" value={createForm.numero_folio || ''} onChange={(e) => setCreateForm((p) => ({ ...p, numero_folio: e.currentTarget.value || null }))} size="sm" />
+                <Select label="Ingeniería" data={INGENIERIA_OPTIONS} value={createForm.ingenieria_clave} onChange={(v) => setCreateForm((p) => ({ ...p, ingenieria_clave: v }))} size="sm" clearable />
+                <TextInput label="Periodo" value={createForm.periodo} onChange={(e) => setCreateForm((p) => ({ ...p, periodo: e.currentTarget.value }))} size="sm" />
               </div>
             </Stack>
           )}
@@ -746,17 +756,9 @@ function DiagnosticoSection() {
           )}
 
           <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={() => setCorrigiendoIdx(null)}>
-              Cancelar
-            </Button>
+            <Button variant="default" onClick={() => setCorrigiendoIdx(null)}>Cancelar</Button>
             {correccionTab === 'crear' && (
-              <Button
-                color="green"
-                loading={createLoading}
-                onClick={handleCreateAlumno}
-              >
-                Crear y asignar
-              </Button>
+              <Button color="green" loading={createLoading} onClick={handleCreateAlumno}>Crear y asignar</Button>
             )}
           </Group>
         </Stack>

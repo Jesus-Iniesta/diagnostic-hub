@@ -252,6 +252,97 @@
   grid-column: 1 / -1;
 }
 
+.wizardProgress {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0.75rem 0;
+  overflow-x: auto;
+}
+
+.wizardStep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 60px;
+  cursor: default;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+
+.wizardStepDone {
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.wizardStepActive {
+  opacity: 1;
+}
+
+.wizardStepCircle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: #e5e7eb;
+  color: #667085;
+  transition: background 0.2s, color 0.2s;
+}
+
+.wizardStepActive .wizardStepCircle {
+  background: #4f46e5;
+  color: #fff;
+}
+
+.wizardStepDone .wizardStepCircle {
+  background: #10b981;
+  color: #fff;
+}
+
+.wizardStepLabel {
+  font-size: 10px;
+  color: #667085;
+  text-align: center;
+  white-space: nowrap;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wizardStepActive .wizardStepLabel {
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+.configGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.configCard {
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.configCardOk {
+  border-color: #a6f4c5;
+  background: #ecfdf3;
+}
+
+.configCardMissing {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
 @media (max-width: 768px) {
   .welcomeTitle {
     font-size: 24px;
@@ -281,5 +372,28 @@
 
   .actionRow .submitButton {
     width: 100%;
+  }
+
+  .wizardProgress {
+    gap: 0;
+  }
+
+  .wizardStep {
+    min-width: 48px;
+  }
+
+  .wizardStepCircle {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+
+  .wizardStepLabel {
+    font-size: 9px;
+    max-width: 56px;
+  }
+
+  .configGrid {
+    grid-template-columns: 1fr;
   }
 }

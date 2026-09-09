@@ -76,3 +76,20 @@ export interface ResultadoAlumno {
   nivel: string;
   retroalimentacion: string;
 }
+
+export interface MateriaResultado {
+  materia: string;
+  nombre: string;
+  puntaje: number | null;
+  maximo: number;
+  nivel: string;
+  retroalimentacion: string;
+}
+
+export interface DiagnosticoAlumnoResponse {
+  periodo: string;
+  promedio: number | null;
+  nivel_general: string;
+  retroalimentacion_general: string;
+  materias: MateriaResultado[];
+}

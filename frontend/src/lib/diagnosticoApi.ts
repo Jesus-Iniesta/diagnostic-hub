@@ -120,3 +120,26 @@ export async function crearAlumnoDiagnostico(payload: CrearAlumnoPayload): Promi
   });
   return res;
 }
+
+export interface MateriaStatus {
+  total_alumnos: number;
+}
+
+export interface MateriaKeyStatus {
+  configurada: boolean;
+  total_preguntas: number;
+}
+
+export async function getDiagnosticoStatus(periodo: string): Promise<Record<string, MateriaStatus>> {
+  const res = await apiFetch<Record<string, MateriaStatus>>(
+    `${DIAGNOSTICO_URL}/status?periodo=${encodeURIComponent(periodo)}`,
+  );
+  return res;
+}
+
+export async function getRespuestaKeyStatus(periodo: string): Promise<Record<string, MateriaKeyStatus>> {
+  const res = await apiFetch<Record<string, MateriaKeyStatus>>(
+    `${DIAGNOSTICO_URL}/respuesta-key-status?periodo=${encodeURIComponent(periodo)}`,
+  );
+  return res;
+}

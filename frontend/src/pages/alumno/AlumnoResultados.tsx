@@ -1,30 +1,139 @@
-import { Badge, Card, Divider, Group, Loader, Stack, Text, Title } from '@mantine/core';
-import { IconChartBar } from '@tabler/icons-react';
+import {
+  Badge,
+  Card,
+  Divider,
+  Group,
+  Loader,
+  SimpleGrid,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
+import { IconMoodSad, IconTrophy } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
-import { fetchMisResultados } from '../../lib/alumnoApi';
+import { fetchMiDiagnostico } from '../../lib/alumnoApi';
 import { dashboardColors } from '../../theme/theme';
-import type { ResultadoAlumno } from '../../types/alumno';
+import type { DiagnosticoAlumnoResponse, MateriaResultado } from '../../types/alumno';
 import classes from './AlumnoResultados.module.css';
 
 const LEVEL_COLORS: Record<string, string> = {
   Alto: dashboardColors.green,
+  Bueno: dashboardColors.blue,
   Medio: dashboardColors.orange,
   Bajo: dashboardColors.red,
+  "Muy bajo": dashboardColors.red,
+  "Sin datos": 'gray',
 };
 
+const MATERIA_ICONS: Record<string, string> = {
+  algebra: 'A',
+  trigonometria: 'T',
+  geometria: 'G',
+  calculo: 'C',
+};
+
+function ScoreBar({ puntaje, maximo }: { puntaje: number | null; maximo: number }) {
+  const pct = puntaje !== null ? (puntaje / maximo) * 100 : 0;
+  const color =
+    pct >= 90
+      ? dashboardColors.green
+      : pct >= 70
+        ? dashboardColors.blue
+        : pct >= 45
+          ? dashboardColors.orange
+          : dashboardColors.red;
+
+  return (
+    <div className={classes.barTrack}>
+      <div
+        className={classes.barFill}
+        style={{
+          width: `${pct}%`,
+          backgroundColor: puntaje !== null ? color : '#e5e7eb',
+        }}
+      />
+    </div>
+  );
+}
+
+function MateriaCard({ materia }: { materia: MateriaResultado }) {
+  const color = LEVEL_COLORS[materia.nivel] ?? 'gray';
+  const isSinDatos = materia.nivel === 'Sin datos';
+
+  return (
+    <Card className={classes.materiaCard} padding="lg" radius="lg">
+      <Group gap="sm" wrap="nowrap" align="flex-start" mb="md">
+        <span
+          className={classes.materiaIcon}
+          style={{
+            backgroundColor: isSinDatos ? '#f3f4f6' : `${color}15`,
+            color: isSinDatos ? '#9ca3af' : color,
+          }}
+        >
+          {MATERIA_ICONS[materia.materia] ?? '?'}
+        </span>
+        <div style={{ flex: 1 }}>
+          <Text fw={600} size="sm" c="dark">
+            {materia.nombre}
+          </Text>
+          <Badge
+            size="sm"
+            radius="md"
+            variant="light"
+            color={color}
+            mt={4}
+          >
+            {materia.nivel}
+          </Badge>
+        </div>
+      </Group>
+
+      <div className={classes.scoreSection}>
+        <Group justify="space-between" mb={6}>
+          <Text size="xs" c="dimmed">
+            Puntaje
+          </Text>
+          <Text fw={700} size="lg" c="dark">
+            {materia.puntaje !== null ? materia.puntaje.toFixed(1) : '—'}
+            <Text component="span" size="xs" c="dimmed" fw={400}>
+              {' '}/ {materia.maximo}
+            </Text>
+          </Text>
+        </Group>
+        <ScoreBar puntaje={materia.puntaje} maximo={materia.maximo} />
+      </div>
+
+      {materia.retroalimentacion && (
+        <>
+          <Divider my="md" color="#F0F1F5" />
+          <Text size="xs" c="dimmed" lh={1.5}>
+            {materia.retroalimentacion}
+          </Text>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function AlumnoResultados() {
-  const [resultado, setResultado] = useState<ResultadoAlumno | null>(null);
+  const [data, setData] = useState<DiagnosticoAlumnoResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    void fetchMisResultados().then((data) => {
-      if (mounted) setResultado(data);
+    void fetchMiDiagnostico().then((result) => {
+      if (mounted) {
+        setData(result);
+        setLoading(false);
+      }
     });
     return () => {
       mounted = false;
     };
   }, []);
+
+  const isSinDatos = data?.nivel_general === 'Sin datos';
 
   return (
     <>
@@ -37,55 +146,76 @@ export default function AlumnoResultados() {
         </Text>
       </div>
 
-      {!resultado ? (
+      {loading ? (
         <Card className={classes.card} padding="xl" radius="lg" mt="lg">
           <Stack align="center" py="xl">
             <Loader size="sm" />
           </Stack>
         </Card>
-      ) : (
-        <Card className={classes.card} padding="xl" radius="lg" mt="lg">
-          <Group gap="sm" wrap="nowrap" align="flex-start">
-            <span className={classes.iconBox}>
-              <IconChartBar size={22} color={dashboardColors.blue} stroke={2} aria-hidden="true" />
-            </span>
-            <div>
-              <Title order={3} className={classes.title}>
-                Resultado del examen diagnóstico
-              </Title>
-              <Text className={classes.subtitle}>Evaluación de nivelación matemática</Text>
-            </div>
-          </Group>
+      ) : data ? (
+        <Stack gap="lg" mt="lg">
+          <Card className={classes.card} padding="xl" radius="lg">
+            <Group gap="sm" wrap="nowrap" align="flex-start">
+              <span className={classes.iconBox}>
+                {isSinDatos ? (
+                  <IconMoodSad size={22} color={dashboardColors.orange} stroke={2} />
+                ) : (
+                  <IconTrophy size={22} color={dashboardColors.green} stroke={2} />
+                )}
+              </span>
+              <div>
+                <Title order={3} className={classes.title}>
+                  Resultado del examen diagnóstico
+                </Title>
+                <Text className={classes.subtitle}>
+                  {data.periodo ? `Periodo ${data.periodo}` : 'Evaluación de nivelación matemática'}
+                </Text>
+              </div>
+            </Group>
 
-          <Stack gap="sm" mt="lg">
-            <div className={classes.scoreRow}>
-              <Stack gap={2}>
-                <Text className={classes.scoreLabel}>Puntaje</Text>
-                <Text className={classes.scoreValue}>{resultado.puntaje}</Text>
-              </Stack>
-              <Stack gap={2} align="flex-end">
-                <Text className={classes.scoreLabel}>Nivel de matemáticas</Text>
-                <Badge
-                  size="lg"
-                  radius="md"
-                  variant="light"
-                  color={LEVEL_COLORS[resultado.nivel] ?? 'gray'}
-                  className={classes.levelBadge}
-                >
-                  {resultado.nivel}
-                </Badge>
-              </Stack>
-            </div>
-          </Stack>
+            <Stack gap="sm" mt="lg">
+              <div className={classes.scoreRow}>
+                <Stack gap={2}>
+                  <Text className={classes.scoreLabel}>Promedio general</Text>
+                  <Text className={classes.scoreValue}>
+                    {data.promedio !== null ? data.promedio.toFixed(1) : '—'}
+                  </Text>
+                </Stack>
+                <Stack gap={2} align="flex-end">
+                  <Text className={classes.scoreLabel}>Nivel</Text>
+                  <Badge
+                    size="lg"
+                    radius="md"
+                    variant="light"
+                    color={LEVEL_COLORS[data.nivel_general] ?? 'gray'}
+                    className={classes.levelBadge}
+                  >
+                    {data.nivel_general}
+                  </Badge>
+                </Stack>
+              </div>
+            </Stack>
 
-          <Divider my="lg" color="#F0F1F5" />
+            <Divider my="lg" color="#F0F1F5" />
 
-          <Stack gap={6}>
-            <Text className={classes.feedbackTitle}>Retroalimentación</Text>
-            <Text className={classes.feedbackText}>{resultado.retroalimentacion}</Text>
-          </Stack>
-        </Card>
-      )}
+            <Stack gap={6}>
+              <Text className={classes.feedbackTitle}>Retroalimentación general</Text>
+              <Text className={classes.feedbackText}>{data.retroalimentacion_general}</Text>
+            </Stack>
+          </Card>
+
+          <div>
+            <Text fw={700} size="lg" c="dark" mb="md">
+              Resultado por materia
+            </Text>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              {data.materias.map((m) => (
+                <MateriaCard key={m.materia} materia={m} />
+              ))}
+            </SimpleGrid>
+          </div>
+        </Stack>
+      ) : null}
     </>
   );
 }

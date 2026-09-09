@@ -81,15 +81,37 @@ def normalize_folio(raw: object | None) -> str | None:
     return digits if len(digits) == 9 else None
 
 
-def extract_answer_key_from_raw(raw: str) -> str | None:
-    if not raw:
+def extract_answer_key_from_raw(raw: object | None) -> str | None:
+    if raw is None:
         return None
-    s = str(raw).strip().lower()
-    m = re.search(r"la opción\s+([abcd])\)", s)
+    s = str(raw).strip()
+    if not s:
+        return None
+
+    s_lower = s.lower()
+
+    m = re.search(r"la\s+opci[oó]n\s+([abcd])\)", s_lower)
     if m:
         return m.group(1)
-    if s in ("a", "b", "c", "d"):
-        return s
+
+    m = re.search(r"\(([abcd])\)", s_lower)
+    if m:
+        return m.group(1)
+
+    m = re.search(r"\b([abcd])\)", s_lower)
+    if m:
+        return m.group(1)
+
+    if s_lower in ("a", "b", "c", "d"):
+        return s_lower
+
+    num_map = {"1": "a", "2": "b", "3": "c", "4": "d"}
+    if s in num_map:
+        return num_map[s]
+
+    if len(s) == 1 and s_lower in ("a", "b", "c", "d"):
+        return s_lower
+
     return None
 
 
@@ -110,17 +132,20 @@ def calculate_exam_score(
     answers: list[str | None],
     correct_key: list[str],
 ) -> float:
-    sections = [
-        calculate_section_score(answers, correct_key, 0),
-        calculate_section_score(answers, correct_key, 5),
-        calculate_section_score(answers, correct_key, 10),
-        calculate_section_score(answers, correct_key, 15),
-    ]
-    return round(sum(sections) / 4, 2)
+    correct = 0
+    for i in range(len(answers)):
+        if i < len(correct_key) and answers[i] == correct_key[i]:
+            correct += 1
+    return correct * 2.0
 
 
 def generate_answer_codes(prefix: str, count: int = 20) -> list[str]:
-    return [f"{prefix}{i+1}" for i in range(count)]
+    codes = []
+    for i in range(count):
+        section = i // 5 + 1
+        pos = i % 5 + 1
+        codes.append(f"{prefix}{section}{pos}")
+    return codes
 
 
 async def load_all_alumnos(
@@ -222,7 +247,7 @@ async def procesar_examen_diagnostico(
     if not correct_key_dict:
         correct_key = [""] * question_count
     else:
-        correct_key = [correct_key_dict.get(code, "") for code in answer_codes]
+        correct_key = [correct_key_dict.get(code, "").lower() for code in answer_codes]
 
     email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
@@ -256,17 +281,20 @@ async def procesar_examen_diagnostico(
 
         if alumno_id is None:
             candidates = find_candidates(nombre_original, alumno_details)
-            no_encontrados.append({
-                "nombre_original": nombre_original,
-                "correo": email,
-                "cuenta": cuenta,
-                "folio": folio,
-                "materia": materia,
-                "motivo": "No se encontró alumno con email, cuenta o folio",
-                "candidatos": candidates,
-                "indice": idx,
-            })
-            continue
+            if len(candidates) == 1:
+                alumno_id = candidates[0]["alumno_id"]
+            else:
+                no_encontrados.append({
+                    "nombre_original": nombre_original,
+                    "correo": email,
+                    "cuenta": cuenta,
+                    "folio": folio,
+                    "materia": materia,
+                    "motivo": "No se encontró alumno con email, cuenta o folio",
+                    "candidatos": candidates,
+                    "indice": idx,
+                })
+                continue
 
         detail = alumno_details[alumno_id]
         respuestas_details = []
@@ -338,7 +366,7 @@ async def corregir_matching_diagnostico(
     if not correct_key_dict:
         correct_key = [""] * question_count
     else:
-        correct_key = [correct_key_dict.get(code, "") for code in answer_codes]
+        correct_key = [correct_key_dict.get(code, "").lower() for code in answer_codes]
 
     _, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 

@@ -217,3 +217,29 @@ async def crear_alumno(
         raise HTTPException(status_code=400, detail=str(exc))
     await db.commit()
     return alumno
+
+
+@router.get(
+    "/status",
+    summary="Estado de resultados de diagnóstico por materia",
+)
+async def get_status(
+    db: DbSession,
+    periodo: str = Query(...),
+    _current_user: User = Depends(require_permission("cargar_diagnostico")),
+):
+    repo = DiagnosticoRepository(db)
+    return await repo.get_status(periodo)
+
+
+@router.get(
+    "/respuesta-key-status",
+    summary="Estado de llaves de respuesta por materia",
+)
+async def get_respuesta_key_status(
+    db: DbSession,
+    periodo: str = Query(...),
+    _current_user: User = Depends(require_permission("cargar_diagnostico")),
+):
+    repo = DiagnosticoRepository(db)
+    return await repo.get_respuesta_key_status(periodo)

@@ -35,6 +35,7 @@ class DiagnosticoRepository:
         respuesta: str,
         periodo: str,
     ) -> None:
+        respuesta = respuesta.strip().lower()
         existing = await self.db.execute(
             select(RespuestaCorrectaDiagnostico).where(
                 RespuestaCorrectaDiagnostico.materia == materia,
@@ -209,3 +210,43 @@ class DiagnosticoRepository:
             "numero_folio": alumno.numero_folio,
             "ingenieria": ingenieria.clave if ingenieria else None,
         }
+
+    async def get_status(self, periodo: str) -> dict:
+        from sqlalchemy import func
+
+        materias = ["algebra", "trigonometria", "geometria", "calculo"]
+        status = {}
+
+        for mat in materias:
+            count_stmt = select(func.count()).select_from(ResultadoDiagnostico).where(
+                ResultadoDiagnostico.periodo == periodo
+            )
+            if mat == "algebra":
+                count_stmt = count_stmt.where(ResultadoDiagnostico.puntaje_algebra.isnot(None))
+            elif mat == "trigonometria":
+                count_stmt = count_stmt.where(ResultadoDiagnostico.puntaje_trigonometria.isnot(None))
+            elif mat == "geometria":
+                count_stmt = count_stmt.where(ResultadoDiagnostico.puntaje_geometria.isnot(None))
+            elif mat == "calculo":
+                count_stmt = count_stmt.where(ResultadoDiagnostico.puntaje_calculo.isnot(None))
+
+            total = (await self.db.execute(count_stmt)).scalar_one()
+            status[mat] = {"total_alumnos": total}
+
+        return status
+
+    async def get_respuesta_key_status(self, periodo: str) -> dict:
+        from sqlalchemy import func
+
+        materias = ["algebra", "trigonometria", "geometria", "calculo"]
+        status = {}
+
+        for mat in materias:
+            count_stmt = select(func.count()).select_from(RespuestaCorrectaDiagnostico).where(
+                RespuestaCorrectaDiagnostico.materia == mat,
+                RespuestaCorrectaDiagnostico.periodo == periodo,
+            )
+            total = (await self.db.execute(count_stmt)).scalar_one()
+            status[mat] = {"configurada": total > 0, "total_preguntas": total}
+
+        return status

@@ -58,3 +58,20 @@ class AlumnoListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class MateriaResultado(BaseModel):
+    materia: str
+    nombre: str
+    puntaje: float | None
+    maximo: float = 40.0
+    nivel: str
+    retroalimentacion: str
+
+
+class DiagnosticoAlumnoResponse(BaseModel):
+    periodo: str
+    promedio: float | None
+    nivel_general: str
+    retroalimentacion_general: str
+    materias: list[MateriaResultado]

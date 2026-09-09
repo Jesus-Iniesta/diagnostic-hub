@@ -15,6 +15,7 @@ from app.models.user import AuthMethod, User
 from app.seeds.data.alumnos import ALUMNOS
 from app.seeds.data.ingenierias import INGENIERIAS
 from app.seeds.data.permissions import PERMISSIONS
+from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
 from app.seeds.data.roles import ROLES
 from app.seeds.data.users import USERS
 
@@ -169,6 +170,33 @@ async def run_seed_alumnos() -> int:
     return created
 
 
+async def run_seed_respuestas_diagnostico(periodo: str = "2022B") -> int:
+    from app.models.respuesta_correcta_diagnostico import RespuestaCorrectaDiagnostico
+
+    async with async_session() as db:
+        created = 0
+        async with atomic_session(db):
+            for materia, answers in DEFAULT_RESPUESTAS.items():
+                for codigo, respuesta in answers.items():
+                    exists = await db.scalar(
+                        select(RespuestaCorrectaDiagnostico).where(
+                            RespuestaCorrectaDiagnostico.materia == materia,
+                            RespuestaCorrectaDiagnostico.codigo == codigo,
+                            RespuestaCorrectaDiagnostico.periodo == periodo,
+                        )
+                    )
+                    if exists:
+                        continue
+                    db.add(RespuestaCorrectaDiagnostico(
+                        materia=materia,
+                        codigo=codigo,
+                        respuesta_correcta=respuesta.lower(),
+                        periodo=periodo,
+                    ))
+                    created += 1
+    return created
+
+
 async def run_all() -> dict:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -177,10 +205,12 @@ async def run_all() -> dict:
     i = await run_seed_ingenierias()
     u = await run_seed_users()
     a = await run_seed_alumnos()
+    d = await run_seed_respuestas_diagnostico()
     return {
         "permissions": p,
         "roles": r,
         "ingenierias": i,
         "users": u,
         "alumnos": a,
+        "respuestas_diagnostico": d,
     }
