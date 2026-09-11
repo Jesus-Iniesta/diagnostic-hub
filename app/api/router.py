@@ -9,8 +9,10 @@ from app.api.v1 import (
     ingenierias,
     liga_examen_diagnostico,
     registro_alumno,
+    reportes,
     upload_alumnos,
     users,
+    webassign,
 )
 
 api_router = APIRouter()
@@ -39,4 +41,14 @@ api_router.include_router(
     diagnostico.router,
     prefix="/diagnostico",
     tags=["diagnostico"],
+)
+api_router.include_router(
+    webassign.router,
+    prefix="/webassign",
+    tags=["webassign"],
+)
+api_router.include_router(
+    reportes.router,
+    prefix="/reportes",
+    tags=["reportes"],
 )

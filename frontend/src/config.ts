@@ -22,3 +22,4 @@ export const USERS_URL = `${API_BASE_URL}/users`;
 export const LIGAS_EXAMENES_URL = `${API_BASE_URL}/ligas-examenes`;
 export const ALUMNO_ME_URL = `${API_BASE_URL}/alumnos/me`;
 export const DIAGNOSTICO_URL = `${API_BASE_URL}/diagnostico`;
+export const WEBASSIGN_URL = `${API_BASE_URL}/webassign`;

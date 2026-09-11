@@ -93,3 +93,21 @@ export interface DiagnosticoAlumnoResponse {
   retroalimentacion_general: string;
   materias: MateriaResultado[];
 }
+
+export interface WebAssignMateriaResultado {
+  materia: string;
+  nombre: string;
+  trabajo: number | null;
+  examen: number | null;
+  promedio: number | null;
+  nivel: string;
+  retroalimentacion: string;
+}
+
+export interface WebAssignAlumnoResponse {
+  periodo: string;
+  carrera: string;
+  promedio: number | null;
+  nivel_general: string;
+  materias: WebAssignMateriaResultado[];
+}

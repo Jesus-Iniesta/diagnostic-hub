@@ -11,7 +11,9 @@ import { IconCircleCheck } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
 import {
+  actualizarEstadoFormularioContacto,
   actualizarEstadoFormularioRegistro,
+  fetchEstadoFormularioContacto,
   fetchEstadoFormularioRegistro,
 } from '../../lib/configuracionApi';
 import classes from './AdminConfiguracion.module.css';
@@ -67,6 +69,7 @@ function useToggleCard(
 
 export default function AdminConfiguracion() {
   const registro = useToggleCard(fetchEstadoFormularioRegistro, actualizarEstadoFormularioRegistro);
+  const contacto = useToggleCard(fetchEstadoFormularioContacto, actualizarEstadoFormularioContacto);
 
   return (
     <>
@@ -135,6 +138,68 @@ export default function AdminConfiguracion() {
             loading={registro.guardando}
             disabled={registro.cargando}
             onClick={registro.handleGuardar}
+          >
+            Guardar cambios
+          </Button>
+        </Stack>
+      </Card>
+
+      <Card className={classes.card} padding="xl" radius="lg" mt="lg">
+        <Stack gap="lg">
+          <div>
+            <Title order={3} className={classes.title}>
+              Formulario de datos de contacto
+            </Title>
+            <Text className={classes.subtitle}>
+              Controla si los alumnos pueden registrar o actualizar sus datos de contacto.
+            </Text>
+          </div>
+
+          <div className={classes.fieldRow}>
+            <Text className={classes.fieldLabel}>Estado</Text>
+            <SegmentedControl
+              value={contacto.estado}
+              onChange={(value) => contacto.setEstado(value as EstadoFormulario)}
+              data={[
+                { label: '🟢 ACTIVO', value: 'activo' },
+                { label: '⚪ INACTIVO', value: 'inactivo' },
+              ]}
+              size="md"
+              radius="md"
+              disabled={contacto.cargando}
+            />
+          </div>
+
+          <Text className={classes.fieldHelp}>
+            {contacto.activo
+              ? 'Los alumnos pueden registrar o actualizar sus datos de contacto.'
+              : 'El formulario de contacto está cerrado. Los alumnos no pueden modificar sus datos.'}
+          </Text>
+
+          {contacto.guardado && (
+            <Alert
+              color="green"
+              variant="light"
+              radius="md"
+              icon={<IconCircleCheck size={18} aria-hidden="true" />}
+            >
+              Los cambios se guardaron correctamente.
+            </Alert>
+          )}
+
+          {contacto.error && (
+            <Alert color="red" variant="light" radius="md">
+              {contacto.error}
+            </Alert>
+          )}
+
+          <Button
+            size="md"
+            color="indigo"
+            className={classes.submitButton}
+            loading={contacto.guardando}
+            disabled={contacto.cargando}
+            onClick={contacto.handleGuardar}
           >
             Guardar cambios
           </Button>

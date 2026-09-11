@@ -5,6 +5,7 @@ from app.api.deps import DbSession
 from app.core.security import get_current_user, require_permission
 from app.models.alumno import Alumno
 from app.models.resultado_diagnostico import ResultadoDiagnostico
+from app.models.resultado_webassign import ResultadoWebAssign
 from app.models.user import User
 from app.repositories.alumno_repository import AlumnoRepository
 from app.repositories.diagnostico_repository import DiagnosticoRepository
@@ -126,3 +127,82 @@ async def mi_diagnostico(
         retroalimentacion_general=texto_gen,
         materias=materias,
     )
+
+
+@router.get(
+    "/me/webassign",
+    summary="Consultar mis resultados WebAssign",
+)
+async def mi_webassign(
+    db: DbSession,
+    periodo: str | None = Query(default=None, description="Periodo a consultar"),
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(Alumno).where(Alumno.usuario_id == current_user.id)
+    result = await db.execute(stmt)
+    alumno = result.scalars().first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+
+    if periodo:
+        stmt_r = select(ResultadoWebAssign).where(
+            ResultadoWebAssign.alumno_id == alumno.id,
+            ResultadoWebAssign.periodo == periodo,
+        )
+    else:
+        stmt_r = (
+            select(ResultadoWebAssign)
+            .where(ResultadoWebAssign.alumno_id == alumno.id)
+            .order_by(ResultadoWebAssign.created_at.desc())
+            .limit(1)
+        )
+    resultado = (await db.execute(stmt_r)).scalars().first()
+
+    if not resultado:
+        raise HTTPException(status_code=404, detail="No tienes resultados WebAssign registrados")
+
+    def score_nivel(val: float | None) -> tuple[str, str]:
+        if val is None:
+            return "Sin datos", ""
+        if val >= 9:
+            return "Alto", "Excelente desempeño"
+        if val >= 7:
+            return "Bueno", "Buen desempeño"
+        if val >= 4.5:
+            return "Medio", "Necesita reforzar"
+        if val >= 2.5:
+            return "Bajo", "Requiere atención"
+        return "Muy bajo", "Comienza desde cero"
+
+    materias = []
+    for materia_key, nombre in [
+        ("algebra", "Álgebra"),
+        ("trigonometria", "Trigonometría"),
+        ("geometria", "Geometría Analítica"),
+    ]:
+        trabajo = getattr(resultado, f"{materia_key}_trabajo")
+        examen = getattr(resultado, f"{materia_key}_examen")
+        vals = [v for v in [trabajo, examen] if v is not None]
+        promedio_materia = round(sum(vals) / len(vals), 2) if vals else None
+        nivel_materia, texto_materia = score_nivel(promedio_materia)
+        materias.append({
+            "materia": materia_key,
+            "nombre": nombre,
+            "trabajo": trabajo,
+            "examen": examen,
+            "promedio": promedio_materia,
+            "nivel": nivel_materia,
+            "retroalimentacion": texto_materia,
+        })
+
+    promedio_vals = [m["promedio"] for m in materias if m["promedio"] is not None]
+    promedio_general = round(sum(promedio_vals) / len(promedio_vals), 2) if promedio_vals else None
+    nivel_gen, _ = score_nivel(promedio_general)
+
+    return {
+        "periodo": resultado.periodo,
+        "carrera": resultado.carrera,
+        "promedio": promedio_general,
+        "nivel_general": nivel_gen,
+        "materias": materias,
+    }

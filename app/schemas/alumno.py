@@ -64,7 +64,7 @@ class MateriaResultado(BaseModel):
     materia: str
     nombre: str
     puntaje: float | None
-    maximo: float = 40.0
+    maximo: float = 10.0
     nivel: str
     retroalimentacion: str
 

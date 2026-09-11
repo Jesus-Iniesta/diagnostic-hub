@@ -8,17 +8,17 @@ MATERIAS_NOMBRES: dict[str, str] = {
     "calculo": "Cálculo Diferencial",
 }
 
-MAXIMO_PUNTAJE = 40.0
+MAXIMO_PUNTAJE = 10.0
 
 
 def _nivel(puntaje: float) -> str:
-    if puntaje >= 36:
+    if puntaje >= 9:
         return "Alto"
-    if puntaje >= 28:
+    if puntaje >= 7:
         return "Bueno"
-    if puntaje >= 18:
+    if puntaje >= 4.5:
         return "Medio"
-    if puntaje >= 10:
+    if puntaje >= 2.5:
         return "Bajo"
     return "Muy bajo"
 

@@ -125,7 +125,7 @@ def calculate_section_score(
     for i in range(section_start, min(section_start + section_size, len(answers))):
         if i < len(correct_key) and answers[i] == correct_key[i]:
             correct += 1
-    return correct * 2.0
+    return round(correct * 0.5, 2)
 
 
 def calculate_exam_score(
@@ -136,7 +136,7 @@ def calculate_exam_score(
     for i in range(len(answers)):
         if i < len(correct_key) and answers[i] == correct_key[i]:
             correct += 1
-    return correct * 2.0
+    return round(correct * 0.5, 2)
 
 
 def generate_answer_codes(prefix: str, count: int = 20) -> list[str]:

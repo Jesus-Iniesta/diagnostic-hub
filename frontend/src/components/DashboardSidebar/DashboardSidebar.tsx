@@ -20,6 +20,7 @@ import {
   IconUpload,
   IconUserSearch,
   IconUsers,
+  IconWorld,
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -29,10 +30,11 @@ import classes from './DashboardSidebar.module.css';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/admin' },
-  { id: 'carga', label: 'Carga y procesamiento', icon: IconUpload, to: '/admin/carga' },
+  { id: 'carga', label: 'Carga diagnóstico', icon: IconUpload, to: '/admin/carga' },
+  { id: 'webassign', label: 'Carga WebAssign', icon: IconWorld, to: '/admin/webassign' },
+  { id: 'reportes', label: 'Reportes', icon: IconReport, to: '/admin/reportes' },
   { id: 'resultados', label: 'Resultados', icon: IconUserSearch },
   { id: 'configuracion', label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
-  { id: 'reportes', label: 'Reportes', icon: IconReport },
   { id: 'usuarios', label: 'Usuarios', icon: IconUsers, to: '/admin/usuarios' },
   { id: 'ligas', label: 'Ligas exámenes', icon: IconLink, to: '/admin/ligas' },
   { id: 'seguridad', label: 'Seguridad', icon: IconShield },
@@ -50,6 +52,8 @@ interface SidebarNavItem {
 function initialActiveFromPath(pathname: string): SidebarItemId {
   if (pathname.startsWith('/admin/configuracion')) return 'configuracion';
   if (pathname.startsWith('/admin/carga')) return 'carga';
+  if (pathname.startsWith('/admin/webassign')) return 'webassign';
+  if (pathname.startsWith('/admin/reportes')) return 'reportes';
   if (pathname.startsWith('/admin/usuarios')) return 'usuarios';
   if (pathname.startsWith('/admin/ligas')) return 'ligas';
   return 'inicio';

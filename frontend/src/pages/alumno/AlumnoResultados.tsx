@@ -12,9 +12,9 @@ import {
 import { IconMoodSad, IconTrophy } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
-import { fetchMiDiagnostico } from '../../lib/alumnoApi';
+import { fetchMiDiagnostico, fetchMiWebAssign } from '../../lib/alumnoApi';
 import { dashboardColors } from '../../theme/theme';
-import type { DiagnosticoAlumnoResponse, MateriaResultado } from '../../types/alumno';
+import type { DiagnosticoAlumnoResponse, MateriaResultado, WebAssignAlumnoResponse, WebAssignMateriaResultado } from '../../types/alumno';
 import classes from './AlumnoResultados.module.css';
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -54,6 +54,77 @@ function ScoreBar({ puntaje, maximo }: { puntaje: number | null; maximo: number 
         }}
       />
     </div>
+  );
+}
+
+function WebAssignMateriaCard({ materia }: { materia: WebAssignMateriaResultado }) {
+  const color = LEVEL_COLORS[materia.nivel] ?? 'gray';
+  const isSinDatos = materia.nivel === 'Sin datos';
+
+  return (
+    <Card className={classes.materiaCard} padding="lg" radius="lg">
+      <Group gap="sm" wrap="nowrap" align="flex-start" mb="md">
+        <span
+          className={classes.materiaIcon}
+          style={{
+            backgroundColor: isSinDatos ? '#f3f4f6' : `${color}15`,
+            color: isSinDatos ? '#9ca3af' : color,
+          }}
+        >
+          {MATERIA_ICONS[materia.materia] ?? '?'}
+        </span>
+        <div style={{ flex: 1 }}>
+          <Text fw={600} size="sm" c="dark">
+            {materia.nombre}
+          </Text>
+          <Badge size="sm" radius="md" variant="light" color={color} mt={4}>
+            {materia.nivel}
+          </Badge>
+        </div>
+      </Group>
+
+      <div className={classes.scoreSection}>
+        <Group justify="space-between" mb={6}>
+          <Text size="xs" c="dimmed">Trabajo</Text>
+          <Text fw={700} size="sm" c="dark">
+            {materia.trabajo !== null ? materia.trabajo.toFixed(1) : '—'}
+            <Text component="span" size="xs" c="dimmed" fw={400}> / 10</Text>
+          </Text>
+        </Group>
+        <ScoreBar puntaje={materia.trabajo} maximo={10} />
+      </div>
+
+      <div className={classes.scoreSection} style={{ marginTop: '8px' }}>
+        <Group justify="space-between" mb={6}>
+          <Text size="xs" c="dimmed">Examen</Text>
+          <Text fw={700} size="sm" c="dark">
+            {materia.examen !== null ? materia.examen.toFixed(1) : '—'}
+            <Text component="span" size="xs" c="dimmed" fw={400}> / 10</Text>
+          </Text>
+        </Group>
+        <ScoreBar puntaje={materia.examen} maximo={10} />
+      </div>
+
+      <div className={classes.scoreSection} style={{ marginTop: '8px' }}>
+        <Group justify="space-between" mb={6}>
+          <Text size="xs" c="dimmed">Promedio materia</Text>
+          <Text fw={700} size="sm" c="dark">
+            {materia.promedio !== null ? materia.promedio.toFixed(1) : '—'}
+            <Text component="span" size="xs" c="dimmed" fw={400}> / 10</Text>
+          </Text>
+        </Group>
+        <ScoreBar puntaje={materia.promedio} maximo={10} />
+      </div>
+
+      {materia.retroalimentacion && (
+        <>
+          <Divider my="md" color="#F0F1F5" />
+          <Text size="xs" c="dimmed" lh={1.5}>
+            {materia.retroalimentacion}
+          </Text>
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -118,13 +189,18 @@ function MateriaCard({ materia }: { materia: MateriaResultado }) {
 
 export default function AlumnoResultados() {
   const [data, setData] = useState<DiagnosticoAlumnoResponse | null>(null);
+  const [webassignData, setWebassignData] = useState<WebAssignAlumnoResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    void fetchMiDiagnostico().then((result) => {
+    void Promise.all([
+      fetchMiDiagnostico().catch(() => null),
+      fetchMiWebAssign().catch(() => null),
+    ]).then(([diag, wa]) => {
       if (mounted) {
-        setData(result);
+        setData(diag);
+        setWebassignData(wa);
         setLoading(false);
       }
     });
@@ -216,6 +292,61 @@ export default function AlumnoResultados() {
           </div>
         </Stack>
       ) : null}
+
+      {webassignData && webassignData.materias.length > 0 && (
+        <Stack gap="lg" mt="lg">
+          <Card className={classes.card} padding="xl" radius="lg">
+            <Group gap="sm" wrap="nowrap" align="flex-start">
+              <span className={classes.iconBox} style={{ backgroundColor: '#EEF2FF', color: '#4F46E5' }}>
+                W
+              </span>
+              <div>
+                <Title order={3} className={classes.title}>
+                  Resultados WebAssign
+                </Title>
+                <Text className={classes.subtitle}>
+                  {webassignData.periodo ? `Periodo ${webassignData.periodo}` : 'Ejercicios en línea'}
+                  {webassignData.carrera ? ` — ${webassignData.carrera}` : ''}
+                </Text>
+              </div>
+            </Group>
+
+            <Stack gap="sm" mt="lg">
+              <div className={classes.scoreRow}>
+                <Stack gap={2}>
+                  <Text className={classes.scoreLabel}>Promedio general</Text>
+                  <Text className={classes.scoreValue}>
+                    {webassignData.promedio !== null ? webassignData.promedio.toFixed(1) : '—'}
+                  </Text>
+                </Stack>
+                <Stack gap={2} align="flex-end">
+                  <Text className={classes.scoreLabel}>Nivel</Text>
+                  <Badge
+                    size="lg"
+                    radius="md"
+                    variant="light"
+                    color={LEVEL_COLORS[webassignData.nivel_general] ?? 'gray'}
+                    className={classes.levelBadge}
+                  >
+                    {webassignData.nivel_general}
+                  </Badge>
+                </Stack>
+              </div>
+            </Stack>
+          </Card>
+
+          <div>
+            <Text fw={700} size="lg" c="dark" mb="md">
+              Resultado por materia
+            </Text>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+              {webassignData.materias.map((m) => (
+                <WebAssignMateriaCard key={m.materia} materia={m} />
+              ))}
+            </SimpleGrid>
+          </div>
+        </Stack>
+      )}
     </>
   );
 }
