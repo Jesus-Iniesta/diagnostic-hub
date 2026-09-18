@@ -62,7 +62,7 @@ export default function DashboardHeader({ onToggle }: DashboardHeaderProps) {
             </UnstyledButton>
           </Menu.Target>
           <Menu.Dropdown>
-            {periods.map((p) => (
+            {periods.map((p: string) => (
               <Menu.Item key={p} onClick={() => setPeriod(p)}>
                 {p}
               </Menu.Item>

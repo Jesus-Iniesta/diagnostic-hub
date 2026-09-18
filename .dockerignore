@@ -13,3 +13,7 @@ postgres-data/
 .dockerignore
 .gitignore
 README.md
+frontend/
+node_modules/
+dist/
+*.log

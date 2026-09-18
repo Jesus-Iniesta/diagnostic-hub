@@ -17,6 +17,7 @@ from app.models.feedback_resultado import FeedbackResultado
 from app.models.resultado_diagnostico import ResultadoDiagnostico
 from app.models.respuesta_correcta_diagnostico import RespuestaCorrectaDiagnostico
 from app.models.liga_examen_diagnostico import LigaExamenDiagnostico
+from app.models.resultado_webassign import ResultadoWebAssign
 
 __all__ = [
     "role_permissions",

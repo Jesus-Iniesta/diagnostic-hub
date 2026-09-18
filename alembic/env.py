@@ -1,4 +1,5 @@
 import asyncio
+import selectors
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -55,7 +56,10 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    asyncio.run(run_async_migrations())
+    if sys.platform == "win32":
+        asyncio.run(run_async_migrations(), loop_factory=asyncio.SelectorEventLoop)
+    else:
+        asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():
