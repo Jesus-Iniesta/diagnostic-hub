@@ -6,6 +6,7 @@ from app.core.base import Base
 
 if TYPE_CHECKING:
     from app.models.alumno import Alumno
+    from app.models.grupo import Grupo
 
 
 class Ingenieria(Base):
@@ -30,3 +31,4 @@ class Ingenieria(Base):
     )
 
     alumnos: Mapped[list["Alumno"]] = relationship(back_populates="ingenieria")
+    grupos: Mapped[list["Grupo"]] = relationship(back_populates="ingenieria")

@@ -19,9 +19,10 @@ ROLES = [
     },
     {
         "name": "profesor",
-        "description": "Consulta únicamente los alumnos de su grupo",
+        "description": "Consulta y administra los alumnos de su grupo",
         "permissions": [
             "consultar_resultados_grupo",
+            "gestionar_grupo",
         ],
     },
     {

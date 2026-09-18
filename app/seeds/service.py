@@ -7,12 +7,16 @@ from app.core.base import Base
 from app.core.database import async_session, engine
 from app.core.security import hash_password
 from app.models.alumno import Alumno
+from app.models.grupo import Grupo
+from app.models.grupo_profesor import grupo_profesor
+from app.models.grupo_alumno import grupo_alumno
 from app.models.ingenieria import Ingenieria
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.role_permission import role_permissions
 from app.models.user import AuthMethod, User
 from app.seeds.data.alumnos import ALUMNOS
+from app.seeds.data.grupos import GRUPOS, GRUPO_PROFESORES, GRUPO_ALUMNOS
 from app.seeds.data.ingenierias import INGENIERIAS
 from app.seeds.data.permissions import PERMISSIONS
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
@@ -197,6 +201,105 @@ async def run_seed_respuestas_diagnostico(periodo: str = "2022B") -> int:
     return created
 
 
+async def run_seed_grupos() -> dict:
+    async with async_session() as db:
+        created_grupos = 0
+        linked_profesores = 0
+        linked_alumnos = 0
+        async with atomic_session(db):
+            for data in GRUPOS:
+                exists = await db.scalar(
+                    select(Grupo).where(
+                        Grupo.nombre == data["nombre"],
+                        Grupo.periodo == data["periodo"],
+                    )
+                )
+                if exists:
+                    continue
+                ingenieria = await db.scalar(
+                    select(Ingenieria).where(
+                        Ingenieria.clave == data["ingenieria_clave"]
+                    )
+                )
+                if not ingenieria:
+                    continue
+                grupo = Grupo(
+                    nombre=data["nombre"],
+                    ingenieria_id=ingenieria.id,
+                    periodo=data["periodo"],
+                )
+                db.add(grupo)
+                await db.flush()
+                created_grupos += 1
+
+            for data in GRUPO_PROFESORES:
+                grupo = await db.scalar(
+                    select(Grupo).where(
+                        Grupo.nombre == data["grupo_nombre"],
+                        Grupo.periodo == "2026B",
+                    )
+                )
+                user = await db.scalar(
+                    select(User).where(
+                        User.correo_personal == data["profesor_correo"]
+                    )
+                )
+                if not grupo or not user:
+                    continue
+                exists = await db.execute(
+                    select(grupo_profesor).where(
+                        grupo_profesor.c.grupo_id == grupo.id,
+                        grupo_profesor.c.user_id == user.id,
+                    )
+                )
+                if exists.first():
+                    continue
+                await db.execute(
+                    grupo_profesor.insert().values(
+                        grupo_id=grupo.id, user_id=user.id
+                    )
+                )
+                linked_profesores += 1
+
+            for data in GRUPO_ALUMNOS:
+                grupo = await db.scalar(
+                    select(Grupo).where(
+                        Grupo.nombre == data["grupo_nombre"],
+                        Grupo.periodo == "2026B",
+                    )
+                )
+                alumno = await db.scalar(
+                    select(Alumno).where(
+                        Alumno.numero_cuenta == data["alumno_numero_cuenta"]
+                    )
+                )
+                if not grupo or not alumno:
+                    continue
+                exists = await db.execute(
+                    select(grupo_alumno).where(
+                        grupo_alumno.c.grupo_id == grupo.id,
+                        grupo_alumno.c.alumno_id == alumno.id,
+                        grupo_alumno.c.periodo == data["periodo"],
+                    )
+                )
+                if exists.first():
+                    continue
+                await db.execute(
+                    grupo_alumno.insert().values(
+                        grupo_id=grupo.id,
+                        alumno_id=alumno.id,
+                        periodo=data["periodo"],
+                    )
+                )
+                linked_alumnos += 1
+
+    return {
+        "grupos": created_grupos,
+        "profesores_vinculados": linked_profesores,
+        "alumnos_vinculados": linked_alumnos,
+    }
+
+
 async def run_all() -> dict:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -206,6 +309,7 @@ async def run_all() -> dict:
     u = await run_seed_users()
     a = await run_seed_alumnos()
     d = await run_seed_respuestas_diagnostico()
+    g = await run_seed_grupos()
     return {
         "permissions": p,
         "roles": r,
@@ -213,4 +317,5 @@ async def run_all() -> dict:
         "users": u,
         "alumnos": a,
         "respuestas_diagnostico": d,
+        "grupos": g,
     }

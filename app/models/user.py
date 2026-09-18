@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.alumno import Alumno
     from app.models.asignacion_examen import AsignacionExamen
     from app.models.examen import Examen
+    from app.models.grupo import Grupo
     from app.models.role import Role
 
 class User(Base):
@@ -79,3 +80,6 @@ class User(Base):
     alumnos: Mapped[list["Alumno"]] = relationship(back_populates="usuario")
     examenes_creados: Mapped[list["Examen"]] = relationship(back_populates="creado_por")
     asignaciones: Mapped[list["AsignacionExamen"]] = relationship(back_populates="asignador")
+    grupos: Mapped[list["Grupo"]] = relationship(
+        secondary="grupo_profesor", back_populates="profesores"
+    )

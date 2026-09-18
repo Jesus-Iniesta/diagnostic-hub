@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import StatCard from '../../components/StatCard/StatCard';
-import { fetchResumenGrupo } from '../../lib/profesorApi';
+import { fetchResumenGrupoLegacy } from '../../lib/profesorApi';
 import { dashboardColors } from '../../theme/theme';
 import type { ResumenGrupo } from '../../types/profesor';
 import classes from './ProfesorHome.module.css';
@@ -20,7 +20,7 @@ export default function ProfesorHome() {
 
   useEffect(() => {
     let mounted = true;
-    void fetchResumenGrupo().then((data) => {
+    void fetchResumenGrupoLegacy().then((data) => {
       if (mounted) setResumen(data);
     });
     return () => {
@@ -32,10 +32,10 @@ export default function ProfesorHome() {
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          ¡Hola, profesor! 👋
+          ¡Hola, profesor!
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Aquí tienes el resumen de tu grupo.
+          Aquí tienes el resumen de tus grupos.
         </Text>
       </div>
 
@@ -74,7 +74,7 @@ export default function ProfesorHome() {
           <Card className={classes.card} padding="xl" radius="lg">
             <Stack gap="sm">
               <Title order={3} className={classes.cardTitle}>
-                Grupo actual
+                Grupo actual: {resumen.nombreGrupo}
               </Title>
               <Group gap="xl" className={classes.statsRow}>
                 <Stack gap={2}>
@@ -105,11 +105,10 @@ export default function ProfesorHome() {
           <Card className={classes.card} padding="xl" radius="lg">
             <Stack gap="sm">
               <Title order={3} className={classes.cardTitle}>
-                Aún no tienes un grupo cargado
+                Aún no tienes un grupo
               </Title>
               <Text className={classes.cardText}>
-                Sube el archivo proporcionado por Control Escolar para consultar
-                los resultados de tus alumnos.
+                Crea un grupo y agrega alumnos para comenzar a consultar sus resultados.
               </Text>
               <Button
                 size="md"
@@ -118,7 +117,7 @@ export default function ProfesorHome() {
                 rightSection={<IconArrowRight size={18} aria-hidden="true" />}
                 onClick={() => navigate('/profesor/grupo')}
               >
-                Cargar lista
+                Ir a Mis grupos
               </Button>
             </Stack>
           </Card>

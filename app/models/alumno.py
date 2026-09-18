@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from app.models.ingenieria import Ingenieria
     from app.models.resultado_diagnostico import ResultadoDiagnostico
     from app.models.user import User
+    from app.models.grupo import Grupo
 
 
 class Alumno(Base):
@@ -93,4 +94,7 @@ class Alumno(Base):
     )
     resultado_diagnostico: Mapped[list["ResultadoDiagnostico"]] = relationship(
         back_populates="alumno"
+    )
+    grupos: Mapped[list["Grupo"]] = relationship(
+        secondary="grupo_alumno", back_populates="alumnos"
     )

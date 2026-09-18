@@ -18,6 +18,9 @@ from app.models.resultado_diagnostico import ResultadoDiagnostico
 from app.models.respuesta_correcta_diagnostico import RespuestaCorrectaDiagnostico
 from app.models.liga_examen_diagnostico import LigaExamenDiagnostico
 from app.models.resultado_webassign import ResultadoWebAssign
+from app.models.grupo import Grupo
+from app.models.grupo_profesor import grupo_profesor
+from app.models.grupo_alumno import grupo_alumno
 
 __all__ = [
     "role_permissions",
@@ -38,4 +41,7 @@ __all__ = [
     "ResultadoDiagnostico",
     "RespuestaCorrectaDiagnostico",
     "LigaExamenDiagnostico",
+    "Grupo",
+    "grupo_profesor",
+    "grupo_alumno",
 ]

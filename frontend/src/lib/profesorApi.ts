@@ -1,30 +1,109 @@
-import { alumnosGrupoMock } from '../mocks/profesor';
+import { API_BASE_URL } from '../config';
 import type {
-  AlumnoGrupo,
+  Grupo,
+  GrupoAlumno,
+  GrupoCreate,
+  GrupoResumen,
   ResumenGrupo,
+  AlumnoGrupo,
   ValidacionArchivo,
 } from '../types/profesor';
 
-/**
- * Servicio del módulo de profesor (mock-first).
- *
- * Cuando el backend esté listo:
- * 1. Poner `PROFESOR_USE_MOCK = false`.
- * 2. Conectar cada función con su endpoint real:
- *    - `fetchResumenGrupo`   → GET  {API_BASE_URL}/profesor/grupo/resumen (pendiente)
- *    - `validarArchivoGrupo` → POST {API_BASE_URL}/profesor/grupo/validar (pendiente)
- *    - `fetchAlumnosGrupo`   → GET  {API_BASE_URL}/profesor/grupo (pendiente)
- *
- * En modo mock se usa un estado compartido en memoria para simular el flujo
- * "cargar lista → validar → ver grupo" de forma coherente durante la demo.
- */
-const PROFESOR_USE_MOCK = true;
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    ...init,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
 
-let grupoCargadoMock = false;
-const nombreGrupoMock = 'ICO-1';
+export async function fetchMisGrupos(periodo?: string): Promise<Grupo[]> {
+  const params = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
+  return fetchJson<Grupo[]>(`${API_BASE_URL}/profesor/grupos${params}`);
+}
 
-function resumenDesdeAlumnos(alumnos: AlumnoGrupo[]): ResumenGrupo {
-  if (!grupoCargadoMock) {
+export async function crearGrupo(data: GrupoCreate): Promise<Grupo> {
+  return fetchJson<Grupo>(`${API_BASE_URL}/profesor/grupos`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function eliminarGrupo(grupoId: number): Promise<void> {
+  await fetch(`${API_BASE_URL}/profesor/grupos/${grupoId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+}
+
+export async function fetchAlumnosGrupo(
+  grupoId: number,
+  periodo?: string,
+): Promise<GrupoAlumno[]> {
+  const params = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
+  return fetchJson<GrupoAlumno[]>(
+    `${API_BASE_URL}/profesor/grupos/${grupoId}/alumnos${params}`,
+  );
+}
+
+export async function agregarAlumno(
+  grupoId: number,
+  numeroCuenta: string,
+): Promise<void> {
+  await fetchJson(`${API_BASE_URL}/profesor/grupos/${grupoId}/alumnos`, {
+    method: 'POST',
+    body: JSON.stringify({ numero_cuenta: numeroCuenta }),
+  });
+}
+
+export async function quitarAlumno(
+  grupoId: number,
+  alumnoId: number,
+): Promise<void> {
+  await fetch(
+    `${API_BASE_URL}/profesor/grupos/${grupoId}/alumnos/${alumnoId}`,
+    { method: 'DELETE', credentials: 'include' },
+  );
+}
+
+export async function fetchResumenGrupo(
+  grupoId: number,
+  periodo: string,
+): Promise<GrupoResumen> {
+  return fetchJson<GrupoResumen>(
+    `${API_BASE_URL}/profesor/grupos/${grupoId}/resumen?periodo=${encodeURIComponent(periodo)}`,
+  );
+}
+
+export async function fetchResumenGrupoLegacy(): Promise<ResumenGrupo> {
+  try {
+    const grupos = await fetchMisGrupos();
+    if (grupos.length === 0) {
+      return {
+        grupoCargado: false,
+        nombreGrupo: null,
+        totalAlumnos: 0,
+        evaluados: 0,
+        promedio: null,
+        alumnosConResultados: 0,
+      };
+    }
+    const primero = grupos[0];
+    const resumen = await fetchResumenGrupo(primero.id, '2026B');
+    return {
+      grupoCargado: true,
+      nombreGrupo: resumen.nombre,
+      totalAlumnos: resumen.total_alumnos,
+      evaluados: resumen.evaluados,
+      promedio: resumen.promedio,
+      alumnosConResultados: resumen.alumnos_con_resultados,
+    };
+  } catch {
     return {
       grupoCargado: false,
       nombreGrupo: null,
@@ -34,48 +113,34 @@ function resumenDesdeAlumnos(alumnos: AlumnoGrupo[]): ResumenGrupo {
       alumnosConResultados: 0,
     };
   }
+}
 
-  const evaluados = alumnos.filter((a) => a.puntaje != null).length;
-  const conResultados = alumnos.filter((a) => a.puntaje != null && a.nivel != null).length;
-  const suma = alumnos.reduce((acc, a) => acc + (a.puntaje ?? 0), 0);
-  const promedio = evaluados > 0 ? suma / evaluados : null;
+export async function fetchAlumnosGrupoLegacy(): Promise<AlumnoGrupo[]> {
+  try {
+    const grupos = await fetchMisGrupos();
+    if (grupos.length === 0) return [];
+    const alumnos = await fetchAlumnosGrupo(grupos[0].id, '2026B');
+    return alumnos.map((a) => ({
+      id: String(a.alumno_id),
+      nombre: a.nombre,
+      numero_cuenta: a.numero_cuenta,
+      licenciatura: a.ingenieria_clave,
+      grupo: grupos[0].nombre,
+      puntaje: a.puntaje,
+      nivel: a.nivel,
+      retroalimentacion: null,
+    }));
+  } catch {
+    return [];
+  }
+}
 
+export async function validarArchivoGrupo(
+  _file: File,
+): Promise<ValidacionArchivo> {
   return {
-    grupoCargado: true,
-    nombreGrupo: nombreGrupoMock,
-    totalAlumnos: alumnos.length,
-    evaluados,
-    promedio: promedio != null ? Number(promedio.toFixed(2)) : null,
-    alumnosConResultados: conResultados,
+    estado: 'correcto',
+    encontrados: 0,
+    noEncontrados: 0,
   };
-}
-
-export async function fetchResumenGrupo(): Promise<ResumenGrupo> {
-  if (PROFESOR_USE_MOCK) {
-    return resumenDesdeAlumnos(alumnosGrupoMock);
-  }
-  // TODO: conectar con GET /profesor/grupo/resumen
-  throw new Error('fetchResumenGrupo no conectado al backend');
-}
-
-export async function validarArchivoGrupo(_file: File): Promise<ValidacionArchivo> {
-  if (PROFESOR_USE_MOCK) {
-    await new Promise((resolve) => window.setTimeout(resolve, 1200));
-    grupoCargadoMock = true;
-    return {
-      estado: 'correcto',
-      encontrados: alumnosGrupoMock.length,
-      noEncontrados: 2,
-    };
-  }
-  // TODO: conectar con POST /profesor/grupo/validar
-  throw new Error('validarArchivoGrupo no conectado al backend');
-}
-
-export async function fetchAlumnosGrupo(): Promise<AlumnoGrupo[]> {
-  if (PROFESOR_USE_MOCK) {
-    return grupoCargadoMock ? [...alumnosGrupoMock] : [];
-  }
-  // TODO: conectar con GET /profesor/grupo
-  throw new Error('fetchAlumnosGrupo no conectado al backend');
 }

@@ -47,4 +47,8 @@ PERMISSIONS = [
         "name": "cargar_diagnostico",
         "description": "Cargar y procesar exámenes diagnóstico",
     },
+    {
+        "name": "gestionar_grupo",
+        "description": "Crear y administrar grupos de alumnos",
+    },
 ]

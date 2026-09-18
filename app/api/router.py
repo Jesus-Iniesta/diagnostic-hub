@@ -9,6 +9,7 @@ from app.api.v1 import (
     health,
     ingenierias,
     liga_examen_diagnostico,
+    profesor_grupos,
     registro_alumno,
     reportes,
     upload_alumnos,
@@ -55,4 +56,8 @@ api_router.include_router(
     reportes.router,
     prefix="/reportes",
     tags=["reportes"],
+)
+api_router.include_router(
+    profesor_grupos.router,
+    tags=["profesor-grupos"],
 )
