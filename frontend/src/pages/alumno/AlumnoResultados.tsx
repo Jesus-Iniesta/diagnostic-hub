@@ -1,5 +1,6 @@
 import {
   Badge,
+  Button,
   Card,
   Divider,
   Group,
@@ -9,10 +10,10 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconMoodSad, IconTrophy } from '@tabler/icons-react';
+import { IconDownload, IconMoodSad, IconTrophy } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
-import { fetchMiDiagnostico, fetchMiWebAssign } from '../../lib/alumnoApi';
+import { descargarResultadoPdf, fetchMiDiagnostico, fetchMiWebAssign } from '../../lib/alumnoApi';
 import { dashboardColors } from '../../theme/theme';
 import type { DiagnosticoAlumnoResponse, MateriaResultado, WebAssignAlumnoResponse, WebAssignMateriaResultado } from '../../types/alumno';
 import classes from './AlumnoResultados.module.css';
@@ -191,6 +192,18 @@ export default function AlumnoResultados() {
   const [data, setData] = useState<DiagnosticoAlumnoResponse | null>(null);
   const [webassignData, setWebassignData] = useState<WebAssignAlumnoResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [descargando, setDescargando] = useState(false);
+
+  const handleDescargarPdf = async () => {
+    setDescargando(true);
+    try {
+      await descargarResultadoPdf();
+    } catch {
+      // silently fail
+    } finally {
+      setDescargando(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -214,12 +227,24 @@ export default function AlumnoResultados() {
   return (
     <>
       <div className={classes.welcome}>
-        <Text component="h1" className={classes.welcomeTitle}>
-          Mis resultados
-        </Text>
-        <Text className={classes.welcomeSubtitle}>
-          Consulta tu puntaje, nivel de matemáticas y retroalimentación.
-        </Text>
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div>
+            <Text component="h1" className={classes.welcomeTitle}>
+              Mis resultados
+            </Text>
+            <Text className={classes.welcomeSubtitle}>
+              Consulta tu puntaje, nivel de matemáticas y retroalimentación.
+            </Text>
+          </div>
+          <Button
+            variant="light"
+            leftSection={<IconDownload size={18} />}
+            onClick={handleDescargarPdf}
+            loading={descargando}
+          >
+            Descargar PDF
+          </Button>
+        </Group>
       </div>
 
       {loading ? (

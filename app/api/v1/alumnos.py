@@ -18,10 +18,11 @@ from app.schemas.alumno import (
 )
 from app.services.feedback_service import (
     MATERIAS_NOMBRES,
+    feedback_final,
     feedback_general,
     feedback_materia,
 )
-from app.services.pdf_service import generar_pdf_correo
+from app.services.pdf_service import generar_pdf_correo, generar_pdf_resultado
 
 router = APIRouter()
 
@@ -241,5 +242,117 @@ async def mi_correo_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="correo_{alumno.numero_cuenta or current_user.id}.pdf"'
+        },
+    )
+
+
+@router.get(
+    "/me/reporte-pdf",
+    summary="Descargar PDF con el reporte de resultados del alumno",
+)
+async def mi_reporte_pdf(
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(Alumno).where(Alumno.usuario_id == current_user.id)
+    result = await db.execute(stmt)
+    alumno = result.scalars().first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+
+    stmt_diag = (
+        select(ResultadoDiagnostico)
+        .where(ResultadoDiagnostico.alumno_id == alumno.id)
+        .order_by(ResultadoDiagnostico.created_at.desc())
+        .limit(1)
+    )
+    diag = (await db.execute(stmt_diag)).scalars().first()
+
+    stmt_wa = (
+        select(ResultadoWebAssign)
+        .where(ResultadoWebAssign.alumno_id == alumno.id)
+        .order_by(ResultadoWebAssign.created_at.desc())
+        .limit(1)
+    )
+    wa = (await db.execute(stmt_wa)).scalars().first()
+
+    periodo = (diag or wa).periodo if (diag or wa) else None
+
+    diagnostico: dict | None = None
+    if diag:
+        dematerias = [
+            {"nombre": name, "puntaje": getattr(diag, key)}
+            for key, name in [
+                ("puntaje_algebra", MATERIAS_NOMBRES["algebra"]),
+                ("puntaje_trigonometria", MATERIAS_NOMBRES["trigonometria"]),
+                ("puntaje_geometria", MATERIAS_NOMBRES["geometria"]),
+                ("puntaje_calculo", MATERIAS_NOMBRES["calculo"]),
+            ]
+        ]
+        diagnostico = {
+            "promedio": diag.promedio_diagnostico,
+            "materias": dematerias,
+        }
+
+    webassign: dict | None = None
+    wa_promedio: float | None = None
+    if wa:
+        wamaterias = []
+        wa_vals = []
+        for key, nombre in [
+            ("algebra", MATERIAS_NOMBRES["algebra"]),
+            ("trigonometria", MATERIAS_NOMBRES["trigonometria"]),
+            ("geometria", MATERIAS_NOMBRES["geometria"]),
+        ]:
+            trabajo = getattr(wa, f"{key}_trabajo")
+            examen = getattr(wa, f"{key}_examen")
+            vals = [v for v in [trabajo, examen] if v is not None]
+            promedio_materia = round(sum(vals) / len(vals), 2) if vals else None
+            if promedio_materia is not None:
+                wa_vals.append(promedio_materia)
+            wamaterias.append({
+                "nombre": nombre,
+                "trabajo": trabajo,
+                "examen": examen,
+            })
+        wa_promedio = round(sum(wa_vals) / len(wa_vals), 2) if wa_vals else None
+        webassign = {
+            "promedio": wa_promedio,
+            "materias": wamaterias,
+        }
+
+    diag_promedio = diag.promedio_diagnostico if diag else None
+    promedios = [p for p in [diag_promedio, wa_promedio] if p is not None]
+    promedio_final = round(sum(promedios) / len(promedios), 2) if promedios else None
+
+    nivel_final, leyenda_final = feedback_final(
+        promedio_final,
+        tiene_diag=diag is not None,
+        tiene_wa=wa is not None,
+    )
+
+    nombre_completo = (
+        f"{current_user.apellido_paterno} {current_user.apellido_materno} "
+        f"{current_user.nombre}"
+    ).strip()
+
+    pdf_bytes = generar_pdf_resultado(
+        nombre_completo=nombre_completo,
+        numero_cuenta=alumno.numero_cuenta,
+        periodo=periodo,
+        diagnostico=diagnostico,
+        webassign=webassign,
+        promedio_final=promedio_final,
+        nivel_final=nivel_final,
+        leyenda_final=leyenda_final,
+    )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="resultado_{alumno.numero_cuenta or current_user.id}.pdf"'
+            )
         },
     )

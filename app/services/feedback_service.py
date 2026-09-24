@@ -117,3 +117,80 @@ def feedback_general(
         )
 
     return nivel, texto
+
+
+def nivel_puntaje(puntaje: float) -> str:
+    return _nivel(puntaje)
+
+
+def feedback_final(
+    promedio_final: float | None,
+    tiene_diag: bool,
+    tiene_wa: bool,
+) -> tuple[str, str]:
+    if promedio_final is None:
+        return (
+            "Sin datos",
+            "Aún no hay resultados registrados para tu resultado final. "
+            "Cuando realices el examen diagnóstico y las actividades de "
+            "WebAssign podrás ver tu reporte completo.",
+        )
+
+    if promedio_final <= 0:
+        return (
+            "Sin registro",
+            "No se registró trabajo: tu promedio general es 0. "
+            "Te invitamos a realizar el examen diagnóstico y las "
+            "actividades de WebAssign; al completarlos verás tu "
+            "desempeño reflejado aquí.",
+        )
+
+    nivel = _nivel(promedio_final)
+
+    if not tiene_diag:
+        texto = (
+            f"Tu promedio final es {promedio_final:.2f}, basado solo en WebAssign, "
+            "ya que aún no tienes examen diagnóstico registrado. "
+            "Completa el diagnóstico para tener un panorama completo."
+        )
+    elif not tiene_wa:
+        texto = (
+            f"Tu promedio final es {promedio_final:.2f}, basado solo en el examen "
+            "diagnóstico. Falta que trabajes tus actividades de WebAssign "
+            "para complementar tu resultado."
+        )
+    elif nivel == "Alto":
+        texto = (
+            "¡Felicidades! Tu resultado final es sobresaliente. "
+            "Dominas las matemáticas de nivelación y tu trabajo en "
+            "WebAssign es consistente. Sigue así y reta temas "
+            "más avanzados."
+        )
+    elif nivel == "Bueno":
+        texto = (
+            "Buen resultado final. Tienes una base sólida en el "
+            "diagnóstico y en WebAssign. Refuerza las áreas con menor "
+            "puntaje para alcanzar un nivel excelente."
+        )
+    elif nivel == "Medio":
+        texto = (
+            "Tu resultado final muestra áreas por reforzar tanto en el "
+            "diagnóstico como en WebAssign. No te desanimes: te "
+            "recomendamos practicar con constancia y buscar apoyo de "
+            "tus profesores."
+        )
+    elif nivel == "Bajo":
+        texto = (
+            "Tu promedio final indica que necesitas reforzar las bases "
+            "matemáticas y tu participación en WebAssign. Con práctica "
+            "diaria y tutorías puedes mejorar considerablemente."
+        )
+    else:
+        texto = (
+            "Es un buen punto de partida: todos los grandes logros "
+            "empiezan así. Invierte tiempo regular en las actividades "
+            "del diagnóstico y de WebAssign, y verás cómo tu resultado "
+            "mejora con el esfuerzo constante."
+        )
+
+    return nivel, texto
