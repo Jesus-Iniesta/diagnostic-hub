@@ -30,7 +30,7 @@ import classes from './DashboardSidebar.module.css';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/admin' },
-  { id: 'carga', label: 'Carga diagnóstico', icon: IconUpload, to: '/admin/carga' },
+  { id: 'carga', label: 'Carga de exámenes', icon: IconUpload, to: '/admin/carga' },
   { id: 'webassign', label: 'Carga WebAssign', icon: IconWorld, to: '/admin/webassign' },
   { id: 'reportes', label: 'Reportes', icon: IconReport, to: '/admin/reportes' },
   { id: 'resultados', label: 'Resultados', icon: IconUserSearch },

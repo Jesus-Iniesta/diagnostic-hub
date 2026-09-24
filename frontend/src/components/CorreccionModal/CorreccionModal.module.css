@@ -1,0 +1,44 @@
+.scrollTable {
+  max-height: 400px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.searchResult {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.searchResult:hover {
+  background: #f0f5ff;
+  border-color: #4c6ef5;
+}
+
+.searchResultName {
+  font-weight: 600;
+  font-size: 14px;
+  color: #17153b;
+}
+
+.searchResultDetail {
+  font-size: 12px;
+  color: #667085;
+  margin-top: 2px;
+}
+
+.correccionForm {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .correccionForm {
+    grid-template-columns: 1fr;
+  }
+}
