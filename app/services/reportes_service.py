@@ -26,6 +26,18 @@ THIN_BORDER = Border(
 )
 
 
+def _fmt_score(value: float | None) -> float:
+    return value if value is not None else 0.0
+
+
+def _fmt_wa(value: float | None, tiene_wa: bool) -> float | str:
+    if not tiene_wa:
+        return 0
+    if value is None or value == 0:
+        return "No trabajó"
+    return value
+
+
 def _style_header(ws, row, max_col):
     for col in range(1, max_col + 1):
         cell = ws.cell(row=row, column=col)
@@ -86,6 +98,7 @@ async def _load_data(db: AsyncSession, periodo: str) -> list[dict]:
             "geometria_trabajo": wa.geometria_trabajo if wa else None,
             "geometria_examen": wa.geometria_examen if wa else None,
             "carrera_wa": wa.carrera if wa else "",
+            "tiene_wa": wa is not None,
         })
 
     data.sort(key=lambda r: (r["ingenieria"], r["nombre"]))
@@ -131,17 +144,17 @@ def _write_resumen_final(wb: openpyxl.Workbook, data: list[dict]):
         ws.cell(row_idx, 1, d["nombre"])
         ws.cell(row_idx, 2, d["numero_cuenta"])
         ws.cell(row_idx, 3, d["ingenieria"])
-        ws.cell(row_idx, 4, d["puntaje_algebra"])
-        ws.cell(row_idx, 5, d["puntaje_trigonometria"])
-        ws.cell(row_idx, 6, d["puntaje_geometria"])
-        ws.cell(row_idx, 7, d["puntaje_calculo"])
-        ws.cell(row_idx, 8, d["promedio_diagnostico"])
-        ws.cell(row_idx, 9, d["algebra_trabajo"])
-        ws.cell(row_idx, 10, d["algebra_examen"])
-        ws.cell(row_idx, 11, d["trigonometria_trabajo"])
-        ws.cell(row_idx, 12, d["trigonometria_examen"])
-        ws.cell(row_idx, 13, d["geometria_trabajo"])
-        ws.cell(row_idx, 14, d["geometria_examen"])
+        ws.cell(row_idx, 4, _fmt_score(d["puntaje_algebra"]))
+        ws.cell(row_idx, 5, _fmt_score(d["puntaje_trigonometria"]))
+        ws.cell(row_idx, 6, _fmt_score(d["puntaje_geometria"]))
+        ws.cell(row_idx, 7, _fmt_score(d["puntaje_calculo"]))
+        ws.cell(row_idx, 8, _fmt_score(d["promedio_diagnostico"]))
+        ws.cell(row_idx, 9, _fmt_wa(d["algebra_trabajo"], d["tiene_wa"]))
+        ws.cell(row_idx, 10, _fmt_wa(d["algebra_examen"], d["tiene_wa"]))
+        ws.cell(row_idx, 11, _fmt_wa(d["trigonometria_trabajo"], d["tiene_wa"]))
+        ws.cell(row_idx, 12, _fmt_wa(d["trigonometria_examen"], d["tiene_wa"]))
+        ws.cell(row_idx, 13, _fmt_wa(d["geometria_trabajo"], d["tiene_wa"]))
+        ws.cell(row_idx, 14, _fmt_wa(d["geometria_examen"], d["tiene_wa"]))
         _style_data(ws, row_idx, 14)
 
     ws.column_dimensions["A"].width = 38
@@ -166,11 +179,11 @@ def _write_diagnostico(wb: openpyxl.Workbook, data: list[dict]):
             d["nombre"],
             d["numero_cuenta"],
             d["ingenieria"],
-            d["puntaje_algebra"],
-            d["puntaje_trigonometria"],
-            d["puntaje_geometria"],
-            d["puntaje_calculo"],
-            d["promedio_diagnostico"],
+            _fmt_score(d["puntaje_algebra"]),
+            _fmt_score(d["puntaje_trigonometria"]),
+            _fmt_score(d["puntaje_geometria"]),
+            _fmt_score(d["puntaje_calculo"]),
+            _fmt_score(d["promedio_diagnostico"]),
         ])
         _style_data(ws, ws.max_row, len(headers))
 
@@ -200,12 +213,12 @@ def _write_webassign(wb: openpyxl.Workbook, data: list[dict]):
             d["numero_cuenta"],
             d["ingenieria"],
             d["carrera_wa"],
-            d["algebra_trabajo"],
-            d["algebra_examen"],
-            d["trigonometria_trabajo"],
-            d["trigonometria_examen"],
-            d["geometria_trabajo"],
-            d["geometria_examen"],
+            _fmt_wa(d["algebra_trabajo"], d["tiene_wa"]),
+            _fmt_wa(d["algebra_examen"], d["tiene_wa"]),
+            _fmt_wa(d["trigonometria_trabajo"], d["tiene_wa"]),
+            _fmt_wa(d["trigonometria_examen"], d["tiene_wa"]),
+            _fmt_wa(d["geometria_trabajo"], d["tiene_wa"]),
+            _fmt_wa(d["geometria_examen"], d["tiene_wa"]),
         ])
         _style_data(ws, ws.max_row, len(headers))
 
