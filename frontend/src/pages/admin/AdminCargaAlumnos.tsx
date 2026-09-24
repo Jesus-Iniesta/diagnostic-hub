@@ -263,12 +263,38 @@ function DiagnosticoSection() {
   const handleCorregirMatching = async () => {
     if (!currentFile || !currentMateria || correcciones.size === 0) return;
     setCorreccionLoading(true);
+    const indicesCorregidos = new Set(correcciones.keys());
     try {
       const correccionesArray = Array.from(correcciones.entries()).map(([indice, alumno_id]) => ({ indice, alumno_id }));
-      const result = await corregirMatching(currentMateria, periodo, currentFile, correccionesArray);
-      setResultado(result);
-      setNoEncontrados(result.no_encontrados_detalle);
-      setWizardResults((prev) => new Map(prev).set(currentMateria, result));
+      await corregirMatching(currentMateria, periodo, currentFile, correccionesArray);
+
+      const nuevosDetalle = noEncontrados.filter((n) => !indicesCorregidos.has(n.indice));
+      const corregidos = noEncontrados.length - nuevosDetalle.length;
+      setNoEncontrados(nuevosDetalle);
+      setCorrigiendoIdx(null);
+      setResultado((prev) =>
+        prev
+          ? {
+              ...prev,
+              encontrados: prev.encontrados + corregidos,
+              no_encontrados: Math.max(0, prev.no_encontrados - corregidos),
+              no_encontrados_detalle: nuevosDetalle,
+            }
+          : prev,
+      );
+      setWizardResults((prev) => {
+        const next = new Map(prev);
+        const prevRes = next.get(currentMateria);
+        if (prevRes) {
+          next.set(currentMateria, {
+            ...prevRes,
+            encontrados: prevRes.encontrados + corregidos,
+            no_encontrados: Math.max(0, prevRes.no_encontrados - corregidos),
+            no_encontrados_detalle: nuevosDetalle,
+          });
+        }
+        return next;
+      });
       setCorrecciones(new Map());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al corregir matching');
@@ -886,12 +912,27 @@ function CuestionarioSection() {
     if (pendientes.length === 0) return;
     setAplicando(true);
     setError(null);
+    const originales = noEncontrados;
     try {
       for (const c of pendientes) {
+        const indicesCorregidos = new Set(correcciones[c].keys());
         const correccionesArray = Array.from(correcciones[c].entries()).map(([indice, alumno_id]) => ({ indice, alumno_id }));
-        const result = await corregirMatchingCuestionario(c, periodo, archivos[c]!, correccionesArray);
-        if (c === 1) setResultadoC1(result);
-        else setResultadoC2(result);
+        await corregirMatchingCuestionario(c, periodo, archivos[c]!, correccionesArray);
+
+        const detalleQueda = originales.filter((n) => !(Number(n.cuestionario) === c && indicesCorregidos.has(n.indice)));
+        const detalleC = detalleQueda.filter((n) => Number(n.cuestionario) === c);
+        const corregidos = originales.length - detalleQueda.length;
+        const merge = (prev: ResultadoProcesamientoCuestionario | null) =>
+          prev
+            ? {
+                ...prev,
+                encontrados: prev.encontrados + corregidos,
+                no_encontrados: Math.max(0, prev.no_encontrados - corregidos),
+                no_encontrados_detalle: detalleC,
+              }
+            : prev;
+        if (c === 1) setResultadoC1(merge);
+        else setResultadoC2(merge);
         setCorrecciones((prev) => ({ ...prev, [c]: new Map() }));
       }
     } catch (err) {
