@@ -205,8 +205,6 @@ def _validate_row(
         campos.append({"campo": "nombre", "motivo": "Nombre es obligatorio"})
     if not ap_paterno:
         campos.append({"campo": "apellido_paterno", "motivo": "Apellido paterno es obligatorio"})
-    if not ap_materno:
-        campos.append({"campo": "apellido_materno", "motivo": "Apellido materno es obligatorio"})
     if not correo:
         campos.append({"campo": "correo_personal", "motivo": "Correo personal inválido o vacío"})
 

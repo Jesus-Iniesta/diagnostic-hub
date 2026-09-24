@@ -5,6 +5,7 @@ import io
 import json
 import re
 import unicodedata
+from datetime import date, datetime
 
 import openpyxl
 from sqlalchemy import select
@@ -36,6 +37,39 @@ COL_NAME = 3
 COL_CUENTA = 4
 COL_FOLIO = 5
 COL_HOUR = 6
+
+
+def extraer_ano_periodo(periodo: str) -> int | None:
+    if not periodo:
+        return None
+    m = re.match(r"\s*(\d{4})", str(periodo))
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def extraer_ano_timestamp(raw: object | None) -> int | None:
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw.year
+    if isinstance(raw, date):
+        return raw.year
+    s = str(raw).strip()
+    if not s:
+        return None
+    m = re.search(r"\b(19|20)\d{2}\b", s)
+    if m:
+        return int(m.group(0))
+    return None
+
+
+def fila_corresponde_periodo(raw_timestamp: object | None, periodo: str) -> bool:
+    ano_periodo = extraer_ano_periodo(periodo)
+    ano_ts = extraer_ano_timestamp(raw_timestamp)
+    if ano_periodo is None or ano_ts is None:
+        return True
+    return ano_ts == ano_periodo
 
 
 def normalize_name(raw: str) -> str:
@@ -324,8 +358,14 @@ async def procesar_examen_diagnostico(
 
     resultados = []
     no_encontrados = []
+    omitidas = 0
 
     for idx, row in enumerate(rows):
+        raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
+        if not fila_corresponde_periodo(raw_timestamp, periodo):
+            omitidas += 1
+            continue
+
         raw_email = row[COL_EMAIL] if len(row) > COL_EMAIL else None
         raw_name = row[COL_NAME] if len(row) > COL_NAME else None
         raw_cuenta = row[COL_CUENTA] if len(row) > COL_CUENTA else None
@@ -408,6 +448,7 @@ async def procesar_examen_diagnostico(
         "total_filas": len(rows),
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
+        "omitidas_otro_periodo": omitidas,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
     }
@@ -446,8 +487,13 @@ async def corregir_matching_diagnostico(
     wb.close()
 
     resultados = []
+    omitidas = 0
 
     for idx, row in enumerate(rows):
+        raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
+        if not fila_corresponde_periodo(raw_timestamp, periodo):
+            omitidas += 1
+            continue
         if idx not in correction_map:
             continue
 
@@ -502,6 +548,7 @@ async def corregir_matching_diagnostico(
         "total_filas": len(resultados),
         "encontrados": len(resultados),
         "no_encontrados": 0,
+        "omitidas_otro_periodo": omitidas,
         "resultados": resultados,
         "no_encontrados_detalle": [],
     }
