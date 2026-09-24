@@ -1,12 +1,14 @@
 import logging
+import unicodedata
 
 import xlrd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.webassign_repository import WebAssignRepository
+from app.services.normalizacion import normalizar_nombre
 from app.services.upload_diagnostico_service import (
     find_alumno,
-    find_candidates,
+    find_candidates_legacy,
     load_all_alumnos,
 )
 
@@ -78,17 +80,35 @@ def calculate_materia_score(
     return trabajo, examen
 
 
+def _es_fila_profesor(nombre: str, nombre_profesor: str, nombre_hoja: str) -> bool:
+    if not nombre:
+        return False
+    if normalizar_nombre(nombre) and normalizar_nombre(nombre) == normalizar_nombre(nombre_profesor):
+        return True
+    normalize = unicodedata.normalize("NFKD", nombre)
+    limpio = "".join(
+        c for c in normalize
+        if not unicodedata.combining(c) and not c.isspace() and c not in ",."
+    ).upper()
+    return bool(nombre_hoja) and limpio == nombre_hoja.upper()
+
+
 def parse_webassign_excel(
     file_bytes: bytes, carrera: str
 ) -> tuple[list[dict], dict]:
     wb = xlrd.open_workbook(file_contents=file_bytes)
     ws = wb.sheet_by_index(0)
 
+    nombre_profesor = str(ws.cell_value(1, 0)) if ws.nrows > 1 else ""
+    nombre_hoja = ws.name
+
     rows_data: list[dict] = []
 
     for i in range(9, ws.nrows):
         name = ws.cell_value(i, 0)
         if not name or name in ("", "Totals", "Fullname"):
+            continue
+        if _es_fila_profesor(str(name), nombre_profesor, nombre_hoja):
             continue
 
         raw_email = ws.cell_value(i, 1)
@@ -154,7 +174,7 @@ async def procesar_webassign(
         )
 
         if alumno_id is None:
-            candidates = find_candidates(nombre_normalizado, alumno_details)
+            candidates = find_candidates_legacy(nombre_normalizado, alumno_details)
             if len(candidates) == 1:
                 alumno_id = candidates[0]["alumno_id"]
             else:

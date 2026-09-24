@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import io
 import json
 import re
@@ -17,6 +18,7 @@ from app.services.normalizacion import (
     clasificar_identificador,
     normalizar_cuenta,
     normalizar_folio,
+    normalizar_nombre,
 )
 
 
@@ -222,7 +224,7 @@ def find_alumno(
     return None
 
 
-def find_candidates(
+def find_candidates_legacy(
     name: str,
     alumno_details: dict[int, dict],
     limit: int = 5,
@@ -243,6 +245,52 @@ def find_candidates(
             if len(candidates) >= limit:
                 break
     return candidates
+
+
+def find_candidates(
+    name: str,
+    alumno_details: dict[int, dict],
+    limit: int = 5,
+) -> list[dict]:
+    n = normalizar_nombre(name)
+    if not n:
+        return []
+
+    exactos: list[dict] = []
+    for aid, info in alumno_details.items():
+        if normalizar_nombre(info["nombre"]) == n:
+            exactos.append({
+                "alumno_id": aid,
+                "nombre": info["nombre"],
+                "cuenta": info["cuenta"],
+                "correo": info["correo"],
+                "sugerido": False,
+                "similitud": 100,
+            })
+
+    if exactos:
+        if len(exactos) == 1:
+            exactos[0]["sugerido"] = True
+        return exactos
+
+    candidatos = []
+    for aid, info in alumno_details.items():
+        db_n = normalizar_nombre(info["nombre"])
+        if not db_n:
+            continue
+        ratio = difflib.SequenceMatcher(None, n, db_n).ratio()
+        if ratio >= 0.80:
+            candidatos.append({
+                "alumno_id": aid,
+                "nombre": info["nombre"],
+                "cuenta": info["cuenta"],
+                "correo": info["correo"],
+                "sugerido": False,
+                "similitud": int(round(ratio * 100)),
+            })
+
+    candidatos.sort(key=lambda c: c["similitud"], reverse=True)
+    return candidatos[:limit]
 
 
 async def procesar_examen_diagnostico(
@@ -298,20 +346,23 @@ async def procesar_examen_diagnostico(
 
         if alumno_id is None:
             candidates = find_candidates(nombre_original, alumno_details)
-            if len(candidates) == 1:
-                alumno_id = candidates[0]["alumno_id"]
+            if candidates and candidates[0]["sugerido"]:
+                motivo = "Coincidencia exacta de nombre: confirmar"
+            elif candidates and candidates[0]["similitud"] == 100:
+                motivo = "Nombre ambiguo: varios alumnos con el mismo nombre"
             else:
-                no_encontrados.append({
-                    "nombre_original": nombre_original,
-                    "correo": email,
-                    "cuenta": cuenta,
-                    "folio": folio,
-                    "materia": materia,
-                    "motivo": "No se encontró alumno con email, cuenta o folio",
-                    "candidatos": candidates,
-                    "indice": idx,
-                })
-                continue
+                motivo = "Sin coincidencia de correo/cuenta/folio; revisar candidatos"
+            no_encontrados.append({
+                "nombre_original": nombre_original,
+                "correo": email,
+                "cuenta": cuenta,
+                "folio": folio,
+                "materia": materia,
+                "motivo": motivo,
+                "candidatos": candidates,
+                "indice": idx,
+            })
+            continue
 
         detail = alumno_details[alumno_id]
         respuestas_details = []

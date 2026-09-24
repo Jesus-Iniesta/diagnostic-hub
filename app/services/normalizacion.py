@@ -1,3 +1,23 @@
+import unicodedata
+
+
+def normalizar_nombre(raw) -> str:
+    """Normaliza un nombre: sin acentos, mayúsculas, sin comas/puntos/dígitos y con las palabras ordenadas."""
+
+    if raw is None:
+        return ""
+    s = unicodedata.normalize("NFKD", str(raw))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.upper()
+    s = s.replace(",", " ").replace(".", " ")
+    s = "".join(" " if c.isdigit() else c for c in s)
+    words = [w for w in s.split() if w]
+    words.sort()
+    if len(words) < 2:
+        return ""
+    return " ".join(words)
+
+
 def solo_digitos(raw) -> str | None:
     """Devuelve solo los dígitos del valor, o None si no representan un número."""
 

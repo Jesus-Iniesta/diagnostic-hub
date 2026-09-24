@@ -216,3 +216,11 @@ cd frontend && pnpm run dev           # dev server
 - Convención de nombres: español (modelos, schemas, endpoints).
 - CRUD de endpoints aún no implementado (solo health + auth).
 - El frontend lo desarrolla otro colaborador; NO construir UI por ahora.
+
+---
+
+## 12. Pendientes
+
+- WebAssign: `/webassign/corregir-matching` no persiste correcciones y el frontend no tiene pantalla para confirmarlas.
+  Al arreglarlo, aplicar también en WebAssign la regla de que el nombre solo sugiere (usar `find_candidates` y eliminar
+  `find_candidates_legacy`).
