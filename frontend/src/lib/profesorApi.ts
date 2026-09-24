@@ -4,9 +4,11 @@ import type {
   GrupoAlumno,
   GrupoCreate,
   GrupoResumen,
+  GrupoEstadisticas,
   ResumenGrupo,
   AlumnoGrupo,
-  ValidacionArchivo,
+  Materia,
+  CargaAlumnosResponse,
 } from '../types/profesor';
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -20,6 +22,10 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(body?.detail ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
+}
+
+export async function fetchMaterias(): Promise<Materia[]> {
+  return fetchJson<Materia[]>(`${API_BASE_URL}/profesor/materias`);
 }
 
 export async function fetchMisGrupos(periodo?: string): Promise<Grupo[]> {
@@ -80,6 +86,36 @@ export async function fetchResumenGrupo(
   );
 }
 
+export async function fetchEstadisticasGrupo(
+  grupoId: number,
+  periodo: string,
+): Promise<GrupoEstadisticas> {
+  return fetchJson<GrupoEstadisticas>(
+    `${API_BASE_URL}/profesor/grupos/${grupoId}/estadisticas?periodo=${encodeURIComponent(periodo)}`,
+  );
+}
+
+export async function cargarAlumnosExcel(
+  grupoId: number,
+  file: File,
+): Promise<CargaAlumnosResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(
+    `${API_BASE_URL}/profesor/grupos/${grupoId}/cargar-alumnos`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<CargaAlumnosResponse>;
+}
+
 export async function fetchResumenGrupoLegacy(): Promise<ResumenGrupo> {
   try {
     const grupos = await fetchMisGrupos();
@@ -133,14 +169,4 @@ export async function fetchAlumnosGrupoLegacy(): Promise<AlumnoGrupo[]> {
   } catch {
     return [];
   }
-}
-
-export async function validarArchivoGrupo(
-  _file: File,
-): Promise<ValidacionArchivo> {
-  return {
-    estado: 'correcto',
-    encontrados: 0,
-    noEncontrados: 0,
-  };
 }

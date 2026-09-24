@@ -11,6 +11,7 @@ from app.models.grupo import Grupo
 from app.models.grupo_profesor import grupo_profesor
 from app.models.grupo_alumno import grupo_alumno
 from app.models.ingenieria import Ingenieria
+from app.models.materia import Materia
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.role_permission import role_permissions
@@ -18,6 +19,7 @@ from app.models.user import AuthMethod, User
 from app.seeds.data.alumnos import ALUMNOS
 from app.seeds.data.grupos import GRUPOS, GRUPO_PROFESORES, GRUPO_ALUMNOS
 from app.seeds.data.ingenierias import INGENIERIAS
+from app.seeds.data.materias import MATERIAS_DATA
 from app.seeds.data.permissions import PERMISSIONS
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
 from app.seeds.data.roles import ROLES
@@ -139,6 +141,20 @@ async def run_seed_ingenierias() -> int:
     return created
 
 
+async def run_seed_materias() -> int:
+    async with async_session() as db:
+        created = 0
+        async with atomic_session(db):
+            for clave, nombre in MATERIAS_DATA:
+                exists = await db.scalar(
+                    select(Materia).where(Materia.clave == clave)
+                )
+                if not exists:
+                    db.add(Materia(clave=clave, nombre=nombre, activo=True))
+                    created += 1
+    return created
+
+
 async def run_seed_alumnos() -> int:
     async with async_session() as db:
         created = 0
@@ -216,16 +232,16 @@ async def run_seed_grupos() -> dict:
                 )
                 if exists:
                     continue
-                ingenieria = await db.scalar(
-                    select(Ingenieria).where(
-                        Ingenieria.clave == data["ingenieria_clave"]
+                materia = await db.scalar(
+                    select(Materia).where(
+                        Materia.clave == data["materia_clave"]
                     )
                 )
-                if not ingenieria:
+                if not materia:
                     continue
                 grupo = Grupo(
                     nombre=data["nombre"],
-                    ingenieria_id=ingenieria.id,
+                    materia_id=materia.id,
                     periodo=data["periodo"],
                 )
                 db.add(grupo)
@@ -306,6 +322,7 @@ async def run_all() -> dict:
     p = await run_seed_permissions()
     r = await run_seed_roles()
     i = await run_seed_ingenierias()
+    m = await run_seed_materias()
     u = await run_seed_users()
     a = await run_seed_alumnos()
     d = await run_seed_respuestas_diagnostico()
@@ -314,6 +331,7 @@ async def run_all() -> dict:
         "permissions": p,
         "roles": r,
         "ingenierias": i,
+        "materias": m,
         "users": u,
         "alumnos": a,
         "respuestas_diagnostico": d,

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import select
 
 from app.api.deps import DbSession
@@ -20,6 +21,7 @@ from app.services.feedback_service import (
     feedback_general,
     feedback_materia,
 )
+from app.services.pdf_service import generar_pdf_correo
 
 router = APIRouter()
 
@@ -206,3 +208,38 @@ async def mi_webassign(
         "nivel_general": nivel_gen,
         "materias": materias,
     }
+
+
+@router.get(
+    "/me/correo-pdf",
+    summary="Descargar PDF con datos de correo del alumno",
+)
+async def mi_correo_pdf(
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(Alumno).where(Alumno.usuario_id == current_user.id)
+    result = await db.execute(stmt)
+    alumno = result.scalars().first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+
+    nombre_completo = (
+        f"{current_user.apellido_paterno} {current_user.apellido_materno} "
+        f"{current_user.nombre}"
+    ).strip()
+
+    pdf_bytes = generar_pdf_correo(
+        nombre_completo=nombre_completo,
+        numero_cuenta=alumno.numero_cuenta,
+        correo_personal=current_user.correo_personal,
+        correo_institucional=current_user.correo_institucional,
+    )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="correo_{alumno.numero_cuenta or current_user.id}.pdf"'
+        },
+    )

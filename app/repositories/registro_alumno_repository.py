@@ -9,7 +9,7 @@ from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.schemas.registro_alumno import RegistroAlumnoCreate, RegistroAlumnoUpdate
 
-USER_FIELDS = {"nombre", "apellido_paterno", "apellido_materno", "correo_personal"}
+USER_FIELDS = {"nombre", "apellido_paterno", "apellido_materno", "correo_personal", "correo_institucional"}
 
 
 class RegistroAlumnoRepository:

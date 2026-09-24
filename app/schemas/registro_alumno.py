@@ -46,6 +46,7 @@ class RegistroAlumnoUpdate(BaseModel):
     apellido_paterno: str | None = Field(default=None, min_length=1)
     apellido_materno: str | None = Field(default=None, min_length=1)
     correo_personal: EmailStr | None = None
+    correo_institucional: EmailStr | None = None
 
     # --- Datos del formulario (Alumno) ---
     numero_cuenta: str | None = Field(default=None, pattern=NUMERO_CUENTA_PATTERN)

@@ -5,12 +5,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.base import Base
 
 if TYPE_CHECKING:
-    from app.models.alumno import Alumno
+    from app.models.grupo import Grupo
 
 
-class Ingenieria(Base):
-    __tablename__ = "ingenieria"
-    
+class Materia(Base):
+    __tablename__ = "materias"
+
     id: Mapped[int] = mapped_column(
         primary_key=True,
         index=True
@@ -29,4 +29,4 @@ class Ingenieria(Base):
         default=True
     )
 
-    alumnos: Mapped[list["Alumno"]] = relationship(back_populates="ingenieria")
+    grupos: Mapped[list["Grupo"]] = relationship(back_populates="materia")

@@ -86,3 +86,19 @@ export async function fetchMiWebAssign(): Promise<WebAssignAlumnoResponse> {
   }
   return res;
 }
+
+export async function descargarCorreoPdf(): Promise<void> {
+  const res = await fetch(`${ALUMNO_ME_URL}/correo-pdf`, { credentials: 'include' });
+  if (!res.ok) {
+    throw new Error('No se pudo generar el PDF');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'correo_tutonet.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

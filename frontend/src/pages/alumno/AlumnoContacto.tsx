@@ -1,7 +1,9 @@
-import { Grid, Text } from '@mantine/core';
+import { Button, Grid, Text } from '@mantine/core';
+import { IconDownload } from '@tabler/icons-react';
 
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import ResumenAlumno from '../../components/ResumenAlumno/ResumenAlumno';
+import { descargarCorreoPdf } from '../../lib/alumnoApi';
 import classes from './AlumnoContacto.module.css';
 
 export default function AlumnoContacto() {
@@ -15,6 +17,14 @@ export default function AlumnoContacto() {
           Mantén actualizada tu información para relacionar correctamente tus
           evaluaciones.
         </Text>
+        <Button
+          mt="sm"
+          variant="light"
+          leftSection={<IconDownload size={16} />}
+          onClick={() => descargarCorreoPdf()}
+        >
+          Descargar PDF de correo
+        </Button>
       </div>
 
       <Grid gutter="lg" mt="lg" align="stretch">
