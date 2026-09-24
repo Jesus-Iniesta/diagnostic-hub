@@ -56,7 +56,9 @@ def _style_data(ws, row, max_col):
             cell.alignment = Alignment(horizontal="center")
 
 
-async def _load_data(db: AsyncSession, periodo: str) -> list[dict]:
+async def _load_data(
+    db: AsyncSession, periodo: str, licenciatura: str | None = None
+) -> list[dict]:
     stmt = (
         select(Alumno, User, Ingenieria, ResultadoDiagnostico, ResultadoWebAssign)
         .join(User, Alumno.usuario_id == User.id)
@@ -73,6 +75,8 @@ async def _load_data(db: AsyncSession, periodo: str) -> list[dict]:
         )
         .options(selectinload(Alumno.ingenieria))
     )
+    if licenciatura:
+        stmt = stmt.where(Ingenieria.clave == licenciatura)
     result = await db.execute(stmt)
     rows = result.all()
 
@@ -105,9 +109,7 @@ async def _load_data(db: AsyncSession, periodo: str) -> list[dict]:
     return data
 
 
-def _write_resumen_final(wb: openpyxl.Workbook, data: list[dict]):
-    ws = wb.create_sheet("Resumen final")
-
+def _write_resumen_ws(ws, data: list[dict]):
     ws.merge_cells("A1:A2")
     ws.merge_cells("B1:B2")
     ws.merge_cells("C1:C2")
@@ -162,6 +164,24 @@ def _write_resumen_final(wb: openpyxl.Workbook, data: list[dict]):
     ws.column_dimensions["C"].width = 8
     for col in range(4, 15):
         ws.column_dimensions[get_column_letter(col)].width = 13
+
+
+def _write_resumen_final(wb: openpyxl.Workbook, data: list[dict]):
+    ws = wb.create_sheet("Resumen final")
+    _write_resumen_ws(ws, data)
+
+
+def _write_resumen_por_licenciatura(
+    wb: openpyxl.Workbook,
+    data: list[dict],
+    licenciaturas: list[tuple[str, str]],
+):
+    for clave, _ in licenciaturas:
+        rows = [d for d in data if d["ingenieria"] == clave]
+        if not rows:
+            continue
+        ws = wb.create_sheet(f"Resumen {clave}")
+        _write_resumen_ws(ws, rows)
 
 
 def _write_diagnostico(wb: openpyxl.Workbook, data: list[dict]):
@@ -230,13 +250,18 @@ def _write_webassign(wb: openpyxl.Workbook, data: list[dict]):
         ws.column_dimensions[get_column_letter(col)].width = 14
 
 
-async def generar_excel_reporte(db: AsyncSession, periodo: str) -> bytes:
-    data = await _load_data(db, periodo)
+async def generar_excel_reporte(
+    db: AsyncSession, periodo: str, licenciatura: str | None = None
+) -> bytes:
+    data = await _load_data(db, periodo, licenciatura)
+
+    licenciaturas = sorted({(d["ingenieria"], d["ingenieria"]) for d in data})
 
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
     _write_resumen_final(wb, data)
+    _write_resumen_por_licenciatura(wb, data, licenciaturas)
     _write_diagnostico(wb, data)
     _write_webassign(wb, data)
 
@@ -275,9 +300,47 @@ async def get_stats_reporte(db: AsyncSession, periodo: str) -> dict:
         .group_by(ResultadoWebAssign.carrera)
     )).all()
 
+    diag_by_ing = (await db.execute(
+        select(
+            Alumno.ingenieria_id,
+            func.count(func.distinct(ResultadoDiagnostico.alumno_id)),
+        )
+        .join(ResultadoDiagnostico, ResultadoDiagnostico.alumno_id == Alumno.id)
+        .where(ResultadoDiagnostico.periodo == periodo)
+        .group_by(Alumno.ingenieria_id)
+    )).all()
+
+    wa_by_ing = (await db.execute(
+        select(
+            Alumno.ingenieria_id,
+            func.count(func.distinct(ResultadoWebAssign.alumno_id)),
+        )
+        .join(ResultadoWebAssign, ResultadoWebAssign.alumno_id == Alumno.id)
+        .where(ResultadoWebAssign.periodo == periodo)
+        .group_by(Alumno.ingenieria_id)
+    )).all()
+
+    diag_map = dict(diag_by_ing)
+    wa_map = dict(wa_by_ing)
+
+    ingenierias = (await db.execute(
+        select(Ingenieria).order_by(Ingenieria.nombre)
+    )).scalars().all()
+
+    por_licenciatura = [
+        {
+            "clave": ing.clave,
+            "nombre": ing.nombre,
+            "diagnosticos": diag_map.get(ing.id, 0),
+            "webassign": wa_map.get(ing.id, 0),
+        }
+        for ing in ingenierias
+    ]
+
     return {
         "periodo": periodo,
         "diagnosticos": diag_count,
         "webassign": wa_count,
         "webassign_por_carrera": {c: n for c, n in wa_by_carrera},
+        "por_licenciatura": por_licenciatura,
     }

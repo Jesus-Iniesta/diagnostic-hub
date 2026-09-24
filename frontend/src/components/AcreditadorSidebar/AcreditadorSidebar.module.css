@@ -1,0 +1,164 @@
+.root {
+  height: 100%;
+  background: #1c1954;
+  color: #ffffff;
+  padding: 18px 14px;
+  transition: width 0.25s ease;
+}
+
+.brand {
+  height: 54px;
+  padding: 0 10px;
+  margin-bottom: 28px;
+  white-space: nowrap;
+}
+
+.brandIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.brandTitle {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.brandSubtitle {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.link {
+  height: 54px;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.link:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.link[data-active] {
+  background-color: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45);
+}
+
+.link[data-active]:hover {
+  background-color: #4f46e5;
+}
+
+.linkIcon {
+  color: currentColor;
+  opacity: 0.75;
+}
+
+.link[data-active] .linkIcon {
+  opacity: 1;
+}
+
+.linkLabel {
+  color: inherit;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.divider {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.userCard {
+  padding: 6px 8px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.userText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.userName {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.userEmail {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userChevron {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.55);
+  flex-shrink: 0;
+}
+
+.logout {
+  height: 44px;
+  border-radius: 12px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.logout:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.collapsed {
+  padding: 18px 10px;
+}
+
+.collapsed .brandText,
+.collapsed .userText,
+.collapsed .userChevron {
+  display: none;
+}
+
+.collapsed .brand {
+  justify-content: center;
+  padding: 0;
+  margin-bottom: 20px;
+}
+
+.collapsed .userCard {
+  justify-content: center;
+  padding: 6px 0;
+}
+
+.collapsed .link {
+  padding-left: 12px;
+}

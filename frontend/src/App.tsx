@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './contexts/AuthContext';
 import { roleHome } from './lib/roles';
 import AcreditadorHome from './pages/acreditador/AcreditadorHome';
+import AcreditadorLayout from './pages/acreditador/AcreditadorLayout';
 import AdminConfiguracion from './pages/admin/AdminConfiguracion';
 import AdminCargaAlumnos from './pages/admin/AdminCargaAlumnos';
 import AdminCargaWebAssign from './pages/admin/AdminCargaWebAssign';
@@ -82,10 +83,12 @@ export default function App() {
         path="/acreditador"
         element={
           <ProtectedRoute roles={['acreditador']}>
-            <AcreditadorHome />
+            <AcreditadorLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route index element={<AcreditadorHome />} />
+      </Route>
       <Route
         path="/alumno"
         element={

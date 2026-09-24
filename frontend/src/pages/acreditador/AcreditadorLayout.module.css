@@ -1,0 +1,23 @@
+.navbar {
+  transition: width 0.25s ease;
+}
+
+.header {
+  background: #ffffff;
+}
+
+.mainArea {
+  background: #f7f8fc;
+}
+
+.main {
+  padding: 28px 32px;
+  min-height: 100vh;
+  max-width: 1080px;
+}
+
+@media (max-width: 768px) {
+  .main {
+    padding: 20px 16px;
+  }
+}

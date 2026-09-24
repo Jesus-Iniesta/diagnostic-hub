@@ -20,10 +20,14 @@ router = APIRouter()
 async def download_excel(
     db: DbSession,
     periodo: str = Query(..., description="Periodo a reportar"),
+    licenciatura: str | None = Query(
+        None, description="Clave de licenciatura para filtrar el reporte"
+    ),
     _current_user: User = Depends(require_permission("consultar_estadisticas")),
 ):
-    content = await generar_excel_reporte(db, periodo)
-    filename = f"reporte_{periodo}.xlsx"
+    content = await generar_excel_reporte(db, periodo, licenciatura)
+    suffix = f"_{licenciatura}" if licenciatura else ""
+    filename = f"reporte{ suffix}_{periodo}.xlsx"
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
