@@ -9,6 +9,9 @@ from sqlalchemy.orm import selectinload
 
 from app.models.alumno import Alumno
 from app.models.ingenieria import Ingenieria
+from app.models.resultado_cuestionario_diagnostico import (
+    ResultadoCuestionarioDiagnostico,
+)
 from app.models.resultado_diagnostico import ResultadoDiagnostico
 from app.models.resultado_webassign import ResultadoWebAssign
 from app.models.user import User
@@ -28,6 +31,12 @@ THIN_BORDER = Border(
 
 def _fmt_score(value: float | None) -> float:
     return value if value is not None else 0.0
+
+
+def _diag_materia(c1: int | None, c2: int | None) -> float:
+    """Calificación de diagnóstico (0-10) = (aciertos_c1 + aciertos_c2) * 0.5."""
+    aciertos = (c1 if c1 is not None else 0) + (c2 if c2 is not None else 0)
+    return aciertos * 0.5
 
 
 def _fmt_wa(value: float | None, tiene_wa: bool) -> float | str:
@@ -99,11 +108,10 @@ def _construir_filas_creani(data: list[dict]) -> list[dict]:
             "numero_cuenta": numero_cuenta,
             "grupo": 0,  # TEMPORAL: pendiente confirmar con la Coordinación de dónde sale
             "licenciatura": d["ingenieria"] or "",
-            # TEMPORAL: cambiar cuando exista la carga del diagnóstico real.
-            "diag_algebra": 0,
-            "diag_trig": 0,
-            "diag_geometria": 0,
-            "diag_calculo": 0,
+            "diag_algebra": _diag_materia(d["aciertos_c1_algebra"], d["aciertos_c2_algebra"]),
+            "diag_trig": _diag_materia(d["aciertos_c1_trigonometria"], d["aciertos_c2_trigonometria"]),
+            "diag_geometria": _diag_materia(d["aciertos_c1_geometria"], d["aciertos_c2_geometria"]),
+            "diag_calculo": _diag_materia(d["aciertos_c1_calculo"], d["aciertos_c2_calculo"]),
             "wa_alg_trabajo": d["algebra_trabajo"] or 0,
             "wa_alg_examen": d["algebra_examen"] or 0,
             "wa_trig_trabajo": d["trigonometria_trabajo"] or 0,
@@ -239,7 +247,14 @@ async def _load_data(
     periodo_norm = periodo.strip().upper()
 
     stmt = (
-        select(Alumno, User, Ingenieria, ResultadoDiagnostico, ResultadoWebAssign)
+        select(
+            Alumno,
+            User,
+            Ingenieria,
+            ResultadoDiagnostico,
+            ResultadoWebAssign,
+            ResultadoCuestionarioDiagnostico,
+        )
         .join(User, Alumno.usuario_id == User.id)
         .outerjoin(Ingenieria, Alumno.ingenieria_id == Ingenieria.id)
         .outerjoin(
@@ -252,13 +267,19 @@ async def _load_data(
             (ResultadoWebAssign.alumno_id == Alumno.id)
             & (ResultadoWebAssign.periodo == periodo),
         )
+        .outerjoin(
+            ResultadoCuestionarioDiagnostico,
+            (ResultadoCuestionarioDiagnostico.alumno_id == Alumno.id)
+            & (ResultadoCuestionarioDiagnostico.periodo == periodo),
+        )
         .options(selectinload(Alumno.ingenieria))
     )
 
     es_generacion = func.upper(func.trim(Alumno.periodo_ingreso)) == periodo_norm
     tiene_diag = ResultadoDiagnostico.id.isnot(None)
     tiene_wa = ResultadoWebAssign.id.isnot(None)
-    stmt = stmt.where(or_(es_generacion, tiene_diag, tiene_wa))
+    tiene_diag_c = ResultadoCuestionarioDiagnostico.id.isnot(None)
+    stmt = stmt.where(or_(es_generacion, tiene_diag, tiene_wa, tiene_diag_c))
 
     if licenciatura:
         stmt = stmt.where(Ingenieria.clave == licenciatura)
@@ -267,7 +288,7 @@ async def _load_data(
 
     data = []
     seen = set()
-    for alumno, user, ingenieria, diag, wa in rows:
+    for alumno, user, ingenieria, diag, wa, cdiag in rows:
         if alumno.id in seen:
             continue
         seen.add(alumno.id)
@@ -280,6 +301,14 @@ async def _load_data(
             "puntaje_geometria": diag.puntaje_geometria if diag else None,
             "puntaje_calculo": diag.puntaje_calculo if diag else None,
             "promedio_diagnostico": diag.promedio_diagnostico if diag else None,
+            "aciertos_c1_algebra": cdiag.aciertos_c1_algebra if cdiag else None,
+            "aciertos_c1_trigonometria": cdiag.aciertos_c1_trigonometria if cdiag else None,
+            "aciertos_c1_geometria": cdiag.aciertos_c1_geometria if cdiag else None,
+            "aciertos_c1_calculo": cdiag.aciertos_c1_calculo if cdiag else None,
+            "aciertos_c2_algebra": cdiag.aciertos_c2_algebra if cdiag else None,
+            "aciertos_c2_trigonometria": cdiag.aciertos_c2_trigonometria if cdiag else None,
+            "aciertos_c2_geometria": cdiag.aciertos_c2_geometria if cdiag else None,
+            "aciertos_c2_calculo": cdiag.aciertos_c2_calculo if cdiag else None,
             "algebra_trabajo": wa.algebra_trabajo if wa else None,
             "algebra_examen": wa.algebra_examen if wa else None,
             "trigonometria_trabajo": wa.trigonometria_trabajo if wa else None,
@@ -402,9 +431,11 @@ async def generar_excel_reporte(
 async def get_periodos_disponibles(db: AsyncSession) -> list[str]:
     stmt_d = select(ResultadoDiagnostico.periodo).distinct()
     stmt_w = select(ResultadoWebAssign.periodo).distinct()
+    stmt_c = select(ResultadoCuestionarioDiagnostico.periodo).distinct()
     periods_d = (await db.execute(stmt_d)).scalars().all()
     periods_w = (await db.execute(stmt_w)).scalars().all()
-    return sorted(set(periods_d + periods_w), reverse=True)
+    periods_c = (await db.execute(stmt_c)).scalars().all()
+    return sorted(set(periods_d + periods_w + periods_c), reverse=True)
 
 
 async def get_stats_reporte(db: AsyncSession, periodo: str) -> dict:

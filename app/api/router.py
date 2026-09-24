@@ -4,6 +4,7 @@ from app.api.v1 import (
     alumnos,
     auth,
     configuracion,
+    cuestionario_diagnostico,
     dashboard,
     diagnostico,
     health,
@@ -51,6 +52,11 @@ api_router.include_router(
     webassign.router,
     prefix="/webassign",
     tags=["webassign"],
+)
+api_router.include_router(
+    cuestionario_diagnostico.router,
+    prefix="/cuestionario-diagnostico",
+    tags=["cuestionario-diagnostico"],
 )
 api_router.include_router(
     reportes.router,

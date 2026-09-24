@@ -73,6 +73,34 @@ def fila_corresponde_periodo(raw_timestamp: object | None, periodo: str) -> bool
     return ano_ts == ano_periodo
 
 
+def ts_sort_key(raw: object | None) -> tuple:
+    """Clave para ordenar intentos por marca temporal (None va al final)."""
+    if isinstance(raw, datetime):
+        return (0, raw.replace(tzinfo=None))
+    if isinstance(raw, date):
+        return (0, datetime.combine(raw, datetime.min))
+    if raw is None:
+        return (2, datetime.min)
+    s = str(raw).strip()
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y",
+        "%m/%d/%Y %H:%M:%S",
+        "%Y-%m-%d",
+        "%d-%m-%Y %H:%M:%S",
+    ):
+        try:
+            return (0, datetime.strptime(s, fmt))
+        except ValueError:
+            continue
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return (0, dt.replace(tzinfo=None))
+    except ValueError:
+        return (1, s)
+
+
 def normalize_name(raw: str) -> str:
     if not raw:
         return ""
@@ -374,6 +402,7 @@ async def procesar_examen_diagnostico(
     resultados = []
     no_encontrados = []
     omitidas = 0
+    encontrados = []
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
@@ -389,13 +418,6 @@ async def procesar_examen_diagnostico(
         email = normalize_email(raw_email)
         cuenta, folio = clasificar_columnas_cuenta_folio(raw_cuenta, raw_folio)
         nombre_original = normalize_name(str(raw_name) if raw_name else "")
-
-        answers = []
-        for qi in range(question_count):
-            col_idx = config["start_col"] + qi
-            raw_answer = row[col_idx] if len(row) > col_idx else None
-            key = extract_answer_key_from_raw(raw_answer)
-            answers.append(key)
 
         alumno_id = find_alumno(email, cuenta, folio, email_map, cuenta_map, folio_map)
 
@@ -419,7 +441,33 @@ async def procesar_examen_diagnostico(
             })
             continue
 
-        detail = alumno_details[alumno_id]
+        encontrados.append({
+            "idx": idx,
+            "alumno_id": alumno_id,
+            "row": row,
+            "ts": raw_timestamp,
+        })
+
+    # El CREANI usa el PRIMER intento (marca temporal más antigua); los demás se ignoran.
+    encontrados.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
+    vistos: set[int] = set()
+    repetidos = 0
+
+    for e in encontrados:
+        if e["alumno_id"] in vistos:
+            repetidos += 1
+            continue
+        vistos.add(e["alumno_id"])
+
+        row = e["row"]
+        answers = []
+        for qi in range(question_count):
+            col_idx = config["start_col"] + qi
+            raw_answer = row[col_idx] if len(row) > col_idx else None
+            key = extract_answer_key_from_raw(raw_answer)
+            answers.append(key)
+
+        detail = alumno_details[e["alumno_id"]]
         respuestas_details = []
         correctas_count = 0
         for qi, code in enumerate(answer_codes):
@@ -437,7 +485,7 @@ async def procesar_examen_diagnostico(
         respuestas_json = json.dumps(respuestas_details, ensure_ascii=False)
 
         await repo.upsert_resultado(
-            alumno_id=alumno_id,
+            alumno_id=e["alumno_id"],
             periodo=periodo,
             respuestas_json=respuestas_json,
             materia=materia,
@@ -445,7 +493,7 @@ async def procesar_examen_diagnostico(
         )
 
         resultados.append({
-            "alumno_id": alumno_id,
+            "alumno_id": e["alumno_id"],
             "nombre_completo": detail["nombre"],
             "numero_cuenta": detail["cuenta"],
             "numero_folio": detail["folio"],
@@ -464,6 +512,7 @@ async def procesar_examen_diagnostico(
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
         "omitidas_otro_periodo": omitidas,
+        "intentos_repetidos_ignorados": repetidos,
         "advertencia": advertencia,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,

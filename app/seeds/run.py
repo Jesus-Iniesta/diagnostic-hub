@@ -1,5 +1,4 @@
 import asyncio
-import selectors
 import sys
 
 import typer
