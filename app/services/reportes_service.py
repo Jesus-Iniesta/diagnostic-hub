@@ -158,7 +158,6 @@ def _write_resumen_ws(ws, filas: list[dict]):
         celda = ws.cell(3, col)
         celda.value = encabezado
         celda.font = CREANI_FONT_BOLD if col in (9, 20) else CREANI_FONT
-        celda.alignment = Alignment(horizontal="center", vertical="center")
         fill = CREANI_COL_FILL[col]
         if fill is not None:
             celda.fill = fill
@@ -198,7 +197,6 @@ def _write_resumen_ws(ws, filas: list[dict]):
             else:
                 celda.value = valores[col]
             celda.font = CREANI_FONT_BOLD if col in (9, 20) else CREANI_FONT
-            celda.alignment = Alignment(horizontal="center", vertical="center")
             fill = CREANI_COL_FILL[col]
             if fill is not None:
                 celda.fill = fill
@@ -229,7 +227,10 @@ def _write_resumen_ws(ws, filas: list[dict]):
     _contorno(ws, 2, 16, 2, 20)
 
     ws.auto_filter.ref = f"A3:T{ultima}"
+    ws.sheet_format.defaultColWidth = 11.43
     ws.column_dimensions["A"].width = 38.43
+    for col in range(2, 21):
+        ws.column_dimensions[get_column_letter(col)].width = 11.43
 
 
 async def _load_data(
