@@ -1,5 +1,4 @@
 import logging
-import re
 
 import xlrd
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,10 +31,11 @@ def clean_email(raw: str | None) -> str | None:
     if not raw:
         return None
     email = raw.strip().lower()
-    email = re.sub(r"@alumno\.uaemex\.mx@uaemex\.mx$", "", email)
-    email = re.sub(r"@uaemex\.mx$", "", email)
-    email = re.sub(r"@correo\.uaemex\.mx$", "", email)
-    return email if email else None
+    if email.count("@") > 1:
+        email = email.rsplit("@", 1)[0]
+    if email.endswith(".con"):
+        email = email[:-4] + ".com"
+    return email if email.count("@") == 1 else None
 
 
 def clean_score(raw) -> float | None:

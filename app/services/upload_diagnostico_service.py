@@ -172,6 +172,8 @@ async def load_all_alumnos(
     for alumno, user in rows:
         if user.correo_personal:
             email_map[user.correo_personal.lower().strip()] = alumno.id
+        if user.correo_institucional:
+            email_map[user.correo_institucional.lower().strip()] = alumno.id
         if alumno.numero_cuenta:
             cuenta_map[alumno.numero_cuenta] = alumno.id
         if alumno.numero_folio:
