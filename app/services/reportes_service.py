@@ -3,7 +3,7 @@ import io
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -236,6 +236,8 @@ def _write_resumen_ws(ws, filas: list[dict]):
 async def _load_data(
     db: AsyncSession, periodo: str, licenciatura: str | None = None
 ) -> list[dict]:
+    periodo_norm = periodo.strip().upper()
+
     stmt = (
         select(Alumno, User, Ingenieria, ResultadoDiagnostico, ResultadoWebAssign)
         .join(User, Alumno.usuario_id == User.id)
@@ -252,6 +254,12 @@ async def _load_data(
         )
         .options(selectinload(Alumno.ingenieria))
     )
+
+    es_generacion = func.upper(func.trim(Alumno.periodo_ingreso)) == periodo_norm
+    tiene_diag = ResultadoDiagnostico.id.isnot(None)
+    tiene_wa = ResultadoWebAssign.id.isnot(None)
+    stmt = stmt.where(or_(es_generacion, tiene_diag, tiene_wa))
+
     if licenciatura:
         stmt = stmt.where(Ingenieria.clave == licenciatura)
     result = await db.execute(stmt)
