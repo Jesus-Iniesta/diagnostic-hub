@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.models.alumno import Alumno
 from app.models.user import User
 from app.repositories.diagnostico_repository import DiagnosticoRepository
+from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
 from app.services.normalizacion import (
     clasificar_identificador,
     normalizar_cuenta,
@@ -163,6 +164,13 @@ def extract_answer_key_from_raw(raw: object | None) -> str | None:
 
     if len(s) == 1 and s_lower in ("a", "b", "c", "d"):
         return s_lower
+
+    nfkd = unicodedata.normalize("NFKD", s_lower)
+    no_accents = "".join(c for c in nfkd if not unicodedata.combining(c))
+    no_spaces = re.sub(r"\s+", "", no_accents)
+    m = re.match(r"^opcion([1-4])$", no_spaces)
+    if m:
+        return num_map[m.group(1)]
 
     return None
 
@@ -341,13 +349,20 @@ async def procesar_examen_diagnostico(
     question_count = config["questions"]
 
     repo = DiagnosticoRepository(db)
-    correct_key_dict = await repo.get_respuestas_correctas(materia, periodo)
     answer_codes = generate_answer_codes(prefix, question_count)
 
-    if not correct_key_dict:
-        correct_key = [""] * question_count
+    guardadas = await repo.get_respuestas_correctas(materia, periodo)
+    if guardadas:
+        respuestas_key = guardadas
+        advertencia = None
     else:
-        correct_key = [correct_key_dict.get(code, "").lower() for code in answer_codes]
+        respuestas_key = dict(DEFAULT_RESPUESTAS[materia])
+        advertencia = (
+            f"No había respuestas correctas guardadas para el periodo {periodo}; "
+            "se usó la clave por defecto."
+        )
+
+    correct_key = [respuestas_key.get(code, "").lower() for code in answer_codes]
 
     email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
@@ -449,6 +464,7 @@ async def procesar_examen_diagnostico(
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
         "omitidas_otro_periodo": omitidas,
+        "advertencia": advertencia,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
     }
@@ -469,13 +485,20 @@ async def corregir_matching_diagnostico(
     question_count = config["questions"]
 
     repo = DiagnosticoRepository(db)
-    correct_key_dict = await repo.get_respuestas_correctas(materia, periodo)
     answer_codes = generate_answer_codes(prefix, question_count)
 
-    if not correct_key_dict:
-        correct_key = [""] * question_count
+    guardadas = await repo.get_respuestas_correctas(materia, periodo)
+    if guardadas:
+        respuestas_key = guardadas
+        advertencia = None
     else:
-        correct_key = [correct_key_dict.get(code, "").lower() for code in answer_codes]
+        respuestas_key = dict(DEFAULT_RESPUESTAS[materia])
+        advertencia = (
+            f"No había respuestas correctas guardadas para el periodo {periodo}; "
+            "se usó la clave por defecto."
+        )
+
+    correct_key = [respuestas_key.get(code, "").lower() for code in answer_codes]
 
     _, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
@@ -549,6 +572,7 @@ async def corregir_matching_diagnostico(
         "encontrados": len(resultados),
         "no_encontrados": 0,
         "omitidas_otro_periodo": omitidas,
+        "advertencia": advertencia,
         "resultados": resultados,
         "no_encontrados_detalle": [],
     }
