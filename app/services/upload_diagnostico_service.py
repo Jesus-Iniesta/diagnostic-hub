@@ -13,6 +13,11 @@ from sqlalchemy.orm import selectinload
 from app.models.alumno import Alumno
 from app.models.user import User
 from app.repositories.diagnostico_repository import DiagnosticoRepository
+from app.services.normalizacion import (
+    clasificar_identificador,
+    normalizar_cuenta,
+    normalizar_folio,
+)
 
 
 MATERIA_COLUMNS: dict[str, dict[str, int]] = {
@@ -65,20 +70,31 @@ def normalize_email(raw: object | None) -> str | None:
     return s if "@" in s else None
 
 
-def normalize_cuenta(raw: object | None) -> str | None:
-    if raw is None:
-        return None
-    s = str(raw).strip()
-    digits = re.sub(r"\D", "", s)
-    return digits if len(digits) == 7 else None
+normalize_cuenta = normalizar_cuenta
+normalize_folio = normalizar_folio
 
 
-def normalize_folio(raw: object | None) -> str | None:
-    if raw is None:
-        return None
-    s = str(raw).strip()
-    digits = re.sub(r"\D", "", s)
-    return digits if len(digits) == 9 else None
+def clasificar_columnas_cuenta_folio(
+    raw_cuenta: object | None,
+    raw_folio: object | None,
+) -> tuple[str | None, str | None]:
+    tipo_cuenta, valor_cuenta = clasificar_identificador(raw_cuenta)
+    tipo_folio, valor_folio = clasificar_identificador(raw_folio)
+
+    cuenta: str | None = None
+    folio: str | None = None
+
+    if tipo_cuenta == "cuenta":
+        cuenta = valor_cuenta
+    elif tipo_cuenta == "folio" and tipo_folio != "folio":
+        folio = valor_cuenta
+
+    if tipo_folio == "folio":
+        folio = valor_folio
+    elif tipo_folio == "cuenta" and cuenta is None:
+        cuenta = valor_folio
+
+    return cuenta, folio
 
 
 def extract_answer_key_from_raw(raw: object | None) -> str | None:
@@ -268,8 +284,7 @@ async def procesar_examen_diagnostico(
         raw_folio = row[COL_FOLIO] if len(row) > COL_FOLIO else None
 
         email = normalize_email(raw_email)
-        cuenta = normalize_cuenta(raw_cuenta)
-        folio = normalize_folio(raw_folio)
+        cuenta, folio = clasificar_columnas_cuenta_folio(raw_cuenta, raw_folio)
         nombre_original = normalize_name(str(raw_name) if raw_name else "")
 
         answers = []

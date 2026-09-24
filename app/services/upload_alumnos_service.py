@@ -12,6 +12,7 @@ from app.models.alumno import Alumno
 from app.models.ingenieria import Ingenieria
 from app.models.role import Role
 from app.models.user import AuthMethod, User
+from app.services.normalizacion import normalizar_cuenta, normalizar_folio
 
 
 # ── Columnas del Excel (índices 0-based) ──────────────────────────
@@ -99,20 +100,8 @@ def _extract_clave_ingenieria(raw: str) -> str | None:
     return None
 
 
-def _clean_numero_cuenta(value: object | None) -> str | None:
-    s = _clean_str(value)
-    if not s or s == ".":
-        return None
-    digits = re.sub(r"\D", "", s)
-    return digits if len(digits) == 7 else None
-
-
-def _clean_numero_folio(value: object | None) -> str | None:
-    s = _clean_str(value)
-    if not s:
-        return None
-    digits = re.sub(r"\D", "", s)
-    return digits if len(digits) == 9 else None
+_clean_numero_cuenta = normalizar_cuenta
+_clean_numero_folio = normalizar_folio
 
 
 def _clean_email(value: object | None) -> str | None:
