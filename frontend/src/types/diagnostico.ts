@@ -48,6 +48,7 @@ export interface ResultadoProcesamientoDiagnostico {
   no_encontrados: number;
   omitidas_otro_periodo: number;
   intentos_repetidos_ignorados: number;
+  omitidas_ya_tenian_resultado?: number[];
   advertencia?: string | null;
   resultados: DiagnosticoAlumnoResultado[];
   no_encontrados_detalle: DiagnosticoNoEncontrado[];

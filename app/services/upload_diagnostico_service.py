@@ -135,6 +135,55 @@ def normalize_email(raw: object | None) -> str | None:
     return s if "@" in s else None
 
 
+def clave_identidad_no_encontrado(
+    correo: str | None,
+    folio: str | None,
+    cuenta: str | None,
+    usuario: str | None,
+) -> tuple[str, str] | None:
+    """Clave de identidad para agrupar filas no encontradas del mismo alumno.
+
+    Prioridad: correo normalizado, si no folio, si no cuenta, si no usuario.
+    Devuelve None cuando no hay ningún dato para identificar al alumno.
+    """
+    if correo:
+        return ("correo", correo.strip().lower())
+    if folio:
+        return ("folio", str(folio).strip())
+    if cuenta:
+        return ("cuenta", str(cuenta).strip())
+    if usuario:
+        return ("usuario", " ".join(str(usuario).upper().split()))
+    return None
+
+
+def deduplicar_primer_intento(filas: list[dict]) -> tuple[list[dict], int]:
+    """Deja solo la fila con la marca temporal más antigua por identidad.
+
+    Cada fila debe traer los campos internos "_clave_identidad" (None si no hay)
+    y "_ts" (marca temporal cruda); "indice" se usa como desempate y orden. Las
+    filas restantes se descartan y se cuentan como intentos repetidos. Devuelve
+    (filas_deduplicadas, ignoradas). Los campos internos se eliminan de las filas
+    que se conservan.
+    """
+    filas.sort(key=lambda f: (ts_sort_key(f.get("_ts")), f.get("indice", 0)))
+    vistos: set = set()
+    ignoradas = 0
+    resultado: list[dict] = []
+    for f in filas:
+        clave = f.get("_clave_identidad")
+        if clave is None:
+            clave = ("unico", f.get("indice", 0))
+        if clave in vistos:
+            ignoradas += 1
+            continue
+        vistos.add(clave)
+        f.pop("_clave_identidad", None)
+        f.pop("_ts", None)
+        resultado.append(f)
+    return resultado, ignoradas
+
+
 normalize_cuenta = normalizar_cuenta
 normalize_folio = normalizar_folio
 
@@ -438,6 +487,10 @@ async def procesar_examen_diagnostico(
                 "motivo": motivo,
                 "candidatos": candidates,
                 "indice": idx,
+                "_ts": raw_timestamp,
+                "_clave_identidad": clave_identidad_no_encontrado(
+                    email, folio, cuenta, None
+                ),
             })
             continue
 
@@ -505,6 +558,9 @@ async def procesar_examen_diagnostico(
 
     await db.commit()
 
+    no_encontrados, repetidos_no_enc = deduplicar_primer_intento(no_encontrados)
+    repetidos += repetidos_no_enc
+
     return {
         "materia": materia,
         "periodo": periodo,
@@ -517,6 +573,19 @@ async def procesar_examen_diagnostico(
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
     }
+
+
+async def _tiene_resultado_diagnostico(
+    db: AsyncSession,
+    repo: DiagnosticoRepository,
+    alumno_id: int,
+    periodo: str,
+    materia: str,
+) -> bool:
+    resultado = await repo.get_resultado(alumno_id, periodo)
+    if resultado is None:
+        return False
+    return getattr(resultado, f"puntaje_{materia}", None) is not None
 
 
 async def corregir_matching_diagnostico(
@@ -560,6 +629,7 @@ async def corregir_matching_diagnostico(
 
     resultados = []
     omitidas = 0
+    candidatos: dict[int, list[tuple[int, object]]] = {}
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
@@ -573,44 +643,61 @@ async def corregir_matching_diagnostico(
         if alumno_id not in alumno_details:
             continue
 
-        answers = []
-        for qi in range(question_count):
-            col_idx = config["start_col"] + qi
-            raw_answer = row[col_idx] if len(row) > col_idx else None
-            key = extract_answer_key_from_raw(raw_answer)
-            answers.append(key)
+        candidatos.setdefault(alumno_id, []).append((idx, raw_timestamp))
 
-        detail = alumno_details[alumno_id]
-        respuestas_details = []
-        for qi, code in enumerate(answer_codes):
-            is_correct = answers[qi] is not None and answers[qi] == correct_key[qi]
-            respuestas_details.append({
-                "codigo": code,
-                "respuesta": answers[qi] or "",
-                "correcta": is_correct,
+    omitidas_ya_tenian_resultado: list[int] = []
+
+    for alumno_id, items in candidatos.items():
+        items.sort(key=lambda it: (ts_sort_key(it[1]), it[0]))
+        for j, (idx, _ts) in enumerate(items):
+            if j > 0:
+                omitidas_ya_tenian_resultado.append(idx)
+                continue
+            if await _tiene_resultado_diagnostico(
+                db, repo, alumno_id, periodo, materia
+            ):
+                omitidas_ya_tenian_resultado.append(idx)
+                continue
+
+            row = rows[idx]
+            answers = []
+            for qi in range(question_count):
+                col_idx = config["start_col"] + qi
+                raw_answer = row[col_idx] if len(row) > col_idx else None
+                key = extract_answer_key_from_raw(raw_answer)
+                answers.append(key)
+
+            detail = alumno_details[alumno_id]
+            respuestas_details = []
+            for qi, code in enumerate(answer_codes):
+                is_correct = answers[qi] is not None and answers[qi] == correct_key[qi]
+                respuestas_details.append({
+                    "codigo": code,
+                    "respuesta": answers[qi] or "",
+                    "correcta": is_correct,
+                })
+
+            puntaje = calculate_exam_score(answers, correct_key)
+            respuestas_json = json.dumps(respuestas_details, ensure_ascii=False)
+
+            await repo.upsert_resultado(
+                alumno_id=alumno_id,
+                periodo=periodo,
+                respuestas_json=respuestas_json,
+                materia=materia,
+                puntaje=puntaje,
+            )
+
+            resultados.append({
+                "alumno_id": alumno_id,
+                "nombre_completo": detail["nombre"],
+                "numero_cuenta": detail["cuenta"],
+                "numero_folio": detail["folio"],
+                "correo": detail["correo"],
+                "ingenieria": detail["ingenieria"],
+                "respuestas": respuestas_details,
+                "puntaje": puntaje,
             })
-
-        puntaje = calculate_exam_score(answers, correct_key)
-        respuestas_json = json.dumps(respuestas_details, ensure_ascii=False)
-
-        await repo.upsert_resultado(
-            alumno_id=alumno_id,
-            periodo=periodo,
-            respuestas_json=respuestas_json,
-            materia=materia,
-            puntaje=puntaje,
-        )
-
-        resultados.append({
-            "alumno_id": alumno_id,
-            "nombre_completo": detail["nombre"],
-            "numero_cuenta": detail["cuenta"],
-            "numero_folio": detail["folio"],
-            "correo": detail["correo"],
-            "ingenieria": detail["ingenieria"],
-            "respuestas": respuestas_details,
-            "puntaje": puntaje,
-        })
 
     await db.commit()
 
@@ -621,6 +708,7 @@ async def corregir_matching_diagnostico(
         "encontrados": len(resultados),
         "no_encontrados": 0,
         "omitidas_otro_periodo": omitidas,
+        "omitidas_ya_tenian_resultado": omitidas_ya_tenian_resultado,
         "advertencia": advertencia,
         "resultados": resultados,
         "no_encontrados_detalle": [],

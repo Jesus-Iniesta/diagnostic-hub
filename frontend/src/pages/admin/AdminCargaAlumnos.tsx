@@ -109,6 +109,7 @@ function DiagnosticoSection() {
   const [correccionLoading, setCorreccionLoading] = useState(false);
   const [resultado, setResultado] = useState<ResultadoProcesamientoDiagnostico | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [avisoOmitidas, setAvisoOmitidas] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
@@ -158,6 +159,7 @@ function DiagnosticoSection() {
     setStep(newStep);
     setResultado(null);
     setError(null);
+    setAvisoOmitidas(null);
     setNoEncontrados([]);
     setCorrecciones(new Map());
     setCurrentFile(null);
@@ -186,6 +188,7 @@ function DiagnosticoSection() {
     }
     setError(null);
     setResultado(null);
+    setAvisoOmitidas(null);
     setCurrentFile(file);
     setUploadingMateria(currentMateria);
 
@@ -263,12 +266,21 @@ function DiagnosticoSection() {
   const handleCorregirMatching = async () => {
     if (!currentFile || !currentMateria || correcciones.size === 0) return;
     setCorreccionLoading(true);
+    setAvisoOmitidas(null);
     const indicesCorregidos = new Set(correcciones.keys());
     try {
       const correccionesArray = Array.from(correcciones.entries()).map(([indice, alumno_id]) => ({ indice, alumno_id }));
-      await corregirMatching(currentMateria, periodo, currentFile, correccionesArray);
+      const res = await corregirMatching(currentMateria, periodo, currentFile, correccionesArray);
+      const omitidosSet = new Set(res.omitidas_ya_tenian_resultado ?? []);
+      if (omitidosSet.size > 0) {
+        setAvisoOmitidas(
+          `${omitidosSet.size} fila(s) no se aplicaron porque ese alumno ya tenía resultado de un intento anterior.`,
+        );
+      }
 
-      const nuevosDetalle = noEncontrados.filter((n) => !indicesCorregidos.has(n.indice));
+      const nuevosDetalle = noEncontrados.filter(
+        (n) => !(indicesCorregidos.has(n.indice) || omitidosSet.has(n.indice)),
+      );
       const corregidos = noEncontrados.length - nuevosDetalle.length;
       setNoEncontrados(nuevosDetalle);
       setCorrigiendoIdx(null);
@@ -478,6 +490,12 @@ function DiagnosticoSection() {
                 <div className={classes.statLabel}>Repetidos (1er intento)</div>
               </div>
             </div>
+
+            {avisoOmitidas && (
+              <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+                {avisoOmitidas}
+              </Alert>
+            )}
 
             {resultado.advertencia && (
               <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
@@ -799,12 +817,9 @@ function TarjetaCuestionario({
               </div>
               <div className={`${classes.statBox} ${classes.statBoxGray}`}>
                 <div className={classes.statNumber}>{resultado.intentos_repetidos_ignorados}</div>
-                <div className={classes.statLabel}>Intentos repetidos ignorados</div>
+                <div className={classes.statLabel}>Intentos repetidos (se tomó el primero)</div>
               </div>
             </div>
-            <Text size="xs" c="dimmed">
-              Se tomó el primer intento, como en el CREANI.
-            </Text>
             <Group justify="space-between">
               {archivo && (
                 <Text size="xs" c="dimmed" className={classes.wrapCell}>
@@ -830,6 +845,7 @@ function CuestionarioSection() {
   const [uploading, setUploading] = useState<1 | 2 | null>(null);
   const [aplicando, setAplicando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avisoOmitidas, setAvisoOmitidas] = useState<string | null>(null);
   const [correcciones, setCorrecciones] = useState<Record<1 | 2, Map<number, number>>>({
     1: new Map(),
     2: new Map(),
@@ -849,6 +865,7 @@ function CuestionarioSection() {
       return;
     }
     setError(null);
+    setAvisoOmitidas(null);
     setUploading(cuestionario);
     try {
       const result = await uploadCuestionario(cuestionario, periodo, file);
@@ -866,6 +883,7 @@ function CuestionarioSection() {
   const reemplazarArchivo = (cuestionario: 1 | 2) => {
     setArchivos((prev) => ({ ...prev, [cuestionario]: undefined }));
     setCorrecciones((prev) => ({ ...prev, [cuestionario]: new Map() }));
+    setAvisoOmitidas(null);
     if (cuestionario === 1) setResultadoC1(null);
     else setResultadoC2(null);
   };
@@ -912,14 +930,20 @@ function CuestionarioSection() {
     if (pendientes.length === 0) return;
     setAplicando(true);
     setError(null);
+    setAvisoOmitidas(null);
     const originales = noEncontrados;
     try {
+      let totalOmitidas = 0;
       for (const c of pendientes) {
         const indicesCorregidos = new Set(correcciones[c].keys());
         const correccionesArray = Array.from(correcciones[c].entries()).map(([indice, alumno_id]) => ({ indice, alumno_id }));
-        await corregirMatchingCuestionario(c, periodo, archivos[c]!, correccionesArray);
+        const res = await corregirMatchingCuestionario(c, periodo, archivos[c]!, correccionesArray);
+        const omitidosSet = new Set(res.omitidas_ya_tenian_resultado ?? []);
+        totalOmitidas += omitidosSet.size;
 
-        const detalleQueda = originales.filter((n) => !(Number(n.cuestionario) === c && indicesCorregidos.has(n.indice)));
+        const detalleQueda = originales.filter(
+          (n) => !(Number(n.cuestionario) === c && (indicesCorregidos.has(n.indice) || omitidosSet.has(n.indice))),
+        );
         const detalleC = detalleQueda.filter((n) => Number(n.cuestionario) === c);
         const corregidos = originales.length - detalleQueda.length;
         const merge = (prev: ResultadoProcesamientoCuestionario | null) =>
@@ -934,6 +958,11 @@ function CuestionarioSection() {
         if (c === 1) setResultadoC1(merge);
         else setResultadoC2(merge);
         setCorrecciones((prev) => ({ ...prev, [c]: new Map() }));
+      }
+      if (totalOmitidas > 0) {
+        setAvisoOmitidas(
+          `${totalOmitidas} fila(s) no se aplicaron porque ese alumno ya tenía resultado de un intento anterior.`,
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al corregir matching');
@@ -976,6 +1005,12 @@ function CuestionarioSection() {
           onReemplazar={reemplazarArchivo}
         />
       </SimpleGrid>
+
+      {avisoOmitidas && (
+        <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+          {avisoOmitidas}
+        </Alert>
+      )}
 
       {error && (
         <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>

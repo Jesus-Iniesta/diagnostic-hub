@@ -50,6 +50,7 @@ export interface ResultadoProcesamientoCuestionario {
   no_encontrados: number;
   omitidas_otro_periodo: number;
   intentos_repetidos_ignorados: number;
+  omitidas_ya_tenian_resultado?: number[];
   resultados: CuestionarioAlumnoResultado[];
   no_encontrados_detalle: CuestionarioNoEncontrado[];
 }

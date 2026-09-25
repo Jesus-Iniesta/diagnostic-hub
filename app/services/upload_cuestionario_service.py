@@ -20,6 +20,8 @@ from app.services.normalizacion import (
     normalizar_cuenta,
 )
 from app.services.upload_diagnostico_service import (
+    clave_identidad_no_encontrado,
+    deduplicar_primer_intento,
     extract_answer_key_from_raw,
     fila_corresponde_periodo,
     load_all_alumnos,
@@ -384,6 +386,13 @@ async def procesar_cuestionario(
                     "motivo": motivo,
                     "candidatos": candidatos,
                     "indice": idx,
+                    "_ts": ts,
+                    "_clave_identidad": clave_identidad_no_encontrado(
+                        emails[0] if emails else None,
+                        folios[0] if folios else None,
+                        cuentas[0] if cuentas else None,
+                        str(usuario_raw).strip() if usuario_raw is not None else None,
+                    ),
                 }
             )
             continue
@@ -422,6 +431,9 @@ async def procesar_cuestionario(
 
     await db.commit()
 
+    no_encontrados, repetidos_no_enc = deduplicar_primer_intento(no_encontrados)
+    repetidos += repetidos_no_enc
+
     return {
         "cuestionario": cuestionario,
         "periodo": periodo,
@@ -433,6 +445,25 @@ async def procesar_cuestionario(
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
     }
+
+
+async def _tiene_resultado_cuestionario(
+    db: AsyncSession,
+    alumno_id: int,
+    periodo: str,
+    cuestionario: int,
+) -> bool:
+    result = await db.execute(
+        select(ResultadoCuestionarioDiagnostico).where(
+            ResultadoCuestionarioDiagnostico.alumno_id == alumno_id,
+            ResultadoCuestionarioDiagnostico.periodo == periodo,
+        )
+    )
+    row = result.scalars().first()
+    if row is None:
+        return False
+    cols_map = C1_ACIERTOS_COL if cuestionario == 1 else C2_ACIERTOS_COL
+    return any(getattr(row, col) is not None for col in cols_map.values())
 
 
 async def corregir_matching_cuestionario(
@@ -455,6 +486,7 @@ async def corregir_matching_cuestionario(
     correction_map = {c["indice"]: c["alumno_id"] for c in correcciones}
     resultados: list[dict] = []
     omitidas = 0
+    candidatos: dict[int, list[tuple[int, object]]] = {}
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
@@ -468,16 +500,33 @@ async def corregir_matching_cuestionario(
         if alumno_id not in alumno_details:
             continue
 
-        aciertos, detalle = calcular_aciertos_cuestionario(
-            row, preguntas, respuestas_key, CUESTIONARIO_CODES[cuestionario]
-        )
-        respuestas_json = json.dumps(detalle, ensure_ascii=False)
-        await _upsert_cuestionario(
-            db, alumno_id, periodo, cuestionario, aciertos, respuestas_json
-        )
-        resultados.append(
-            _detalle_resultado(alumno_details, alumno_id, aciertos, detalle)
-        )
+        candidatos.setdefault(alumno_id, []).append((idx, ts))
+
+    omitidas_ya_tenian_resultado: list[int] = []
+
+    for alumno_id, items in candidatos.items():
+        items.sort(key=lambda it: (ts_sort_key(it[1]), it[0]))
+        for j, (idx, _ts) in enumerate(items):
+            if j > 0:
+                omitidas_ya_tenian_resultado.append(idx)
+                continue
+            if await _tiene_resultado_cuestionario(
+                db, alumno_id, periodo, cuestionario
+            ):
+                omitidas_ya_tenian_resultado.append(idx)
+                continue
+
+            row = rows[idx]
+            aciertos, detalle = calcular_aciertos_cuestionario(
+                row, preguntas, respuestas_key, CUESTIONARIO_CODES[cuestionario]
+            )
+            respuestas_json = json.dumps(detalle, ensure_ascii=False)
+            await _upsert_cuestionario(
+                db, alumno_id, periodo, cuestionario, aciertos, respuestas_json
+            )
+            resultados.append(
+                _detalle_resultado(alumno_details, alumno_id, aciertos, detalle)
+            )
 
     await db.commit()
 
@@ -489,6 +538,7 @@ async def corregir_matching_cuestionario(
         "no_encontrados": 0,
         "omitidas_otro_periodo": omitidas,
         "intentos_repetidos_ignorados": 0,
+        "omitidas_ya_tenian_resultado": omitidas_ya_tenian_resultado,
         "resultados": resultados,
         "no_encontrados_detalle": [],
     }
