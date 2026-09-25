@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import DbSession
 from app.core.security import require_permission
@@ -13,7 +13,19 @@ from app.schemas.configuracion import (
     ConfigContactoUpdate,
     ConfigRegistroRead,
     ConfigRegistroUpdate,
+    PeriodoRangoRead,
+    PeriodoRangoUpdate,
 )
+from app.services.upload_diagnostico_service import (
+    normalizar_periodo,
+    obtener_rango_periodo,
+)
+
+PERIODO_INVALIDO_MSG = (
+    "El periodo debe tener el formato AAAA A o AAAA B (ej. 2026B)."
+)
+
+PERIODO_RANGO_KEY_PREFIX = "periodo_rango:"
 
 router = APIRouter()
 
@@ -66,3 +78,55 @@ async def update_contacto_config(
     repo = ConfiguracionRepository(db)
     await repo.set(CONTACTO_HABILITADO_KEY, "true" if payload.habilitado else "false")
     return ConfigContactoRead(habilitado=payload.habilitado)
+
+
+@router.get(
+    "/periodo-rango",
+    response_model=PeriodoRangoRead,
+    summary="Rango de fechas de un periodo (A/B)",
+)
+async def read_periodo_rango(
+    db: DbSession,
+    periodo: str = Query(..., description="Ejemplo: 2026B"),
+) -> PeriodoRangoRead:
+    rango = await obtener_rango_periodo(db, periodo)
+    if rango is None:
+        raise HTTPException(status_code=400, detail=PERIODO_INVALIDO_MSG)
+    inicio, fin, es_default = rango
+    return PeriodoRangoRead(
+        periodo=normalizar_periodo(periodo),
+        inicio=inicio,
+        fin=fin,
+        es_default=es_default,
+    )
+
+
+@router.put(
+    "/periodo-rango",
+    response_model=PeriodoRangoRead,
+    summary="Configurar el rango de fechas de un periodo (A/B)",
+)
+async def update_periodo_rango(
+    payload: PeriodoRangoUpdate,
+    db: DbSession,
+    _current_user: User = Depends(require_permission("gestionar_registro")),
+) -> PeriodoRangoRead:
+    normalizado = normalizar_periodo(payload.periodo)
+    if normalizado is None:
+        raise HTTPException(status_code=400, detail=PERIODO_INVALIDO_MSG)
+    if payload.inicio > payload.fin:
+        raise HTTPException(
+            status_code=400,
+            detail="La fecha de inicio debe ser anterior o igual a la de fin.",
+        )
+    repo = ConfiguracionRepository(db)
+    await repo.set(
+        f"{PERIODO_RANGO_KEY_PREFIX}{normalizado}",
+        f"{payload.inicio.isoformat()}|{payload.fin.isoformat()}",
+    )
+    return PeriodoRangoRead(
+        periodo=normalizado,
+        inicio=payload.inicio,
+        fin=payload.fin,
+        es_default=False,
+    )
