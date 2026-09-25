@@ -273,15 +273,30 @@ async def _upsert_cuestionario(
 
 
 async def _indice_usuario(
-    db: AsyncSession, alumno_details: dict[int, dict]
+    db: AsyncSession,
+    alumno_details: dict[int, dict],
+    periodo: str,
 ) -> dict[tuple[str, int], list[int]]:
-    result = await db.execute(select(Alumno.id, Alumno.lugar_admision))
-    lugar_map = dict(result.all())
+    """Índice por (ingeniería, lugar de admisión) SOLO de la generación del periodo.
+
+    El lugar de admisión se repite cada año, así que se restringe a los alumnos
+    cuyo periodo_ingreso (sin espacios, en mayúsculas) coincide con el periodo
+    que se está subiendo.
+    """
+    result = await db.execute(
+        select(Alumno.id, Alumno.lugar_admision, Alumno.periodo_ingreso)
+    )
+    filas = result.all()
+    periodo_norm = "".join(str(periodo).upper().split())
 
     index: dict[tuple[str, int], list[int]] = {}
-    for aid, info in alumno_details.items():
+    for aid, lugar, periodo_ingreso in filas:
+        if "".join(str(periodo_ingreso).upper().split()) != periodo_norm:
+            continue
+        info = alumno_details.get(aid)
+        if info is None:
+            continue
         clave = (info.get("ingenieria") or "").upper()
-        lugar = lugar_map.get(aid)
         if clave and lugar is not None:
             index.setdefault((clave, lugar), []).append(aid)
     return index
@@ -318,7 +333,7 @@ async def procesar_cuestionario(
     respuestas_key = _respuestas_key_default()
 
     email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
-    usuario_index = await _indice_usuario(db, alumno_details)
+    usuario_index = await _indice_usuario(db, alumno_details, periodo)
 
     encontrados_cola: list[dict] = []
     no_encontrados: list[dict] = []
