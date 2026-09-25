@@ -46,6 +46,7 @@ from app.services.upload_diagnostico_service import (  # noqa: E402
     extract_answer_key_from_raw,
     extraer_ano_timestamp,
     fila_corresponde_periodo,
+    obtener_rango_periodo,
     ts_sort_key,
 )
 
@@ -245,10 +246,12 @@ def _verificar_final(path: str, periodo: str, db_url: str | None) -> int:
             rows = list(ws.iter_rows(min_row=2, values_only=True))
             wb.close()
 
+            rango = await obtener_rango_periodo(db, periodo)
+
             intentos: dict[int, list[dict]] = {}
             for idx, row in enumerate(rows):
                 raw_ts = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
-                if not fila_corresponde_periodo(raw_ts, periodo):
+                if not fila_corresponde_periodo(raw_ts, rango):
                     continue
                 email = normalize_email(
                     row[COL_EMAIL] if len(row) > COL_EMAIL else None

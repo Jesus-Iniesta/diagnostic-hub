@@ -22,9 +22,12 @@ import {
   IconUpload,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import CorreccionModal from '../../components/CorreccionModal/CorreccionModal';
 import { corregirFilas, uploadAlumnosExcel } from '../../lib/uploadApi';
+import { fetchPeriodoRango } from '../../lib/configuracionApi';
+import type { PeriodoRango } from '../../lib/configuracionApi';
 import {
   uploadDiagnostico,
   corregirMatching,
@@ -97,6 +100,46 @@ function getCurrentPeriodo(): string {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   return `${year}${month <= 6 ? 'A' : 'B'}`;
+}
+
+function formatFecha(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function usePeriodoRango(periodo: string): PeriodoRango | null {
+  const [rango, setRango] = useState<PeriodoRango | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setRango(null);
+    const p = periodo.trim();
+    if (!p) return;
+    fetchPeriodoRango(p)
+      .then((data) => {
+        if (mounted) setRango(data);
+      })
+      .catch(() => {
+        if (mounted) setRango(null);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [periodo]);
+
+  return rango;
+}
+
+function RangoPeriodoInfo({ periodo }: { periodo: string }) {
+  const rango = usePeriodoRango(periodo);
+
+  return (
+    <Text size="sm" c="dimmed">
+      {rango && `Se tomarán las respuestas del ${formatFecha(rango.inicio)} al ${formatFecha(rango.fin)}`}
+      {rango && ' · '}
+      <Link to="/admin/configuracion">Cambiar en Configuración</Link>
+    </Text>
+  );
 }
 
 function DiagnosticoSection() {
@@ -612,6 +655,7 @@ function DiagnosticoSection() {
           style={{ width: 140 }}
           size="sm"
         />
+        <RangoPeriodoInfo periodo={periodo} />
       </Group>
 
       {renderProgressBar()}
@@ -952,6 +996,7 @@ function CuestionarioSection() {
           style={{ width: 140 }}
           size="sm"
         />
+        <RangoPeriodoInfo periodo={periodo} />
       </Group>
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">

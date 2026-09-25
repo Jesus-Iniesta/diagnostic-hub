@@ -24,6 +24,8 @@ from app.services.upload_diagnostico_service import (
     fila_corresponde_periodo,
     load_all_alumnos,
     normalize_name,
+    obtener_rango_periodo,
+    rango_fechas_dict,
     ts_sort_key,
 )
 from app.services.upload_webassign_service import clean_email
@@ -318,13 +320,15 @@ async def procesar_cuestionario(
     email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
     usuario_index = await _indice_usuario(db, alumno_details)
 
+    rango = await obtener_rango_periodo(db, periodo)
+
     encontrados_cola: list[dict] = []
     no_encontrados: list[dict] = []
     omitidas = 0
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
-        if not fila_corresponde_periodo(ts, periodo):
+        if not fila_corresponde_periodo(ts, rango):
             omitidas += 1
             continue
 
@@ -425,6 +429,7 @@ async def procesar_cuestionario(
     return {
         "cuestionario": cuestionario,
         "periodo": periodo,
+        "rango_fechas": rango_fechas_dict(rango),
         "total_filas": len(rows),
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
@@ -450,6 +455,8 @@ async def corregir_matching_cuestionario(
     preguntas = _filtro_preguntas(cols, cuestionario)
     respuestas_key = _respuestas_key_default()
 
+    rango = await obtener_rango_periodo(db, periodo)
+
     _, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
     correction_map = {c["indice"]: c["alumno_id"] for c in correcciones}
@@ -458,7 +465,7 @@ async def corregir_matching_cuestionario(
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
-        if not fila_corresponde_periodo(ts, periodo):
+        if not fila_corresponde_periodo(ts, rango):
             omitidas += 1
             continue
         if idx not in correction_map:

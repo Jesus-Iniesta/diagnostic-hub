@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.alumno import Alumno
 from app.models.user import User
+from app.repositories.configuracion_repository import ConfiguracionRepository
 from app.repositories.diagnostico_repository import DiagnosticoRepository
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
 from app.services.normalizacion import (
@@ -65,12 +66,124 @@ def extraer_ano_timestamp(raw: object | None) -> int | None:
     return None
 
 
-def fila_corresponde_periodo(raw_timestamp: object | None, periodo: str) -> bool:
-    ano_periodo = extraer_ano_periodo(periodo)
-    ano_ts = extraer_ano_timestamp(raw_timestamp)
-    if ano_periodo is None or ano_ts is None:
+def _periodo_ab(periodo: str) -> tuple[int, str] | None:
+    """Devuelve (anio, letra) si el periodo tiene formato YYYYA/YYYYB
+    (tolerante a espacios y minúsculas)."""
+    m = re.match(r"^\s*(\d{4})\s*([abAB])\s*$", str(periodo or ""))
+    if not m:
+        return None
+    return int(m.group(1)), m.group(2).upper()
+
+
+def normalizar_periodo(periodo: str) -> str | None:
+    """Normaliza un periodo a formato YYYYA/YYYYB (ej. '2026 b' -> '2026B')."""
+    p = _periodo_ab(periodo)
+    if p is None:
+        return None
+    return f"{p[0]}{p[1]}"
+
+
+def rango_por_defecto(periodo: str) -> tuple[date, date] | None:
+    """Rango por defecto (inicio, fin) del periodo: B va de mayo a octubre
+    y A va de noviembre del año anterior a abril."""
+    p = _periodo_ab(periodo)
+    if p is None:
+        return None
+    anio, letra = p
+    if letra == "B":
+        return date(anio, 5, 1), date(anio, 10, 31)
+    return date(anio - 1, 11, 1), date(anio, 4, 30)
+
+
+async def obtener_rango_periodo(
+    db: AsyncSession, periodo: str
+) -> tuple[date, date, bool] | None:
+    """Rango de fechas (inicio, fin, es_default) del periodo.
+
+    Usa la configuración `periodo_rango:<PERIODO>` si existe; si no, el rango
+    por defecto. Devuelve None si el periodo no tiene formato YYYYA/YYYYB.
+    """
+    normalizado = normalizar_periodo(periodo)
+    if normalizado is None:
+        return None
+    inicio, fin = rango_por_defecto(normalizado)
+    assert inicio is not None and fin is not None
+
+    repo = ConfiguracionRepository(db)
+    valor = await repo.get(f"periodo_rango:{normalizado}")
+    if valor:
+        partes = valor.split("|")
+        if len(partes) == 2:
+            try:
+                inicio_guardado = datetime.strptime(
+                    partes[0].strip(), "%Y-%m-%d"
+                ).date()
+                fin_guardado = datetime.strptime(partes[1].strip(), "%Y-%m-%d").date()
+                if inicio_guardado <= fin_guardado:
+                    return inicio_guardado, fin_guardado, False
+            except ValueError:
+                pass
+    return inicio, fin, True
+
+
+def _fecha_de_timestamp(raw: object | None) -> date | None:
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y",
+        "%m/%d/%Y %H:%M:%S",
+        "%Y-%m-%d",
+        "%d-%m-%Y %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt.date()
+    except ValueError:
+        return None
+
+
+def fila_corresponde_periodo(
+    raw_timestamp: object | None, rango: tuple[date, date, bool] | None
+) -> bool:
+    """True si la fila debe procesarse: su fecha cae dentro del rango del periodo.
+
+    Si el rango es None (el periodo no tiene formato YYYYA/YYYYB) o la marca
+    temporal no se puede leer, conserva el comportamiento previo (no se omite).
+    """
+    if rango is None:
         return True
-    return ano_ts == ano_periodo
+    inicio, fin, _ = rango
+    fecha = _fecha_de_timestamp(raw_timestamp)
+    if fecha is None:
+        return True
+    return inicio <= fecha <= fin
+
+
+def rango_fechas_dict(
+    rango: tuple[date, date, bool] | None,
+) -> dict | None:
+    """Representación JSON del rango (inicio/fin en ISO y es_default)."""
+    if rango is None:
+        return None
+    inicio, fin, es_default = rango
+    return {
+        "inicio": inicio.isoformat(),
+        "fin": fin.isoformat(),
+        "es_default": es_default,
+    }
 
 
 def ts_sort_key(raw: object | None) -> tuple:
@@ -392,6 +505,8 @@ async def procesar_examen_diagnostico(
 
     correct_key = [respuestas_key.get(code, "").lower() for code in answer_codes]
 
+    rango = await obtener_rango_periodo(db, periodo)
+
     email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
@@ -406,7 +521,7 @@ async def procesar_examen_diagnostico(
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
-        if not fila_corresponde_periodo(raw_timestamp, periodo):
+        if not fila_corresponde_periodo(raw_timestamp, rango):
             omitidas += 1
             continue
 
@@ -508,6 +623,7 @@ async def procesar_examen_diagnostico(
     return {
         "materia": materia,
         "periodo": periodo,
+        "rango_fechas": rango_fechas_dict(rango),
         "total_filas": len(rows),
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
@@ -549,6 +665,8 @@ async def corregir_matching_diagnostico(
 
     correct_key = [respuestas_key.get(code, "").lower() for code in answer_codes]
 
+    rango = await obtener_rango_periodo(db, periodo)
+
     _, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
     correction_map = {c["indice"]: c["alumno_id"] for c in correcciones}
@@ -563,7 +681,7 @@ async def corregir_matching_diagnostico(
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
-        if not fila_corresponde_periodo(raw_timestamp, periodo):
+        if not fila_corresponde_periodo(raw_timestamp, rango):
             omitidas += 1
             continue
         if idx not in correction_map:
