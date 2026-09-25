@@ -200,6 +200,17 @@ def _obtener_timestamp(row: tuple, cols: dict) -> object | None:
     return _valor(row, cols["timestamp"])
 
 
+def _identificador_contradice(
+    ids_fila: list[str], id_candidato: str | None
+) -> bool:
+    """True si la fila trae un identificador del tipo (folio o cuenta) y el
+    candidato tiene registrado uno distinto. Si fueran iguales la fila ya se
+    habría encontrado por ese identificador."""
+    if not id_candidato:
+        return False
+    return any(i != id_candidato for i in ids_fila)
+
+
 def _respuestas_key_default() -> dict[str, str]:
     flat: dict[str, str] = {}
     for por_materia in DEFAULT_RESPUESTAS_CUESTIONARIO.values():
@@ -357,20 +368,24 @@ async def procesar_cuestionario(
                 ids = usuario_index.get((clave, lugar))
                 if ids and len(ids) == 1:
                     info = alumno_details[ids[0]]
-                    candidatos.append(
-                        {
-                            "alumno_id": ids[0],
-                            "nombre": info["nombre"],
-                            "cuenta": info["cuenta"],
-                            "correo": info["correo"],
-                            "sugerido": True,
-                            "motivo": "Coincidencia por usuario (carrera + lugar): confirmar",
-                        }
-                    )
-                    motivo = (
-                        "Sin coincidencia de correo/cuenta/folio; "
-                        "usuario coincide con un solo alumno (carrera + lugar)"
-                    )
+                    contradictorio = _identificador_contradice(
+                        folios, info["folio"]
+                    ) or _identificador_contradice(cuentas, info["cuenta"])
+                    if not contradictorio:
+                        candidatos.append(
+                            {
+                                "alumno_id": ids[0],
+                                "nombre": info["nombre"],
+                                "cuenta": info["cuenta"],
+                                "correo": info["correo"],
+                                "sugerido": True,
+                                "motivo": "Coincidencia por usuario (carrera + lugar): confirmar",
+                            }
+                        )
+                        motivo = (
+                            "Sin coincidencia de correo/cuenta/folio; "
+                            "usuario coincide con un solo alumno (carrera + lugar)"
+                        )
             no_encontrados.append(
                 {
                     "nombre_original": nombre,
