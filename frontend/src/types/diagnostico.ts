@@ -1,3 +1,5 @@
+import type { CandidatoCoincidencia } from './cuestionario';
+
 export interface RespuestaCorrecta {
   codigo: string;
   respuesta_correcta: string;
@@ -34,7 +36,7 @@ export interface DiagnosticoNoEncontrado {
   folio: string | null;
   materia: string;
   motivo: string;
-  candidatos: Array<Record<string, unknown>>;
+  candidatos: CandidatoCoincidencia[];
   indice: number;
 }
 
@@ -44,6 +46,9 @@ export interface ResultadoProcesamientoDiagnostico {
   total_filas: number;
   encontrados: number;
   no_encontrados: number;
+  omitidas_otro_periodo: number;
+  intentos_repetidos_ignorados: number;
+  advertencia?: string | null;
   resultados: DiagnosticoAlumnoResultado[];
   no_encontrados_detalle: DiagnosticoNoEncontrado[];
 }
