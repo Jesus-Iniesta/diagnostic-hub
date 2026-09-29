@@ -16,7 +16,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = ""
+    app_name: str = "TutoNet"
     app_version: str = "1.0.0"
     debug: bool = False
 
@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     @property
     def jwt_cookie_max_age(self) -> int:
         return self.access_token_expire_minutes * 60
+
+    @field_validator("app_name", mode="before")
+    @classmethod
+    def default_app_name(cls, value: str | None) -> str:
+        return value.strip() if isinstance(value, str) and value.strip() else "TutoNet"
 
     @field_validator("database_url")
     @classmethod
