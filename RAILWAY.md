@@ -34,4 +34,6 @@ frontend:
 
 ```text
 CORS_ORIGINS=https://<dominio-publico-del-frontend>
+JWT_COOKIE_SAMESITE=none
+JWT_COOKIE_SECURE=true
 ```

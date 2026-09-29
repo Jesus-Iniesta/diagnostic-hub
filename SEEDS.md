@@ -22,6 +22,8 @@ JWT_SECRET=<cadena aleatoria larga>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 CORS_ORIGINS=https://<dominio-publico-del-frontend>
+JWT_COOKIE_SAMESITE=none
+JWT_COOKIE_SECURE=true
 ```
 
 También se aceptan las variables PostgreSQL estándar `PGHOST`, `PGPORT`, `PGUSER`,
