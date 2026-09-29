@@ -77,7 +77,7 @@ async def get_current_user(
     bearer: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    token = request.cookies.get(settings.jwt_cookie_name) or bearer
+    token = bearer or request.cookies.get(settings.jwt_cookie_name)
     if not token:
         raise credentials_exc
 
