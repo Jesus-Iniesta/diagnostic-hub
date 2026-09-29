@@ -20,7 +20,15 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = False
 
-    database_url: str = ""
+    database_url: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "DATABASE_URL",
+            "POSTGRES_URL",
+            "POSTGRESQL_URL",
+            "DATABASE_PUBLIC_URL",
+        ),
+    )
     pg_host: str = Field(default="", validation_alias=AliasChoices("PGHOST", "POSTGRES_HOST"))
     pg_port: str = Field(default="5432", validation_alias=AliasChoices("PGPORT", "POSTGRES_PORT"))
     pg_user: str = Field(default="", validation_alias=AliasChoices("PGUSER", "POSTGRES_USER"))

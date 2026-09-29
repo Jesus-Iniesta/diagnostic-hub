@@ -27,6 +27,10 @@ CORS_ORIGINS=https://<dominio-publico-del-frontend>
 También se aceptan las variables PostgreSQL estándar `PGHOST`, `PGPORT`, `PGUSER`,
 `PGPASSWORD` y `PGDATABASE`. `PORT` lo proporciona Railway automáticamente.
 
+El nombre `Postgres` debe coincidir con el nombre del servicio de base de datos en
+Railway. Si el servicio tiene otro nombre, usa la referencia que Railway inserte
+desde **Add Reference**, no escribas el ejemplo literalmente.
+
 ## Usuarios de prueba
 
 | Perfil | Usuario | Contraseña |
