@@ -13,4 +13,8 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    host: true,
+    allowedHosts: ['eloquent-success-production.up.railway.app'],
+  },
 });
