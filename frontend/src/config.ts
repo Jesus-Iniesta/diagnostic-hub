@@ -1,8 +1,8 @@
-const apiUrl: string | undefined = import.meta.env.VITE_API_URL;
+const apiUrl: string | undefined = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '');
 
 if (!apiUrl) {
   throw new Error(
-    'VITE_API_URL no está definido. Copia frontend/.env.example a frontend/.env y configura la URL de la API.',
+    'VITE_API_URL no está definido. Copia frontend/.env.example a frontend/.env y configura la URL de la API.'
   );
 }
 
