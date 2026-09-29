@@ -31,6 +31,10 @@ El nombre `Postgres` debe coincidir con el nombre del servicio de base de datos 
 Railway. Si el servicio tiene otro nombre, usa la referencia que Railway inserte
 desde **Add Reference**, no escribas el ejemplo literalmente.
 
+En la configuración del servicio, deja vacío **Start Command** para usar el
+`CMD` del Dockerfile, o configúralo exactamente como `sh scripts/start.sh`.
+No uses solamente `uvicorn app.main:app`, porque omite las migraciones y los seeds.
+
 ## Usuarios de prueba
 
 | Perfil | Usuario | Contraseña |
