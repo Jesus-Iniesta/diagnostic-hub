@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     def required_env_var(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("Debe definirse en el archivo .env")
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
 
     @field_validator("cors_origins", mode="before")

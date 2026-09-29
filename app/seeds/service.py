@@ -7,6 +7,7 @@ from app.core.base import Base
 from app.core.database import async_session, engine
 from app.core.security import hash_password
 from app.models.alumno import Alumno
+from app.models.configuracion import Configuracion
 from app.models.grupo import Grupo
 from app.models.grupo_profesor import grupo_profesor
 from app.models.grupo_alumno import grupo_alumno
@@ -17,6 +18,7 @@ from app.models.role import Role
 from app.models.role_permission import role_permissions
 from app.models.user import AuthMethod, User
 from app.seeds.data.alumnos import ALUMNOS
+from app.seeds.data.configuracion import CONFIGURACION
 from app.seeds.data.grupos import GRUPOS, GRUPO_PROFESORES, GRUPO_ALUMNOS
 from app.seeds.data.ingenierias import INGENIERIAS
 from app.seeds.data.materias import MATERIAS_DATA
@@ -190,6 +192,22 @@ async def run_seed_alumnos() -> int:
     return created
 
 
+async def run_seed_configuracion() -> int:
+    async with async_session() as db:
+        created = 0
+        async with atomic_session(db):
+            for data in CONFIGURACION:
+                config = await db.scalar(
+                    select(Configuracion).where(Configuracion.key == data["key"])
+                )
+                if config:
+                    config.value = data["value"]
+                    continue
+                db.add(Configuracion(key=data["key"], value=data["value"]))
+                created += 1
+    return created
+
+
 async def run_seed_respuestas_diagnostico(periodo: str = "2022B") -> int:
     from app.models.respuesta_correcta_diagnostico import RespuestaCorrectaDiagnostico
 
@@ -325,6 +343,7 @@ async def run_all() -> dict:
     m = await run_seed_materias()
     u = await run_seed_users()
     a = await run_seed_alumnos()
+    c = await run_seed_configuracion()
     d = await run_seed_respuestas_diagnostico()
     g = await run_seed_grupos()
     return {
@@ -334,6 +353,7 @@ async def run_all() -> dict:
         "materias": m,
         "users": u,
         "alumnos": a,
+        "configuracion": c,
         "respuestas_diagnostico": d,
         "grupos": g,
     }

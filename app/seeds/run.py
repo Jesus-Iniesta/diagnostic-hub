@@ -6,6 +6,9 @@ import typer
 from app.seeds.service import (
     run_all,
     run_seed_alumnos,
+    run_seed_configuracion,
+    run_seed_grupos,
+    run_seed_materias,
     run_seed_ingenierias,
     run_seed_permissions,
     run_seed_respuestas_diagnostico,
@@ -57,6 +60,24 @@ def users():
 def alumnos():
     n = run_async(run_seed_alumnos())
     typer.echo(f"Alumnos seed completed ({n} created).")
+
+
+@app.command("configuracion")
+def configuracion():
+    n = run_async(run_seed_configuracion())
+    typer.echo(f"Configuracion seed completed ({n} created).")
+
+
+@app.command("materias")
+def materias():
+    n = run_async(run_seed_materias())
+    typer.echo(f"Materias seed completed ({n} created).")
+
+
+@app.command("grupos")
+def grupos():
+    result = run_async(run_seed_grupos())
+    typer.echo(f"Grupos seed completed: {result}.")
 
 
 @app.command("respuestas-diagnostico")
