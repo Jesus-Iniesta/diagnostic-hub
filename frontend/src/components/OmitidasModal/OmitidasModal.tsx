@@ -6,6 +6,7 @@ const RAZON_COLOR: Record<RazonOmitida, string> = {
   'registro del alumno': 'blue',
   'periodo marcado en el formulario': 'grape',
   'rango de fechas': 'yellow',
+  'fecha anterior al periodo': 'orange',
 };
 
 function formatFechaHora(valor: string | null): string {
@@ -27,8 +28,9 @@ export default function OmitidasModal({ opened, onClose, omitidas, periodo }: Om
   return (
     <Modal opened={opened} onClose={onClose} title={`Filas omitidas (no son de ${periodo})`} size="xl" radius="md">
       <Text size="sm" c="dimmed" mb="md">
-        Se decide primero por el registro del alumno; si no se encontró, por el periodo que marcó en el
-        formulario; si no lo marcó, por el rango de fechas del periodo.
+        Se decide primero por el registro del alumno (si tiene un periodo válido), sin aceptar respuestas
+        anteriores al inicio del periodo; si no, por el periodo que marcó en el formulario; si no lo marcó,
+        por el rango de fechas del periodo.
       </Text>
       {omitidas.length === 0 ? (
         <Text c="dimmed" ta="center" py="xl">No hay filas omitidas.</Text>

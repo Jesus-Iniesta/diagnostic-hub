@@ -189,6 +189,7 @@ def rango_fechas_dict(
 RAZON_REGISTRO = "registro del alumno"
 RAZON_PERIODO_MARCADO = "periodo marcado en el formulario"
 RAZON_RANGO = "rango de fechas"
+RAZON_FECHA_ANTERIOR = "fecha anterior al periodo"
 
 
 def _clave_periodo(periodo: object | None) -> str | None:
@@ -226,16 +227,29 @@ def decidir_periodo_fila(
     """Decide si una fila ya emparejada pertenece al periodo subido.
 
     Prioridad:
-    1. Si se encontró al alumno: su periodo_ingreso (normalizado) == periodo.
+    1. Si se encontró al alumno y su periodo_ingreso es un periodo válido
+       (AAAAA/AAAAB): pertenece si es igual al periodo subido. El registro puede
+       incluir filas contestadas tarde, pero no anteriores al inicio del rango
+       del periodo (se omiten como "fecha anterior al periodo"; si la fecha no
+       se puede leer, decide el registro).
     2. Si no, y la fila trae el periodo marcado por el alumno: == periodo.
     3. Si no: el rango de fechas configurable del periodo.
 
     Devuelve (pertenece, razon, periodo_detectado).
     """
     periodo_subido = _clave_periodo(periodo)
-    if alumno is not None:
-        detectado = _clave_periodo(alumno.get("periodo_ingreso"))
-        return detectado == periodo_subido, RAZON_REGISTRO, detectado
+    registro = (
+        normalizar_periodo(str(alumno.get("periodo_ingreso") or ""))
+        if alumno is not None
+        else None
+    )
+    if registro:
+        if registro != periodo_subido:
+            return False, RAZON_REGISTRO, registro
+        fecha = _fecha_de_timestamp(raw_timestamp)
+        if rango is not None and fecha is not None and fecha < rango[0]:
+            return False, RAZON_FECHA_ANTERIOR, periodo_por_fecha(raw_timestamp)
+        return True, RAZON_REGISTRO, registro
     if periodo_marcado:
         return periodo_marcado == periodo_subido, RAZON_PERIODO_MARCADO, periodo_marcado
     return (
