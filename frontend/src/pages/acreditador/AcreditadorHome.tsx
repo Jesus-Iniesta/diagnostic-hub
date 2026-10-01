@@ -1,4 +1,5 @@
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -10,10 +11,11 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconDownload, IconReport } from '@tabler/icons-react';
+import { IconAlertCircle, IconDownload, IconReport } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
 import { API_BASE_URL } from '../../config';
+import { apiFetch } from '../../lib/api';
 
 interface PeriodosResponse {
   periodos: string[];
@@ -41,15 +43,22 @@ export default function AcreditadorHome() {
   const [loadingPeriodos, setLoadingPeriodos] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
   const [downloadingClave, setDownloadingClave] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    void fetch(`${API_BASE_URL}/reportes/periodos`, { credentials: 'include' })
-      .then((r) => r.json() as Promise<PeriodosResponse>)
+    apiFetch<PeriodosResponse>(`${API_BASE_URL}/reportes/periodos`)
       .then((data) => {
         if (mounted) {
           setPeriodos(data.periodos);
           if (data.periodos.length > 0) setPeriodo(data.periodos[0]);
+        }
+      })
+      .catch((err: unknown) => {
+        if (mounted) {
+          setError(
+            `No se pudieron cargar los periodos: ${err instanceof Error ? err.message : 'error desconocido'}`,
+          );
         }
       })
       .finally(() => {
@@ -62,15 +71,17 @@ export default function AcreditadorHome() {
     if (!periodo) return;
     let mounted = true;
     setLoadingStats(true);
-    void fetch(`${API_BASE_URL}/reportes/stats?periodo=${encodeURIComponent(periodo)}`, {
-      credentials: 'include',
-    })
-      .then((r) => r.json() as Promise<StatsResponse>)
+    apiFetch<StatsResponse>(`${API_BASE_URL}/reportes/stats?periodo=${encodeURIComponent(periodo)}`)
       .then((data) => {
         if (mounted) setStats(data);
       })
-      .catch(() => {
-        if (mounted) setStats(null);
+      .catch((err: unknown) => {
+        if (mounted) {
+          setStats(null);
+          setError(
+            `No se pudieron cargar las estadísticas: ${err instanceof Error ? err.message : 'error desconocido'}`,
+          );
+        }
       })
       .finally(() => {
         if (mounted) setLoadingStats(false);
@@ -81,13 +92,14 @@ export default function AcreditadorHome() {
   const handleDownload = async (licenciatura?: string) => {
     if (!periodo) return;
     setDownloadingClave(licenciatura ?? 'all');
+    setError(null);
     try {
       const params = new URLSearchParams({ periodo });
       if (licenciatura) params.set('licenciatura', licenciatura);
       const res = await fetch(`${API_BASE_URL}/reportes/excel?${params.toString()}`, {
         credentials: 'include',
       });
-      if (!res.ok) throw new Error('Error al descargar');
+      if (!res.ok) throw new Error(`Error ${res.status} al descargar el reporte`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -97,8 +109,8 @@ export default function AcreditadorHome() {
         : `reporte_${periodo}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      // silently fail
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al descargar el reporte');
     } finally {
       setDownloadingClave(null);
     }
@@ -120,6 +132,7 @@ export default function AcreditadorHome() {
               value={periodo}
               onChange={setPeriodo}
               disabled={loadingPeriodos}
+              nothingFoundMessage="No hay periodos con resultados cargados"
             />
             <Group align="flex-end">
               <Button
@@ -134,6 +147,18 @@ export default function AcreditadorHome() {
             </Group>
           </SimpleGrid>
         </Card>
+
+        {error && (
+          <Alert color="red" icon={<IconAlertCircle size={18} />} withCloseButton onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+
+        {!loadingPeriodos && !error && periodos.length === 0 && (
+          <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
+            Aún no hay resultados de diagnóstico ni de WebAssign cargados, por lo que no hay periodos para reportar.
+          </Alert>
+        )}
 
         {loadingStats && (
           <Card withBorder p="xl">
