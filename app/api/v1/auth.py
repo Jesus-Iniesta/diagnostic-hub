@@ -11,7 +11,7 @@ from app.core.security import (
 )
 from app.models.user import AuthMethod, User
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import NumeroCuentaLogin, Token
+from app.schemas.auth import NumeroCuentaLogin, SessionResponse
 from app.schemas.user import UserRead
 
 router = APIRouter()
@@ -41,7 +41,7 @@ def _set_auth_cookie(response: Response, token: str) -> None:
 
 async def _token_por_numero_cuenta(
     repo: UserRepository, numero: str, response: Response | None = None
-) -> Token:
+) -> SessionResponse:
     alumno = await repo.get_alumno_por_numero_cuenta(numero)
     if not alumno or not alumno.usuario:
         raise invalid_credentials()
@@ -57,15 +57,15 @@ async def _token_por_numero_cuenta(
     token = create_access_token(sub=str(user.id))
     if response is not None:
         _set_auth_cookie(response, token)
-    return Token(access_token=token, token_type="bearer")
+    return SessionResponse()
 
 
-@router.post("/token", response_model=Token, summary="Login por correo/RFC o número de cuenta")
+@router.post("/token", response_model=SessionResponse, summary="Login por correo/RFC o número de cuenta")
 async def login_token(
     form_data: TokenLoginForm = Depends(),
     db: AsyncSession = Depends(get_db),
     response: Response = Response(),
-) -> Token:
+) -> SessionResponse:
     repo = UserRepository(db)
 
     user = await repo.get_user_for_login(form_data.username)
@@ -81,17 +81,17 @@ async def login_token(
 
         token = create_access_token(sub=str(user.id))
         _set_auth_cookie(response, token)
-        return Token(access_token=token, token_type="bearer")
+        return SessionResponse()
 
     return await _token_por_numero_cuenta(repo, form_data.username, response)
 
 
-@router.post("/numero-cuenta", response_model=Token, summary="Login del alumno por número de cuenta")
+@router.post("/numero-cuenta", response_model=SessionResponse, summary="Login del alumno por número de cuenta")
 async def login_numero_cuenta(
     payload: NumeroCuentaLogin,
     db: AsyncSession = Depends(get_db),
     response: Response = Response(),
-) -> Token:
+) -> SessionResponse:
     repo = UserRepository(db)
     return await _token_por_numero_cuenta(repo, payload.numero_cuenta, response)
 

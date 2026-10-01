@@ -1,5 +1,5 @@
 from app.schemas.alumno import AlumnoCreate, AlumnoRead, AlumnoUpdate
-from app.schemas.auth import NumeroCuentaLogin, Token
+from app.schemas.auth import NumeroCuentaLogin, SessionResponse
 from app.schemas.asignacion_examen import (
     AsignacionExamenCreate,
     AsignacionExamenRead,
@@ -63,7 +63,7 @@ __all__ = [
     "RoleCreate",
     "RoleRead",
     "RoleUpdate",
-    "Token",
+    "SessionResponse",
     "UserCreate",
     "UserRead",
     "UserUpdate",

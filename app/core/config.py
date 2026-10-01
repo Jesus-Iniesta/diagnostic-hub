@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     ]
 
     jwt_cookie_name: str = "tutonet_token"
-    jwt_cookie_secure: bool = False
-    jwt_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    jwt_cookie_secure: bool = True
+    jwt_cookie_samesite: Literal["lax", "strict", "none"] = "none"
 
     @property
     def jwt_cookie_max_age(self) -> int:
