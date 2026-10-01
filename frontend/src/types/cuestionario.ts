@@ -1,3 +1,5 @@
+import type { OmitidaDetalle } from './omitidas';
+
 export interface CandidatoCoincidencia {
   alumno_id: number;
   nombre: string;
@@ -51,6 +53,7 @@ export interface ResultadoProcesamientoCuestionario {
   omitidas_otro_periodo: number;
   intentos_repetidos_ignorados: number;
   omitidas_ya_tenian_resultado?: number[];
+  omitidas_detalle?: OmitidaDetalle[];
   resultados: CuestionarioAlumnoResultado[];
   no_encontrados_detalle: CuestionarioNoEncontrado[];
 }

@@ -1,4 +1,5 @@
 import type { CandidatoCoincidencia } from './cuestionario';
+import type { OmitidaDetalle } from './omitidas';
 
 export interface RespuestaCorrecta {
   codigo: string;
@@ -49,6 +50,7 @@ export interface ResultadoProcesamientoDiagnostico {
   omitidas_otro_periodo: number;
   intentos_repetidos_ignorados: number;
   omitidas_ya_tenian_resultado?: number[];
+  omitidas_detalle?: OmitidaDetalle[];
   advertencia?: string | null;
   resultados: DiagnosticoAlumnoResultado[];
   no_encontrados_detalle: DiagnosticoNoEncontrado[];

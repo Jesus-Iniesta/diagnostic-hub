@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import unicodedata
 
 import openpyxl
 from sqlalchemy import select
@@ -21,12 +22,14 @@ from app.services.normalizacion import (
 )
 from app.services.upload_diagnostico_service import (
     clave_identidad_no_encontrado,
+    decidir_periodo_fila,
     deduplicar_primer_intento,
     extract_answer_key_from_raw,
-    fila_corresponde_periodo,
     load_all_alumnos,
     normalize_name,
+    normalizar_periodo,
     obtener_rango_periodo,
+    omitida_detalle,
     rango_fechas_dict,
     ts_sort_key,
 )
@@ -73,6 +76,12 @@ def _header_text(raw: object | None) -> str:
     return str(raw).strip()
 
 
+def _sin_acentos(texto: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
+    )
+
+
 def detectar_columnas_cuestionario(headers: list) -> dict:
     """Detecta columnas por el texto del encabezado (posiciones variables)."""
     cols = {
@@ -85,6 +94,7 @@ def detectar_columnas_cuestionario(headers: list) -> dict:
         "score": None,
         "timestamp": None,
         "nombre": None,
+        "periodo_marcado": None,
         "preguntas": {},
     }
 
@@ -92,6 +102,13 @@ def detectar_columnas_cuestionario(headers: list) -> dict:
         s = _header_text(raw)
         low = s.lower()
         if not low:
+            continue
+
+        # Va antes de las demás reglas: el encabezado puede contener otras
+        # palabras clave (p. ej. "fecha") que lo confundirían con otra columna.
+        if "periodo de ingreso" in _sin_acentos(low):
+            if cols["periodo_marcado"] is None:
+                cols["periodo_marcado"] = idx
             continue
 
         matches = list(re.finditer(r"\(([ATGC])(\d+)\)", s))
@@ -202,6 +219,71 @@ def _identificadores_fila(row: tuple, cols: dict) -> tuple[list[str], list[str]]
 
 def _obtener_timestamp(row: tuple, cols: dict) -> object | None:
     return _valor(row, cols["timestamp"])
+
+
+def _periodo_marcado(row: tuple, cols: dict) -> str | None:
+    """Periodo de ingreso que marcó el alumno (ej. '2026A'); None si viene vacío
+    o con otro formato."""
+    raw = _valor(row, cols.get("periodo_marcado"))
+    if raw is None:
+        return None
+    return normalizar_periodo(str(raw))
+
+
+def _emparejar_fila(
+    row: tuple,
+    cols: dict,
+    email_map: dict[str, int],
+    cuenta_map: dict[str, int],
+    folio_map: dict[str, int],
+) -> tuple[int | None, list[str], list[str], list[str]]:
+    """Empareja la fila por correo, luego cuenta y luego folio.
+
+    Devuelve (alumno_id, correos, cuentas, folios)."""
+    emails = _correos_fila(row, cols)
+    cuentas, folios = _identificadores_fila(row, cols)
+    for em in emails:
+        if em in email_map:
+            return email_map[em], emails, cuentas, folios
+    for c in cuentas:
+        if c in cuenta_map:
+            return cuenta_map[c], emails, cuentas, folios
+    for f in folios:
+        if f in folio_map:
+            return folio_map[f], emails, cuentas, folios
+    return None, emails, cuentas, folios
+
+
+def _decidir_fila(
+    idx: int,
+    row: tuple,
+    cols: dict,
+    periodo: str,
+    rango,
+    alumno_id: int | None,
+    emails: list[str],
+    folios: list[str],
+    alumno_details: dict[int, dict],
+) -> dict | None:
+    """None si la fila pertenece al periodo; si no, el detalle de la omitida."""
+    ts = _obtener_timestamp(row, cols)
+    pertenece, razon, periodo_detectado = decidir_periodo_fila(
+        periodo,
+        rango,
+        ts,
+        alumno_details.get(alumno_id) if alumno_id is not None else None,
+        _periodo_marcado(row, cols),
+    )
+    if pertenece:
+        return None
+    return omitida_detalle(
+        idx,
+        emails[0] if emails else None,
+        folios[0] if folios else None,
+        ts,
+        periodo_detectado,
+        razon,
+    )
 
 
 def _identificador_contradice(
@@ -352,34 +434,25 @@ async def procesar_cuestionario(
 
     encontrados_cola: list[dict] = []
     no_encontrados: list[dict] = []
-    omitidas = 0
+    omitidas_detalle: list[dict] = []
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
-        if not fila_corresponde_periodo(ts, rango):
-            omitidas += 1
+        alumno_id, emails, cuentas, folios = _emparejar_fila(
+            row, cols, email_map, cuenta_map, folio_map
+        )
+
+        # Primero se empareja; luego se decide si la fila es del periodo subido.
+        # El primer intento se aplica solo entre las filas que sí pertenecen.
+        omitida = _decidir_fila(
+            idx, row, cols, periodo, rango, alumno_id, emails, folios, alumno_details
+        )
+        if omitida is not None:
+            omitidas_detalle.append(omitida)
             continue
 
-        emails = _correos_fila(row, cols)
-        cuentas, folios = _identificadores_fila(row, cols)
         usuario_raw = _valor(row, cols["usuario"])
         nombre = normalize_name(_valor(row, cols["nombre"]))
-
-        alumno_id = None
-        for em in emails:
-            if em in email_map:
-                alumno_id = email_map[em]
-                break
-        if alumno_id is None:
-            for c in cuentas:
-                if c in cuenta_map:
-                    alumno_id = cuenta_map[c]
-                    break
-        if alumno_id is None:
-            for f in folios:
-                if f in folio_map:
-                    alumno_id = folio_map[f]
-                    break
 
         if alumno_id is None:
             motivo = "Sin coincidencia de correo/cuenta/folio"
@@ -475,7 +548,8 @@ async def procesar_cuestionario(
         "total_filas": len(rows),
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
-        "omitidas_otro_periodo": omitidas,
+        "omitidas_otro_periodo": len(omitidas_detalle),
+        "omitidas_detalle": omitidas_detalle,
         "intentos_repetidos_ignorados": repetidos,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
@@ -518,17 +592,25 @@ async def corregir_matching_cuestionario(
 
     rango = await obtener_rango_periodo(db, periodo)
 
-    _, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
+    email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
     correction_map = {c["indice"]: c["alumno_id"] for c in correcciones}
     resultados: list[dict] = []
-    omitidas = 0
+    omitidas_detalle: list[dict] = []
     candidatos: dict[int, list[tuple[int, object]]] = {}
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
-        if not fila_corresponde_periodo(ts, rango):
-            omitidas += 1
+        # Misma decisión que en procesar_cuestionario, para aceptar las filas
+        # corregidas con la misma regla con que se mostraron.
+        emparejado, emails, _, folios = _emparejar_fila(
+            row, cols, email_map, cuenta_map, folio_map
+        )
+        omitida = _decidir_fila(
+            idx, row, cols, periodo, rango, emparejado, emails, folios, alumno_details
+        )
+        if omitida is not None:
+            omitidas_detalle.append(omitida)
             continue
         if idx not in correction_map:
             continue
@@ -573,7 +655,8 @@ async def corregir_matching_cuestionario(
         "total_filas": len(resultados),
         "encontrados": len(resultados),
         "no_encontrados": 0,
-        "omitidas_otro_periodo": omitidas,
+        "omitidas_otro_periodo": len(omitidas_detalle),
+        "omitidas_detalle": omitidas_detalle,
         "intentos_repetidos_ignorados": 0,
         "omitidas_ya_tenian_resultado": omitidas_ya_tenian_resultado,
         "resultados": resultados,

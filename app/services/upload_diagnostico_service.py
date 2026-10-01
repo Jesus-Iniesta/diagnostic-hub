@@ -186,6 +186,90 @@ def rango_fechas_dict(
     }
 
 
+RAZON_REGISTRO = "registro del alumno"
+RAZON_PERIODO_MARCADO = "periodo marcado en el formulario"
+RAZON_RANGO = "rango de fechas"
+
+
+def _clave_periodo(periodo: object | None) -> str | None:
+    """Periodo comparable: YYYYA/YYYYB si se puede normalizar; si no, el texto
+    sin espacios y en mayúsculas (None si viene vacío)."""
+    if periodo is None:
+        return None
+    normalizado = normalizar_periodo(str(periodo))
+    if normalizado:
+        return normalizado
+    compacto = "".join(str(periodo).upper().split())
+    return compacto or None
+
+
+def periodo_por_fecha(raw_timestamp: object | None) -> str | None:
+    """Periodo al que corresponde una fecha según los rangos por defecto
+    (B: mayo-octubre; A: noviembre del año anterior a abril)."""
+    fecha = _fecha_de_timestamp(raw_timestamp)
+    if fecha is None:
+        return None
+    if 5 <= fecha.month <= 10:
+        return f"{fecha.year}B"
+    if fecha.month >= 11:
+        return f"{fecha.year + 1}A"
+    return f"{fecha.year}A"
+
+
+def decidir_periodo_fila(
+    periodo: str,
+    rango: tuple[date, date, bool] | None,
+    raw_timestamp: object | None,
+    alumno: dict | None,
+    periodo_marcado: str | None = None,
+) -> tuple[bool, str, str | None]:
+    """Decide si una fila ya emparejada pertenece al periodo subido.
+
+    Prioridad:
+    1. Si se encontró al alumno: su periodo_ingreso (normalizado) == periodo.
+    2. Si no, y la fila trae el periodo marcado por el alumno: == periodo.
+    3. Si no: el rango de fechas configurable del periodo.
+
+    Devuelve (pertenece, razon, periodo_detectado).
+    """
+    periodo_subido = _clave_periodo(periodo)
+    if alumno is not None:
+        detectado = _clave_periodo(alumno.get("periodo_ingreso"))
+        return detectado == periodo_subido, RAZON_REGISTRO, detectado
+    if periodo_marcado:
+        return periodo_marcado == periodo_subido, RAZON_PERIODO_MARCADO, periodo_marcado
+    return (
+        fila_corresponde_periodo(raw_timestamp, rango),
+        RAZON_RANGO,
+        periodo_por_fecha(raw_timestamp),
+    )
+
+
+def omitida_detalle(
+    indice: int,
+    correo: str | None,
+    folio: str | None,
+    raw_timestamp: object | None,
+    periodo_detectado: str | None,
+    razon: str,
+) -> dict:
+    """Fila omitida por ser de otro periodo, para mostrarla en el frontend."""
+    if isinstance(raw_timestamp, (datetime, date)):
+        fecha = raw_timestamp.isoformat()
+    elif raw_timestamp is None or str(raw_timestamp).strip() == "":
+        fecha = None
+    else:
+        fecha = str(raw_timestamp).strip()
+    return {
+        "indice": indice,
+        "correo": correo,
+        "folio": folio,
+        "fecha": fecha,
+        "periodo_detectado": periodo_detectado,
+        "razon": razon,
+    }
+
+
 def ts_sort_key(raw: object | None) -> tuple:
     """Clave para ordenar intentos por marca temporal (None va al final)."""
     if isinstance(raw, datetime):
@@ -434,6 +518,7 @@ async def load_all_alumnos(
             "folio": alumno.numero_folio,
             "correo": user.correo_personal,
             "ingenieria": alumno.ingenieria.clave if alumno.ingenieria else "",
+            "periodo_ingreso": alumno.periodo_ingreso,
         }
 
     return email_map, cuenta_map, folio_map, alumno_details
@@ -565,15 +650,11 @@ async def procesar_examen_diagnostico(
 
     resultados = []
     no_encontrados = []
-    omitidas = 0
+    omitidas_detalle: list[dict] = []
     encontrados = []
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
-        if not fila_corresponde_periodo(raw_timestamp, rango):
-            omitidas += 1
-            continue
-
         raw_email = row[COL_EMAIL] if len(row) > COL_EMAIL else None
         raw_name = row[COL_NAME] if len(row) > COL_NAME else None
         raw_cuenta = row[COL_CUENTA] if len(row) > COL_CUENTA else None
@@ -584,6 +665,19 @@ async def procesar_examen_diagnostico(
         nombre_original = normalize_name(str(raw_name) if raw_name else "")
 
         alumno_id = find_alumno(email, cuenta, folio, email_map, cuenta_map, folio_map)
+
+        # El examen final no trae periodo marcado: registro del alumno o rango de fechas.
+        pertenece, razon, periodo_detectado = decidir_periodo_fila(
+            periodo,
+            rango,
+            raw_timestamp,
+            alumno_details.get(alumno_id) if alumno_id is not None else None,
+        )
+        if not pertenece:
+            omitidas_detalle.append(
+                omitida_detalle(idx, email, folio, raw_timestamp, periodo_detectado, razon)
+            )
+            continue
 
         if alumno_id is None:
             candidates = find_candidates(nombre_original, alumno_details)
@@ -683,7 +777,8 @@ async def procesar_examen_diagnostico(
         "total_filas": len(rows),
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
-        "omitidas_otro_periodo": omitidas,
+        "omitidas_otro_periodo": len(omitidas_detalle),
+        "omitidas_detalle": omitidas_detalle,
         "intentos_repetidos_ignorados": repetidos,
         "advertencia": advertencia,
         "resultados": resultados,
@@ -736,7 +831,7 @@ async def corregir_matching_diagnostico(
 
     rango = await obtener_rango_periodo(db, periodo)
 
-    _, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
+    email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
     correction_map = {c["indice"]: c["alumno_id"] for c in correcciones}
 
@@ -746,13 +841,29 @@ async def corregir_matching_diagnostico(
     wb.close()
 
     resultados = []
-    omitidas = 0
+    omitidas_detalle: list[dict] = []
     candidatos: dict[int, list[tuple[int, object]]] = {}
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
-        if not fila_corresponde_periodo(raw_timestamp, rango):
-            omitidas += 1
+        # Misma decisión que en procesar_examen_diagnostico (emparejar y luego decidir),
+        # para aceptar las filas corregidas con la misma regla con que se mostraron.
+        email = normalize_email(row[COL_EMAIL] if len(row) > COL_EMAIL else None)
+        cuenta, folio = clasificar_columnas_cuenta_folio(
+            row[COL_CUENTA] if len(row) > COL_CUENTA else None,
+            row[COL_FOLIO] if len(row) > COL_FOLIO else None,
+        )
+        emparejado = find_alumno(email, cuenta, folio, email_map, cuenta_map, folio_map)
+        pertenece, razon, periodo_detectado = decidir_periodo_fila(
+            periodo,
+            rango,
+            raw_timestamp,
+            alumno_details.get(emparejado) if emparejado is not None else None,
+        )
+        if not pertenece:
+            omitidas_detalle.append(
+                omitida_detalle(idx, email, folio, raw_timestamp, periodo_detectado, razon)
+            )
             continue
         if idx not in correction_map:
             continue
@@ -825,7 +936,8 @@ async def corregir_matching_diagnostico(
         "total_filas": len(resultados),
         "encontrados": len(resultados),
         "no_encontrados": 0,
-        "omitidas_otro_periodo": omitidas,
+        "omitidas_otro_periodo": len(omitidas_detalle),
+        "omitidas_detalle": omitidas_detalle,
         "omitidas_ya_tenian_resultado": omitidas_ya_tenian_resultado,
         "advertencia": advertencia,
         "resultados": resultados,

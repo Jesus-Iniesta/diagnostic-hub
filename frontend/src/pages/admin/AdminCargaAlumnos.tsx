@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import CorreccionModal from '../../components/CorreccionModal/CorreccionModal';
+import OmitidasModal from '../../components/OmitidasModal/OmitidasModal';
 import { corregirFilas, uploadAlumnosExcel } from '../../lib/uploadApi';
 import { fetchPeriodoRango } from '../../lib/configuracionApi';
 import type { PeriodoRango } from '../../lib/configuracionApi';
@@ -153,6 +154,7 @@ function DiagnosticoSection() {
   const [resultado, setResultado] = useState<ResultadoProcesamientoDiagnostico | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [avisoOmitidas, setAvisoOmitidas] = useState<string | null>(null);
+  const [verOmitidas, setVerOmitidas] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
@@ -511,6 +513,12 @@ function DiagnosticoSection() {
 
         {resultado && (
           <Stack gap="md">
+            <OmitidasModal
+              opened={verOmitidas}
+              onClose={() => setVerOmitidas(false)}
+              omitidas={resultado.omitidas_detalle ?? []}
+              periodo={resultado.periodo}
+            />
             <div className={classes.statsRow}>
               <div className={`${classes.statBox} ${classes.statBoxGray}`}>
                 <div className={classes.statNumber}>{resultado.total_filas}</div>
@@ -527,6 +535,11 @@ function DiagnosticoSection() {
               <div className={`${classes.statBox} ${classes.statBoxYellow}`}>
                 <div className={classes.statNumber}>{resultado.omitidas_otro_periodo ?? 0}</div>
                 <div className={classes.statLabel}>Omitidas (otro periodo)</div>
+                {(resultado.omitidas_detalle?.length ?? 0) > 0 && (
+                  <Button size="compact-xs" variant="subtle" color="dark" mt={4} onClick={() => setVerOmitidas(true)}>
+                    Ver omitidas
+                  </Button>
+                )}
               </div>
               <div className={`${classes.statBox} ${classes.statBoxGray}`}>
                 <div className={classes.statNumber}>{resultado.intentos_repetidos_ignorados ?? 0}</div>
@@ -787,6 +800,7 @@ function TarjetaCuestionario({
   onUpload,
   onReemplazar,
 }: TarjetaCuestionarioProps) {
+  const [verOmitidas, setVerOmitidas] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -846,6 +860,12 @@ function TarjetaCuestionario({
 
         {!uploading && resultado && (
           <Stack gap="md">
+            <OmitidasModal
+              opened={verOmitidas}
+              onClose={() => setVerOmitidas(false)}
+              omitidas={resultado.omitidas_detalle ?? []}
+              periodo={resultado.periodo}
+            />
             <div className={classes.statsRow}>
               <div className={`${classes.statBox} ${classes.statBoxGreen}`}>
                 <div className={classes.statNumber}>{resultado.encontrados}</div>
@@ -858,6 +878,11 @@ function TarjetaCuestionario({
               <div className={`${classes.statBox} ${classes.statBoxYellow}`}>
                 <div className={classes.statNumber}>{resultado.omitidas_otro_periodo}</div>
                 <div className={classes.statLabel}>Omitidas (otro periodo)</div>
+                {(resultado.omitidas_detalle?.length ?? 0) > 0 && (
+                  <Button size="compact-xs" variant="subtle" color="dark" mt={4} onClick={() => setVerOmitidas(true)}>
+                    Ver omitidas
+                  </Button>
+                )}
               </div>
               <div className={`${classes.statBox} ${classes.statBoxGray}`}>
                 <div className={classes.statNumber}>{resultado.intentos_repetidos_ignorados}</div>
