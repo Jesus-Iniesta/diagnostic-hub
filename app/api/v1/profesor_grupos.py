@@ -17,11 +17,13 @@ from app.schemas.grupo import (
     GrupoAlumnoAdd,
     GrupoAlumnoResponse,
     GrupoCreate,
+    GrupoCreani,
     GrupoEstadisticas,
     GrupoResumen,
     GrupoResponse,
     MateriaResponse,
 )
+from app.services.reportes_service import resumen_creani_alumnos
 from app.services.upload_grupo_service import parse_profesor_excel
 
 router = APIRouter(prefix="/profesor", tags=["profesor-grupos"])
@@ -202,6 +204,22 @@ async def estadisticas_grupo(
 
     stats = await repo.get_estadisticas_grupo(grupo_id, periodo)
     return GrupoEstadisticas(**stats)
+
+
+@router.get("/grupos/{grupo_id}/creani", response_model=GrupoCreani)
+async def creani_grupo(
+    grupo_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    periodo: str = "2026B",
+) -> GrupoCreani:
+    repo = GrupoRepository(db)
+    if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
+
+    alumnos = await repo.get_alumnos(grupo_id)
+    resumen = await resumen_creani_alumnos(db, [a.id for a in alumnos], periodo)
+    return GrupoCreani(**resumen)
 
 
 @router.post("/grupos/{grupo_id}/cargar-alumnos")

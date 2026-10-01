@@ -28,10 +28,11 @@ import {
   YAxis,
 } from 'recharts';
 
+import CreaniCharts from '../../components/CreaniCharts/CreaniCharts';
 import StatCard from '../../components/StatCard/StatCard';
-import { fetchMisGrupos, fetchEstadisticasGrupo } from '../../lib/profesorApi';
+import { fetchCreaniGrupo, fetchEstadisticasGrupo, fetchMisGrupos } from '../../lib/profesorApi';
 import { dashboardColors } from '../../theme/theme';
-import type { GrupoEstadisticas } from '../../types/profesor';
+import type { GrupoCreani, GrupoEstadisticas } from '../../types/profesor';
 import classes from './ProfesorHome.module.css';
 
 const NivelColors: Record<string, string> = {
@@ -66,26 +67,10 @@ function NivelTooltip({
   );
 }
 
-function MateriaTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: { materia: string; promedio: number } }>;
-}) {
-  if (!active || !payload || payload.length === 0) return null;
-  const d = payload[0].payload;
-  return (
-    <div style={{ background: '#fff', padding: '8px 12px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
-      <Text size="sm" fw={600}>{d.materia}</Text>
-      <Text size="xs" c="dimmed">Promedio: {d.promedio.toFixed(2)}</Text>
-    </div>
-  );
-}
-
 export default function ProfesorHome() {
   const navigate = useNavigate();
   const [estadisticas, setEstadisticas] = useState<GrupoEstadisticas | null>(null);
+  const [creani, setCreani] = useState<GrupoCreani | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -94,8 +79,14 @@ export default function ProfesorHome() {
       try {
         const grupos = await fetchMisGrupos();
         if (grupos.length > 0) {
-          const stats = await fetchEstadisticasGrupo(grupos[0].id, '2026B');
-          if (mounted) setEstadisticas(stats);
+          const [stats, creaniData] = await Promise.all([
+            fetchEstadisticasGrupo(grupos[0].id, '2026B'),
+            fetchCreaniGrupo(grupos[0].id, '2026B').catch(() => null),
+          ]);
+          if (mounted) {
+            setEstadisticas(stats);
+            setCreani(creaniData);
+          }
         }
       } catch {
         // ignore
@@ -159,7 +150,7 @@ export default function ProfesorHome() {
           <Skeleton height={300} radius="lg" />
         </SimpleGrid>
       ) : estadisticas && estadisticas.evaluados > 0 ? (
-        <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg" mt="xl">
+        <SimpleGrid cols={1} spacing="lg" mt="xl">
           {/* Distribucion por nivel */}
           <Card className={classes.card} padding="xl" radius="lg">
             <Title order={4} className={classes.cardTitle} mb="md">
@@ -193,45 +184,16 @@ export default function ProfesorHome() {
               </BarChart>
             </ResponsiveContainer>
           </Card>
-
-          {/* Promedio por materia */}
-          <Card className={classes.card} padding="xl" radius="lg">
-            <Title order={4} className={classes.cardTitle} mb="md">
-              Promedio por materia
-            </Title>
-            {materiaData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart
-                  data={materiaData}
-                  margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
-                  barCategoryGap="25%"
-                >
-                  <CartesianGrid vertical={false} strokeDasharray="5 5" stroke="#E8EAF0" />
-                  <XAxis
-                    dataKey="materia"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#667085', fontSize: 12, fontWeight: 600 }}
-                  />
-                  <YAxis
-                    domain={[0, 10]}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: '#98A2B3', fontSize: 12 }}
-                    width={40}
-                  />
-                  <Tooltip content={<MateriaTooltip />} cursor={{ fill: 'rgba(16,24,40,0.04)' }} />
-                  <Bar dataKey="promedio" radius={[8, 8, 0, 0]} barSize={48} fill={dashboardColors.blue} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <Text c="dimmed" ta="center" py="xl">
-                Sin datos de materias disponibles
-              </Text>
-            )}
-          </Card>
         </SimpleGrid>
       ) : null}
+
+      {!loading && creani && estadisticas && estadisticas.total_alumnos > 0 && (
+        <CreaniCharts
+          creani={creani}
+          cardClassName={classes.card}
+          titleClassName={classes.cardTitle}
+        />
+      )}
 
       <Box mt="xl">
         {estadisticas && estadisticas.total_alumnos > 0 ? (

@@ -122,6 +122,10 @@ def _construir_filas_creani(data: list[dict]) -> list[dict]:
             "final_trig": d["puntaje_trigonometria"] or 0,
             "final_geometria": d["puntaje_geometria"] or 0,
             "final_calculo": d["puntaje_calculo"] or 0,
+            "alumno_id": d["alumno_id"],
+            "tiene_cuestionario": d["tiene_cuestionario"],
+            "tiene_wa": d["tiene_wa"],
+            "tiene_final": d["tiene_final"],
         })
     filas.sort(key=lambda f: f["nombre"])
     return filas
@@ -293,6 +297,7 @@ async def _load_data(
             continue
         seen.add(alumno.id)
         data.append({
+            "alumno_id": alumno.id,
             "nombre": f"{user.apellido_paterno} {user.apellido_materno} {user.nombre}".strip(),
             "numero_cuenta": alumno.numero_cuenta or "",
             "ingenieria": ingenieria.clave if ingenieria else "",
@@ -317,6 +322,8 @@ async def _load_data(
             "geometria_examen": wa.geometria_examen if wa else None,
             "carrera_wa": wa.carrera if wa else "",
             "tiene_wa": wa is not None,
+            "tiene_cuestionario": cdiag is not None,
+            "tiene_final": diag is not None,
         })
 
     data.sort(key=lambda r: (r["ingenieria"], r["nombre"]))
@@ -502,4 +509,66 @@ async def get_stats_reporte(db: AsyncSession, periodo: str) -> dict:
         "webassign": wa_count,
         "webassign_por_carrera": {c: n for c, n in wa_by_carrera},
         "por_licenciatura": por_licenciatura,
+    }
+
+
+def _promedio(valores: list[float]) -> float | None:
+    return round(sum(valores) / len(valores), 2) if valores else None
+
+
+def _resumen_seccion(filas: list[dict], llaves: dict[str, str]) -> dict:
+    """Promedia cada columna CREANI entre las filas dadas; n = len(filas)."""
+    seccion: dict = {"n": len(filas)}
+    for nombre, llave in llaves.items():
+        seccion[nombre] = _promedio([f[llave] for f in filas])
+    return seccion
+
+
+async def resumen_creani_alumnos(
+    db: AsyncSession, alumno_ids: list[int], periodo: str
+) -> dict:
+    """Promedios de las columnas del reporte CREANI para un subconjunto de alumnos."""
+    ids = set(alumno_ids)
+    filas = [
+        f for f in _construir_filas_creani(await _load_data(db, periodo))
+        if f["alumno_id"] in ids
+    ]
+    con_diag = [f for f in filas if f["tiene_cuestionario"]]
+    con_wa = [f for f in filas if f["tiene_wa"]]
+    con_final = [f for f in filas if f["tiene_final"]]
+
+    return {
+        "secciones": {
+            "diagnostico": _resumen_seccion(con_diag, {
+                "algebra": "diag_algebra",
+                "trigonometria": "diag_trig",
+                "geometria": "diag_geometria",
+                "calculo": "diag_calculo",
+            }),
+            "webassign": _resumen_seccion(con_wa, {
+                "alg_trabajo": "wa_alg_trabajo",
+                "alg_examen": "wa_alg_examen",
+                "trig_trabajo": "wa_trig_trabajo",
+                "trig_examen": "wa_trig_examen",
+                "ga_trabajo": "wa_ga_trabajo",
+                "ga_examen": "wa_ga_examen",
+            }),
+            "final": _resumen_seccion(con_final, {
+                "algebra": "final_algebra",
+                "trigonometria": "final_trig",
+                "geometria": "final_geometria",
+                "calculo": "final_calculo",
+            }),
+        },
+        # Equivalen a las columnas "Promedio" (I y T) del CREANI.
+        "totales": {
+            "diagnostico": _promedio([
+                (f["diag_algebra"] + f["diag_trig"] + f["diag_geometria"] + f["diag_calculo"]) / 4
+                for f in con_diag
+            ]),
+            "final": _promedio([
+                (f["final_algebra"] + f["final_trig"] + f["final_geometria"] + f["final_calculo"]) / 4
+                for f in con_final
+            ]),
+        },
     }

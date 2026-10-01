@@ -30,9 +30,15 @@ import {
   YAxis,
 } from 'recharts';
 
-import { fetchMisGrupos, fetchAlumnosGrupo, fetchEstadisticasGrupo } from '../../lib/profesorApi';
+import CreaniCharts from '../../components/CreaniCharts/CreaniCharts';
+import {
+  fetchAlumnosGrupo,
+  fetchCreaniGrupo,
+  fetchEstadisticasGrupo,
+  fetchMisGrupos,
+} from '../../lib/profesorApi';
 import { dashboardColors } from '../../theme/theme';
-import type { Grupo, GrupoAlumno, GrupoEstadisticas } from '../../types/profesor';
+import type { Grupo, GrupoAlumno, GrupoCreani, GrupoEstadisticas } from '../../types/profesor';
 import classes from './ProfesorResultados.module.css';
 
 const NIVELES = ['Todos', 'Alto', 'Bueno', 'Medio', 'Bajo', 'Muy bajo'];
@@ -88,6 +94,7 @@ export default function ProfesorResultados() {
   const [grupoId, setGrupoId] = useState<string | null>(null);
   const [alumnos, setAlumnos] = useState<GrupoAlumno[]>([]);
   const [estadisticas, setEstadisticas] = useState<GrupoEstadisticas | null>(null);
+  const [creani, setCreani] = useState<GrupoCreani | null>(null);
   const [cargando, setCargando] = useState(true);
   const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
   const [busqueda, setBusqueda] = useState('');
@@ -117,10 +124,12 @@ export default function ProfesorResultados() {
     void Promise.all([
       fetchAlumnosGrupo(Number(grupoId), '2026B'),
       fetchEstadisticasGrupo(Number(grupoId), '2026B').catch(() => null),
-    ]).then(([alumnosData, stats]) => {
+      fetchCreaniGrupo(Number(grupoId), '2026B').catch(() => null),
+    ]).then(([alumnosData, stats, creaniData]) => {
       if (mounted) {
         setAlumnos(alumnosData);
         setEstadisticas(stats);
+        setCreani(creaniData);
         setCargandoAlumnos(false);
         setSeleccionado(null);
       }
@@ -267,6 +276,14 @@ export default function ProfesorResultados() {
                 )}
               </Card>
             </SimpleGrid>
+          )}
+
+          {!cargandoAlumnos && creani && alumnos.length > 0 && (
+            <CreaniCharts
+              creani={creani}
+              cardClassName={classes.card}
+              titleClassName={classes.cardTitle}
+            />
           )}
 
           {/* Table section */}

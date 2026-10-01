@@ -5,6 +5,7 @@ import type {
   GrupoCreate,
   GrupoResumen,
   GrupoEstadisticas,
+  GrupoCreani,
   ResumenGrupo,
   AlumnoGrupo,
   Materia,
@@ -92,6 +93,15 @@ export async function fetchEstadisticasGrupo(
 ): Promise<GrupoEstadisticas> {
   return fetchJson<GrupoEstadisticas>(
     `${API_BASE_URL}/profesor/grupos/${grupoId}/estadisticas?periodo=${encodeURIComponent(periodo)}`,
+  );
+}
+
+export async function fetchCreaniGrupo(
+  grupoId: number,
+  periodo: string,
+): Promise<GrupoCreani> {
+  return fetchJson<GrupoCreani>(
+    `${API_BASE_URL}/profesor/grupos/${grupoId}/creani?periodo=${encodeURIComponent(periodo)}`,
   );
 }
 

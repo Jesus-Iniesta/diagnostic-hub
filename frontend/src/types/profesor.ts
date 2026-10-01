@@ -102,3 +102,33 @@ export interface GrupoEstadisticas {
   distribucion_ingenieria: IngenieriaDistribucion[];
   promedio_materias: PromedioMaterias;
 }
+
+export interface CreaniMaterias {
+  n: number;
+  algebra: number | null;
+  trigonometria: number | null;
+  geometria: number | null;
+  calculo: number | null;
+}
+
+export interface CreaniWebAssign {
+  n: number;
+  alg_trabajo: number | null;
+  alg_examen: number | null;
+  trig_trabajo: number | null;
+  trig_examen: number | null;
+  ga_trabajo: number | null;
+  ga_examen: number | null;
+}
+
+export interface GrupoCreani {
+  secciones: {
+    diagnostico: CreaniMaterias;
+    webassign: CreaniWebAssign;
+    final: CreaniMaterias;
+  };
+  totales: {
+    diagnostico: number | null;
+    final: number | null;
+  };
+}

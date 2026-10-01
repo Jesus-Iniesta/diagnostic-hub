@@ -80,3 +80,37 @@ class GrupoEstadisticas(BaseModel):
     distribucion_nivel: list[NivelDistribucion]
     distribucion_ingenieria: list[IngenieriaDistribucion]
     promedio_materias: PromedioMaterias
+
+
+class CreaniMaterias(BaseModel):
+    n: int
+    algebra: float | None = None
+    trigonometria: float | None = None
+    geometria: float | None = None
+    calculo: float | None = None
+
+
+class CreaniWebAssign(BaseModel):
+    n: int
+    alg_trabajo: float | None = None
+    alg_examen: float | None = None
+    trig_trabajo: float | None = None
+    trig_examen: float | None = None
+    ga_trabajo: float | None = None
+    ga_examen: float | None = None
+
+
+class CreaniSecciones(BaseModel):
+    diagnostico: CreaniMaterias
+    webassign: CreaniWebAssign
+    final: CreaniMaterias
+
+
+class CreaniTotales(BaseModel):
+    diagnostico: float | None = None
+    final: float | None = None
+
+
+class GrupoCreani(BaseModel):
+    secciones: CreaniSecciones
+    totales: CreaniTotales
