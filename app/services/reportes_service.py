@@ -524,18 +524,56 @@ def _resumen_seccion(filas: list[dict], llaves: dict[str, str]) -> dict:
     return seccion
 
 
+async def _periodos_con_resultados(db: AsyncSession, alumno_ids: list[int]) -> list[str]:
+    """Periodos en los que alguno de los alumnos tiene resultados, del más antiguo al más reciente.
+
+    Se ordena como cadena, igual que get_periodos_disponibles (formato AAAAX).
+    """
+    if not alumno_ids:
+        return []
+    periodos: set[str] = set()
+    for modelo in (
+        ResultadoCuestionarioDiagnostico,
+        ResultadoWebAssign,
+        ResultadoDiagnostico,
+    ):
+        rows = await db.execute(
+            select(modelo.periodo).where(modelo.alumno_id.in_(alumno_ids)).distinct()
+        )
+        periodos.update(rows.scalars().all())
+    return sorted(periodos)
+
+
 async def resumen_creani_alumnos(
-    db: AsyncSession, alumno_ids: list[int], periodo: str
+    db: AsyncSession, alumno_ids: list[int], periodo: str | None = None
 ) -> dict:
-    """Promedios de las columnas del reporte CREANI para un subconjunto de alumnos."""
+    """Promedios de las columnas del reporte CREANI para un subconjunto de alumnos.
+
+    Sin periodo, para cada alumno y cada sección (diagnóstico, WebAssign, final)
+    se usa la fila del periodo más reciente en que tiene datos de esa sección. No
+    se usa Alumno.periodo_ingreso, que no es confiable para alumnos dados de alta
+    desde la lista del profesor.
+    """
     ids = set(alumno_ids)
-    filas = [
-        f for f in _construir_filas_creani(await _load_data(db, periodo))
-        if f["alumno_id"] in ids
-    ]
-    con_diag = [f for f in filas if f["tiene_cuestionario"]]
-    con_wa = [f for f in filas if f["tiene_wa"]]
-    con_final = [f for f in filas if f["tiene_final"]]
+    periodos = [periodo] if periodo else await _periodos_con_resultados(db, alumno_ids)
+
+    # Recorre los periodos del más antiguo al más reciente: la última fila gana.
+    por_seccion: dict[str, dict[int, dict]] = {
+        "tiene_cuestionario": {},
+        "tiene_wa": {},
+        "tiene_final": {},
+    }
+    for p in periodos:
+        for f in _construir_filas_creani(await _load_data(db, p)):
+            if f["alumno_id"] not in ids:
+                continue
+            for bandera, filas in por_seccion.items():
+                if f[bandera]:
+                    filas[f["alumno_id"]] = f
+
+    con_diag = list(por_seccion["tiene_cuestionario"].values())
+    con_wa = list(por_seccion["tiene_wa"].values())
+    con_final = list(por_seccion["tiene_final"].values())
 
     return {
         "secciones": {

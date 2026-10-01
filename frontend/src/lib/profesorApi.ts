@@ -98,11 +98,10 @@ export async function fetchEstadisticasGrupo(
 
 export async function fetchCreaniGrupo(
   grupoId: number,
-  periodo: string,
+  periodo?: string,
 ): Promise<GrupoCreani> {
-  return fetchJson<GrupoCreani>(
-    `${API_BASE_URL}/profesor/grupos/${grupoId}/creani?periodo=${encodeURIComponent(periodo)}`,
-  );
+  const params = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
+  return fetchJson<GrupoCreani>(`${API_BASE_URL}/profesor/grupos/${grupoId}/creani${params}`);
 }
 
 export async function cargarAlumnosExcel(

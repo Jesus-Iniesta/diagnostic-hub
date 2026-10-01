@@ -211,7 +211,7 @@ async def creani_grupo(
     grupo_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    periodo: str = "2026B",
+    periodo: str | None = None,
 ) -> GrupoCreani:
     repo = GrupoRepository(db)
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):

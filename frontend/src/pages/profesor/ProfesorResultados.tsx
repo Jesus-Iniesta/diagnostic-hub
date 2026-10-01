@@ -124,7 +124,7 @@ export default function ProfesorResultados() {
     void Promise.all([
       fetchAlumnosGrupo(Number(grupoId), '2026B'),
       fetchEstadisticasGrupo(Number(grupoId), '2026B').catch(() => null),
-      fetchCreaniGrupo(Number(grupoId), '2026B').catch(() => null),
+      fetchCreaniGrupo(Number(grupoId)).catch(() => null),
     ]).then(([alumnosData, stats, creaniData]) => {
       if (mounted) {
         setAlumnos(alumnosData);
