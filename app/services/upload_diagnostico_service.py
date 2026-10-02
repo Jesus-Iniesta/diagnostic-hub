@@ -18,6 +18,10 @@ from app.models.user import User
 from app.repositories.configuracion_repository import ConfiguracionRepository
 from app.repositories.diagnostico_repository import DiagnosticoRepository
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
+from app.services.identificadores_service import (
+    RegistroIdentificadores,
+    cargar_identificadores_extra,
+)
 from app.services.normalizacion import (
     clasificar_identificador,
     normalizar_correo,
@@ -543,6 +547,9 @@ async def load_all_alumnos(
             "periodo_ingreso": alumno.periodo_ingreso,
         }
 
+    # Correos/cuentas/folios aprendidos en cargas anteriores (no pisan al registro).
+    await cargar_identificadores_extra(db, email_map, cuenta_map, folio_map)
+
     return email_map, cuenta_map, folio_map, alumno_details
 
 
@@ -730,7 +737,15 @@ async def procesar_examen_diagnostico(
             "alumno_id": alumno_id,
             "row": row,
             "ts": raw_timestamp,
+            "email": email,
+            "cuenta": cuenta,
+            "folio": folio,
         })
+
+    registro = RegistroIdentificadores(
+        db, email_map, cuenta_map, folio_map, alumno_details,
+        fuente=f"examen_final:{materia}",
+    )
 
     # El CREANI usa el PRIMER intento (marca temporal más antigua); los demás se ignoran.
     encontrados.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
@@ -738,6 +753,14 @@ async def procesar_examen_diagnostico(
     repetidos = 0
 
     for e in encontrados:
+        # Se aprenden los datos de todas las filas del alumno, aunque sean repetidas.
+        await registro.registrar(
+            e["alumno_id"],
+            correos=[e["email"]],
+            cuentas=[e["cuenta"]],
+            folios=[e["folio"]],
+            indice=e["idx"],
+        )
         if e["alumno_id"] in vistos:
             repetidos += 1
             continue
@@ -805,6 +828,7 @@ async def procesar_examen_diagnostico(
         "advertencia": advertencia,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
+        **registro.resumen(),
     }
 
 
@@ -865,6 +889,7 @@ async def corregir_matching_diagnostico(
     resultados = []
     omitidas_detalle: list[dict] = []
     candidatos: dict[int, list[tuple[int, object]]] = {}
+    identificadores_fila: dict[int, tuple[str | None, str | None, str | None]] = {}
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
@@ -895,11 +920,22 @@ async def corregir_matching_diagnostico(
             continue
 
         candidatos.setdefault(alumno_id, []).append((idx, raw_timestamp))
+        identificadores_fila[idx] = (email, cuenta, folio)
 
+    # El administrador confirmó estas filas: sus datos quedan ligados al alumno.
+    registro = RegistroIdentificadores(
+        db, email_map, cuenta_map, folio_map, alumno_details,
+        fuente=f"correccion:examen_final:{materia}",
+    )
     omitidas_ya_tenian_resultado: list[int] = []
 
     for alumno_id, items in candidatos.items():
         items.sort(key=lambda it: (ts_sort_key(it[1]), it[0]))
+        for idx, _ts in items:
+            email, cuenta, folio = identificadores_fila[idx]
+            await registro.registrar(
+                alumno_id, correos=[email], cuentas=[cuenta], folios=[folio], indice=idx
+            )
         for j, (idx, _ts) in enumerate(items):
             if j > 0:
                 omitidas_ya_tenian_resultado.append(idx)
@@ -964,6 +1000,7 @@ async def corregir_matching_diagnostico(
         "advertencia": advertencia,
         "resultados": resultados,
         "no_encontrados_detalle": [],
+        **registro.resumen(),
     }
 
 

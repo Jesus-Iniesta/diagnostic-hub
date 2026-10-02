@@ -146,7 +146,7 @@ def test_load_all_alumnos_correos_que_normalizan_igual():
         _fila_bd(20, "X@Gmial.com"),
         # mismo alumno con personal e institucional iguales: no debe avisar
         _fila_bd(30, "y@uaemex.mx", "Y@uaemex.mx"),
-    ]])
+    ], []])  # sin identificadores aprendidos (identificador_alumno)
     logger = logging.getLogger("app.services.upload_diagnostico_service")
     captura = _CapturaLogs()
     logger.addHandler(captura)

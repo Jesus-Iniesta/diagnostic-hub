@@ -33,6 +33,7 @@ from app.services.upload_diagnostico_service import (
     rango_fechas_dict,
     ts_sort_key,
 )
+from app.services.identificadores_service import RegistroIdentificadores
 from app.services.upload_webassign_service import clean_email
 
 MATERIA_FOR_CODE = {
@@ -510,16 +511,31 @@ async def procesar_cuestionario(
                 "alumno_id": alumno_id,
                 "row": row,
                 "ts": ts,
+                "emails": emails,
+                "cuentas": cuentas,
+                "folios": folios,
             }
         )
 
     encontrados_cola.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
 
+    registro = RegistroIdentificadores(
+        db, email_map, cuenta_map, folio_map, alumno_details,
+        fuente=f"cuestionario:{cuestionario}",
+    )
     vistos: set[int] = set()
     repetidos = 0
     resultados: list[dict] = []
 
     for e in encontrados_cola:
+        # Se aprenden los datos de todas las filas del alumno, aunque sean repetidas.
+        await registro.registrar(
+            e["alumno_id"],
+            correos=e["emails"],
+            cuentas=e["cuentas"],
+            folios=e["folios"],
+            indice=e["idx"],
+        )
         if e["alumno_id"] in vistos:
             repetidos += 1
             continue
@@ -553,6 +569,7 @@ async def procesar_cuestionario(
         "intentos_repetidos_ignorados": repetidos,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
+        **registro.resumen(),
     }
 
 
@@ -598,12 +615,13 @@ async def corregir_matching_cuestionario(
     resultados: list[dict] = []
     omitidas_detalle: list[dict] = []
     candidatos: dict[int, list[tuple[int, object]]] = {}
+    identificadores_fila: dict[int, tuple[list[str], list[str], list[str]]] = {}
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
         # Misma decisión que en procesar_cuestionario, para aceptar las filas
         # corregidas con la misma regla con que se mostraron.
-        emparejado, emails, _, folios = _emparejar_fila(
+        emparejado, emails, cuentas, folios = _emparejar_fila(
             row, cols, email_map, cuenta_map, folio_map
         )
         omitida = _decidir_fila(
@@ -620,11 +638,22 @@ async def corregir_matching_cuestionario(
             continue
 
         candidatos.setdefault(alumno_id, []).append((idx, ts))
+        identificadores_fila[idx] = (emails, cuentas, folios)
 
+    # El administrador confirmó estas filas: sus datos quedan ligados al alumno.
+    registro = RegistroIdentificadores(
+        db, email_map, cuenta_map, folio_map, alumno_details,
+        fuente=f"correccion:cuestionario:{cuestionario}",
+    )
     omitidas_ya_tenian_resultado: list[int] = []
 
     for alumno_id, items in candidatos.items():
         items.sort(key=lambda it: (ts_sort_key(it[1]), it[0]))
+        for idx, _ts in items:
+            emails, cuentas, folios = identificadores_fila[idx]
+            await registro.registrar(
+                alumno_id, correos=emails, cuentas=cuentas, folios=folios, indice=idx
+            )
         for j, (idx, _ts) in enumerate(items):
             if j > 0:
                 omitidas_ya_tenian_resultado.append(idx)
@@ -661,4 +690,5 @@ async def corregir_matching_cuestionario(
         "omitidas_ya_tenian_resultado": omitidas_ya_tenian_resultado,
         "resultados": resultados,
         "no_encontrados_detalle": [],
+        **registro.resumen(),
     }

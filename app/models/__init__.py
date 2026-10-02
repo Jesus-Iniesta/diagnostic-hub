@@ -25,6 +25,7 @@ from app.models.resultado_cuestionario_diagnostico import (
 from app.models.grupo import Grupo
 from app.models.grupo_profesor import grupo_profesor
 from app.models.grupo_alumno import grupo_alumno
+from app.models.identificador_alumno import IdentificadorAlumno
 
 __all__ = [
     "role_permissions",
@@ -51,4 +52,5 @@ __all__ = [
     "Grupo",
     "grupo_profesor",
     "grupo_alumno",
+    "IdentificadorAlumno",
 ]
