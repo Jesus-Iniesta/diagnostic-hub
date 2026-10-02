@@ -21,16 +21,10 @@ import {
   guardarPeriodoRango,
 } from '../../lib/configuracionApi';
 import type { PeriodoRango } from '../../lib/configuracionApi';
+import { getCurrentPeriodo } from '../../lib/periodo';
 import classes from './AdminConfiguracion.module.css';
 
 type EstadoFormulario = 'activo' | 'inactivo';
-
-function getCurrentPeriodo(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return `${year}${month <= 6 ? 'A' : 'B'}`;
-}
 
 function useToggleCard(
   fetcher: () => Promise<{ habilitado: boolean }>,

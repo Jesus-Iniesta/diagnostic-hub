@@ -7,11 +7,13 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core';
 import { IconCheck, IconUpload, IconX } from '@tabler/icons-react';
 import { useState } from 'react';
 
+import { getCurrentPeriodo } from '../../lib/periodo';
 import {
   uploadWebAssign,
   type WebAssignUploadResult,
@@ -27,9 +29,9 @@ const CARRERAS = [
   { value: 'ISES', label: 'Ing. Sistemas Energéticos (ISES)' },
 ];
 
-export default function AdminCargaWebAssign() {
+export default function WebAssignSection() {
   const [carrera, setCarrera] = useState<string | null>(null);
-  const [periodo, setPeriodo] = useState('2026B');
+  const [periodo, setPeriodo] = useState(getCurrentPeriodo());
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<WebAssignUploadResult | null>(null);
@@ -51,54 +53,45 @@ export default function AdminCargaWebAssign() {
   };
 
   return (
-    <Stack gap="xl">
-      <Title order={2}>Carga de Resultados WebAssign</Title>
-      <Text c="dimmed">
-        Sube los archivos Excel de WebAssign por carrera. Los resultados se guardan en escala de 0 a 10.
-      </Text>
-
-      <Card withBorder p="xl">
-        <Stack gap="md">
-          <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <Select
-              label="Carrera"
-              placeholder="Selecciona carrera"
-              data={CARRERAS}
-              value={carrera}
-              onChange={setCarrera}
-              searchable
-            />
-            <Text size="sm" fw={500}>Periodo</Text>
+    <Stack gap="lg">
+      <Stack gap="md">
+        <SimpleGrid cols={{ base: 1, sm: 3 }}>
+          <Select
+            label="Carrera"
+            placeholder="Selecciona carrera"
+            data={CARRERAS}
+            value={carrera}
+            onChange={setCarrera}
+            searchable
+          />
+          <TextInput
+            label="Periodo"
+            placeholder="Ej. 2026B"
+            value={periodo}
+            onChange={(e) => setPeriodo(e.currentTarget.value)}
+          />
+          <div>
+            <Text size="sm" fw={500} mb={4}>Archivo Excel</Text>
             <input
-              type="text"
-              value={periodo}
-              onChange={(e) => setPeriodo(e.target.value)}
+              type="file"
+              accept=".xls,.xlsx"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
               className={classes.fileInput}
-              style={{ padding: '8px 12px', border: '1px solid #dee2e9', borderRadius: '6px' }}
             />
-            <div>
-              <Text size="sm" fw={500} mb={4}>Archivo Excel</Text>
-              <input
-                type="file"
-                accept=".xls,.xlsx"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className={classes.fileInput}
-              />
-            </div>
-          </SimpleGrid>
+          </div>
+        </SimpleGrid>
 
-          <Group>
-            <Button
-              leftSection={<IconUpload size={18} />}
-              onClick={handleUpload}
-              loading={uploading}
-              disabled={!carrera || !file}
-            >
-              Procesar archivo
-            </Button>
-          </Group>
-        </Stack>
-      </Card>
+        <Group>
+          <Button
+            leftSection={<IconUpload size={18} />}
+            onClick={handleUpload}
+            loading={uploading}
+            disabled={!carrera || !file}
+          >
+            Procesar archivo
+          </Button>
+        </Group>
+      </Stack>
 
       {error && (
         <Card withBorder p="md" style={{ borderColor: 'var(--mantine-color-red-5)' }}>
