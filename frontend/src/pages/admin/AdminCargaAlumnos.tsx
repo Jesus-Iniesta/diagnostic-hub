@@ -20,14 +20,16 @@ import {
   IconFileSpreadsheet,
   IconInfoCircle,
   IconUpload,
+  IconWorld,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import CorreccionModal from '../../components/CorreccionModal/CorreccionModal';
 import OmitidasModal from '../../components/OmitidasModal/OmitidasModal';
 import { corregirFilas, uploadAlumnosExcel } from '../../lib/uploadApi';
 import { fetchPeriodoRango } from '../../lib/configuracionApi';
+import { getCurrentPeriodo } from '../../lib/periodo';
 import type { PeriodoRango } from '../../lib/configuracionApi';
 import {
   uploadDiagnostico,
@@ -53,8 +55,16 @@ import type {
   ResultadoProcesamientoCuestionario,
 } from '../../types/cuestionario';
 import classes from './AdminCargaAlumnos.module.css';
+import WebAssignSection from './WebAssignSection';
 
 type ViewState = 'idle' | 'uploading' | 'result' | 'error';
+
+const TABS = ['alumnos', 'cuestionario', 'webassign', 'diagnostico'] as const;
+type TabId = (typeof TABS)[number];
+
+function isTabId(value: string | null): value is TabId {
+  return TABS.includes(value as TabId);
+}
 
 const BADGE_CONFIG: Record<string, { className: string; label: string }> = {
   exitoso: { className: classes.badgeExitoso, label: 'Exitoso' },
@@ -94,13 +104,6 @@ const FORM_FIELDS: { key: string; label: string; type?: string; options?: { valu
 
 function getErrorFields(row: FilaResultado): string[] {
   return row.campos_con_error.map((c: CampoError) => c.campo);
-}
-
-function getCurrentPeriodo(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  return `${year}${month <= 6 ? 'A' : 'B'}`;
 }
 
 function formatFecha(iso: string): string {
@@ -1188,6 +1191,22 @@ function CuestionarioSection() {
 }
 
 export default function AdminCargaAlumnos() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const activeTab: TabId = isTabId(tabParam) ? tabParam : 'alumnos';
+
+  const handleTabChange = (value: string | null) => {
+    if (!isTabId(value)) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', value);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
   const [viewState, setViewState] = useState<ViewState>('idle');
   const [resultado, setResultado] = useState<ResultadoCarga | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1343,13 +1362,16 @@ export default function AdminCargaAlumnos() {
         </Text>
       </div>
 
-      <Tabs defaultValue="alumnos" mt="lg">
+      <Tabs value={activeTab} onChange={handleTabChange} mt="lg">
         <Tabs.List>
           <Tabs.Tab value="alumnos" leftSection={<IconUpload size={16} />}>
             Carga de Alumnos
           </Tabs.Tab>
           <Tabs.Tab value="cuestionario" leftSection={<IconClipboardList size={16} />}>
             Examen diagnóstico
+          </Tabs.Tab>
+          <Tabs.Tab value="webassign" leftSection={<IconWorld size={16} />}>
+            WebAssign
           </Tabs.Tab>
           <Tabs.Tab value="diagnostico" leftSection={<IconFileSpreadsheet size={16} />}>
             Examen final
@@ -1613,6 +1635,23 @@ export default function AdminCargaAlumnos() {
               </div>
 
               <CuestionarioSection />
+            </Stack>
+          </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="webassign" pt="md">
+          <Card className={classes.card} padding="xl" radius="lg">
+            <Stack gap="lg">
+              <div>
+                <Title order={3} className={classes.title}>
+                  Procesar resultados de WebAssign
+                </Title>
+                <Text className={classes.subtitle}>
+                  Sube el archivo Excel de WebAssign de cada carrera. Los resultados se guardan en escala de 0 a 10.
+                </Text>
+              </div>
+
+              <WebAssignSection />
             </Stack>
           </Card>
         </Tabs.Panel>

@@ -20,7 +20,6 @@ import {
   IconUpload,
   IconUserSearch,
   IconUsers,
-  IconWorld,
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -31,7 +30,6 @@ import classes from './DashboardSidebar.module.css';
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/admin' },
   { id: 'carga', label: 'Carga de exámenes', icon: IconUpload, to: '/admin/carga' },
-  { id: 'webassign', label: 'Carga WebAssign', icon: IconWorld, to: '/admin/webassign' },
   { id: 'reportes', label: 'Reportes', icon: IconReport, to: '/admin/reportes' },
   { id: 'resultados', label: 'Resultados', icon: IconUserSearch },
   { id: 'configuracion', label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
@@ -52,7 +50,6 @@ interface SidebarNavItem {
 function initialActiveFromPath(pathname: string): SidebarItemId {
   if (pathname.startsWith('/admin/configuracion')) return 'configuracion';
   if (pathname.startsWith('/admin/carga')) return 'carga';
-  if (pathname.startsWith('/admin/webassign')) return 'webassign';
   if (pathname.startsWith('/admin/reportes')) return 'reportes';
   if (pathname.startsWith('/admin/usuarios')) return 'usuarios';
   if (pathname.startsWith('/admin/ligas')) return 'ligas';
