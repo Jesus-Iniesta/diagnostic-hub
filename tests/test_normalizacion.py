@@ -113,7 +113,24 @@ check('correo icoud', normalizar_correo("juan@icoud.com"), "juan@icloud.com")
 check('correo yahoo.com.mz', normalizar_correo("juan@yahoo.com.mz"), "juan@yahoo.com.mx")
 check('correo yaho', normalizar_correo("juan@yaho.com"), "juan@yahoo.com")
 check('correo gmail.con -> gmail.com', normalizar_correo("juan@gmail.con"), "juan@gmail.com")
-for valido in ("juan@gmx.com", "juan@live.com.mx", "juan@uaemex.mx", "juan@alumno.uaemex.mx", "juan@yahoo.com.mx"):
+check('correo gmail.comm', normalizar_correo("juan@gmail.comm"), "juan@gmail.com")
+check('correo gmail.comcom', normalizar_correo("juan@gmail.comcom"), "juan@gmail.com")
+check('correo gmailcom', normalizar_correo("juan@gmailcom"), "juan@gmail.com")
+check('correo gmail..com', normalizar_correo("juan@gmail..com"), "juan@gmail.com")
+check('correo gnail', normalizar_correo("juan@gnail.com"), "juan@gmail.com")
+check('correo gail', normalizar_correo("juan@gail.com"), "juan@gmail.com")
+check('correo outloo', normalizar_correo("juan@outloo.com"), "juan@outlook.com")
+check('correo iclud', normalizar_correo("juan@iclud.com"), "juan@icloud.com")
+check('correo hotmail.c', normalizar_correo("juan@hotmail.c"), "juan@hotmail.com")
+check('correo alumno.uaemx.mx', normalizar_correo("juan@alumno.uaemx.mx"), "juan@alumno.uaemex.mx")
+check('correo alumnos.uaemex.mx', normalizar_correo("juan@alumnos.uaemex.mx"), "juan@alumno.uaemex.mx")
+check('correo alumnouamex.mx', normalizar_correo("juan@alumnouamex.mx"), "juan@alumno.uaemex.mx")
+check('correo ueamex.mx', normalizar_correo("juan@ueamex.mx"), "juan@uaemex.mx")
+check('correo coma en dominio', normalizar_correo("juan@alumno.uaemex,mx"), "juan@alumno.uaemex.mx")
+check('correo coma + mal escrito', normalizar_correo("juan@gmial,com"), "juan@gmail.com")
+check('correo coma + .con', normalizar_correo("juan@hotmail,con"), "juan@hotmail.com")
+for valido in ("juan@gmx.com", "juan@live.com.mx", "juan@uaemex.mx", "juan@alumno.uaemex.mx", "juan@yahoo.com.mx",
+               "x@alumno.uaem.mx"):
     check(f"correo intacto {valido}", normalizar_correo(valido), valido)
 
 if FALLOS:

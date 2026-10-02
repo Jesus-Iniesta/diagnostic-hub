@@ -5,6 +5,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import openpyxl
+from fastapi import HTTPException
+
+from app.repositories.registro_alumno_repository import RegistroAlumnoRepository
+from app.schemas.registro_alumno import RegistroAlumnoCreate
 
 from app.services import upload_alumnos_service as alumnos_svc
 from app.services.upload_diagnostico_service import load_all_alumnos
@@ -19,6 +23,12 @@ class FakeResult:
 
     def all(self):
         return list(self._rows)
+
+    def scalars(self):
+        return FakeResult([r[0] if isinstance(r, tuple) else r for r in self._rows])
+
+    def first(self):
+        return self._rows[0] if self._rows else None
 
 
 class FakeSession:
@@ -150,6 +160,66 @@ def test_load_all_alumnos_correos_que_normalizan_igual():
     assert set(detalles) == {10, 20, 30}
     assert len(captura.mensajes) == 1, captura.mensajes
     assert "10" in captura.mensajes[0] and "20" in captura.mensajes[0]
+
+
+def _registro(correo: str) -> RegistroAlumnoCreate:
+    return RegistroAlumnoCreate(
+        nombre="Juan", apellido_paterno="Perez", apellido_materno="Lopez",
+        correo_personal=correo, numero_cuenta="2221316", ingenieria_id=1,
+        periodo_ingreso="2025B", tiene_internet=True, tiene_computadora=True,
+        es_foraneo=False, vulnerabilidad_economica=False,
+    )
+
+
+async def _ingenieria_ok(self, _id):
+    return SimpleNamespace(id=1, activo=True)
+
+
+def test_registro_con_dominio_mal_escrito_es_duplicado():
+    db = FakeSession([
+        [],                   # numero_cuenta no existe
+        ["x@gmail.com"],      # correos personales en BD
+    ])
+    repo = RegistroAlumnoRepository(db)
+    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok):
+        try:
+            asyncio.run(repo.create(_registro("x@gmial.com")))
+        except HTTPException as e:
+            assert e.status_code == 409, e
+            assert "correo" in e.detail
+        else:
+            raise AssertionError("se esperaba 409 por correo duplicado")
+    assert db.agregados == []
+
+
+def test_registro_detecta_duplicado_guardado_mal_escrito():
+    # Al revés: en BD quedó x@gmial.com (sin migrar) y se registra x@gmail.com.
+    db = FakeSession([[], ["X@Gmial.com"]])
+    repo = RegistroAlumnoRepository(db)
+    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok):
+        try:
+            asyncio.run(repo.create(_registro("x@gmail.com")))
+        except HTTPException as e:
+            assert e.status_code == 409, e
+        else:
+            raise AssertionError("se esperaba 409 por correo duplicado")
+
+
+def test_registro_guarda_correo_normalizado():
+    db = FakeSession([[], ["otro@gmail.com"]])
+    repo = RegistroAlumnoRepository(db)
+
+    async def fake_rol(self):
+        return SimpleNamespace(id=1)
+
+    async def fake_fetch(self, _user_id):
+        return None
+
+    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok),             patch.object(RegistroAlumnoRepository, "_get_alumno_role", fake_rol),             patch.object(RegistroAlumnoRepository, "_fetch_or_raise", fake_fetch):
+        asyncio.run(repo.create(_registro("x@gmial.com")))
+
+    user = db.agregados[0]
+    assert user.correo_personal == "x@gmail.com", user.correo_personal
 
 
 if __name__ == "__main__":

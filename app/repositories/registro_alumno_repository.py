@@ -8,6 +8,7 @@ from app.models.ingenieria import Ingenieria
 from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.schemas.registro_alumno import RegistroAlumnoCreate, RegistroAlumnoUpdate
+from app.services.normalizacion import normalizar_correo
 
 USER_FIELDS = {"nombre", "apellido_paterno", "apellido_materno", "correo_personal", "correo_institucional"}
 
@@ -39,10 +40,13 @@ class RegistroAlumnoRepository:
     async def _existe_correo(
         self, correo: str, exclude_user_id: int | None = None
     ) -> bool:
-        stmt = select(User.id).where(User.correo_personal == correo)
+        # Los correos en BD no están migrados: se normalizan igual que en _load_dup_sets.
+        objetivo = normalizar_correo(correo) or correo
+        stmt = select(User.correo_personal).where(User.correo_personal.isnot(None))
         if exclude_user_id is not None:
             stmt = stmt.where(User.id != exclude_user_id)
-        return (await self.db.execute(stmt)).scalars().first() is not None
+        correos = (await self.db.execute(stmt)).scalars()
+        return any(normalizar_correo(c) == objetivo for c in correos)
 
     async def _get_ingenieria(self, ingenieria_id: int) -> Ingenieria:
         ingenieria = await self.db.get(Ingenieria, ingenieria_id)
@@ -85,6 +89,7 @@ class RegistroAlumnoRepository:
 
     async def create(self, data: RegistroAlumnoCreate) -> Alumno:
         await self._get_ingenieria(data.ingenieria_id)
+        correo_personal = normalizar_correo(data.correo_personal) or data.correo_personal
 
         if await self._existe_numero_cuenta(data.numero_cuenta):
             raise HTTPException(
@@ -94,7 +99,7 @@ class RegistroAlumnoRepository:
             raise HTTPException(
                 status_code=409, detail="El número de folio ya está registrado"
             )
-        if await self._existe_correo(data.correo_personal):
+        if await self._existe_correo(correo_personal):
             raise HTTPException(
                 status_code=409, detail="El correo personal ya está registrado"
             )
@@ -105,7 +110,7 @@ class RegistroAlumnoRepository:
             nombre=data.nombre,
             apellido_paterno=data.apellido_paterno,
             apellido_materno=data.apellido_materno,
-            correo_personal=data.correo_personal,
+            correo_personal=correo_personal,
             auth_method=AuthMethod.NUMERO_CUENTA,
             activo=True,
             role_id=role.id,
@@ -138,6 +143,9 @@ class RegistroAlumnoRepository:
         self, alumno: Alumno, data: RegistroAlumnoUpdate
     ) -> Alumno:
         payload = data.model_dump(exclude_unset=True)
+        for campo in ("correo_personal", "correo_institucional"):
+            if payload.get(campo) is not None:
+                payload[campo] = normalizar_correo(payload[campo]) or payload[campo]
 
         if "ingenieria_id" in payload and payload["ingenieria_id"] is not None:
             await self._get_ingenieria(payload["ingenieria_id"])

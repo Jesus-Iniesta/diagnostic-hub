@@ -12,24 +12,55 @@ DOMINIOS_CORRECTOS: dict[str, str] = {
     "gmail.cm": "gmail.com",
     "gmail.om": "gmail.com",
     "gmaill.com": "gmail.com",
+    "gmail.comm": "gmail.com",
+    "gmail.como": "gmail.com",
+    "gmail.comcom": "gmail.com",
+    "gmail.ocm": "gmail.com",
+    "gmail.clm": "gmail.com",
+    "gmailcom": "gmail.com",
+    "gmail..com": "gmail.com",
+    "gnail.com": "gmail.com",
+    "gmmail.com": "gmail.com",
+    "gmaail.com": "gmail.com",
+    "gamail.com": "gmail.com",
+    "gimail.com": "gmail.com",
+    "gmsil.com": "gmail.com",
+    "gmaio.com": "gmail.com",
+    "gail.com": "gmail.com",
     # hotmail
     "hotmial.com": "hotmail.com",
     "hotmai.com": "hotmail.com",
     "hotmal.com": "hotmail.com",
     "hotmail.co": "hotmail.com",
     "hotmail.cm": "hotmail.com",
+    "hotmail.c": "hotmail.com",
     # outlook
     "outlook.coom": "outlook.com",
     "outlok.com": "outlook.com",
     "outllok.com": "outlook.com",
     "outlook.co": "outlook.com",
+    "outloo.com": "outlook.com",
     # icloud
     "icloud.co": "icloud.com",
     "icoud.com": "icloud.com",
+    "iclud.com": "icloud.com",
     # yahoo
     "yahoo.com.mz": "yahoo.com.mx",
     "yaho.com": "yahoo.com",
     "yahoo.co": "yahoo.com",
+    # Nota: alumno.uaem.mx NO se corrige; uaem.mx es dominio real de la UAEM (Morelos).
+    # institucional alumnos UAEMex
+    "alumno.uaemx.mx": "alumno.uaemex.mx",
+    "alumnos.uaemex.mx": "alumno.uaemex.mx",
+    "alumn.uaemex.mx": "alumno.uaemex.mx",
+    "alumco.uaemex.mx": "alumno.uaemex.mx",
+    "alumno.uemex.mx": "alumno.uaemex.mx",
+    "alumnouamex.mx": "alumno.uaemex.mx",
+    "alumnoueamex.mx": "alumno.uaemex.mx",
+    # institucional UAEMex
+    "uamemex.mx": "uaemex.mx",
+    "ueamex.mx": "uaemex.mx",
+    "auemex.mx": "uaemex.mx",
 }
 
 
@@ -114,7 +145,8 @@ def normalizar_correo(raw) -> str | None:
     """Normaliza un correo para emparejar alumnos entre archivos.
 
     Minúsculas, sin espacios, quita el "@dominio" extra que agrega WebAssign
-    (correo@gmail.com@uaemex.mx), corrige ".con" y dominios mal escritos.
+    (correo@gmail.com@uaemex.mx), cambia "," por "." en el dominio y corrige
+    ".con" y dominios mal escritos.
     Devuelve None si el valor no parece un correo.
     """
 
@@ -130,6 +162,7 @@ def normalizar_correo(raw) -> str | None:
     usuario, dominio = s.split("@")
     if not usuario or not dominio:
         return None
+    dominio = dominio.replace(",", ".")
     if dominio.endswith(".con"):
         dominio = dominio[:-4] + ".com"
     dominio = DOMINIOS_CORRECTOS.get(dominio, dominio)
