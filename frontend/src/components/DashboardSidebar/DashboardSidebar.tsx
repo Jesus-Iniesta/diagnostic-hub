@@ -18,6 +18,7 @@ import {
   IconShield,
   IconLink,
   IconUpload,
+  IconUserPlus,
   IconUserSearch,
   IconUsers,
 } from '@tabler/icons-react';
@@ -29,6 +30,7 @@ import classes from './DashboardSidebar.module.css';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/admin' },
+  { id: 'alumnos', label: 'Carga de alumnos', icon: IconUserPlus, to: '/admin/alumnos' },
   { id: 'carga', label: 'Carga de exámenes', icon: IconUpload, to: '/admin/carga' },
   { id: 'reportes', label: 'Reportes', icon: IconReport, to: '/admin/reportes' },
   { id: 'resultados', label: 'Resultados', icon: IconUserSearch },
@@ -49,6 +51,7 @@ interface SidebarNavItem {
 
 function initialActiveFromPath(pathname: string): SidebarItemId {
   if (pathname.startsWith('/admin/configuracion')) return 'configuracion';
+  if (pathname.startsWith('/admin/alumnos')) return 'alumnos';
   if (pathname.startsWith('/admin/carga')) return 'carga';
   if (pathname.startsWith('/admin/reportes')) return 'reportes';
   if (pathname.startsWith('/admin/usuarios')) return 'usuarios';
