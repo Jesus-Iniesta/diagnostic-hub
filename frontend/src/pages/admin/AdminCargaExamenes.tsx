@@ -54,7 +54,7 @@ import type {
 import classes from './AdminCargaAlumnos.module.css';
 import WebAssignSection from './WebAssignSection';
 
-const TABS = ['cuestionario', 'webassign', 'diagnostico'] as const;
+const TABS = ['cuestionario', 'diagnostico', 'webassign'] as const;
 type TabId = (typeof TABS)[number];
 
 function isTabId(value: string | null): value is TabId {
@@ -1174,20 +1174,20 @@ export default function AdminCargaExamenes() {
           Carga de exámenes
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Sube los archivos de los exámenes y de WebAssign para su procesamiento.
+          Sube los archivos en orden: primero el examen diagnóstico, luego el examen final y al último WebAssign.
         </Text>
       </div>
 
       <Tabs value={activeTab} onChange={handleTabChange} mt="lg">
         <Tabs.List>
           <Tabs.Tab value="cuestionario" leftSection={<IconClipboardList size={16} />}>
-            Examen diagnóstico
-          </Tabs.Tab>
-          <Tabs.Tab value="webassign" leftSection={<IconWorld size={16} />}>
-            WebAssign
+            1. Examen diagnóstico
           </Tabs.Tab>
           <Tabs.Tab value="diagnostico" leftSection={<IconFileSpreadsheet size={16} />}>
-            Examen final
+            2. Examen final
+          </Tabs.Tab>
+          <Tabs.Tab value="webassign" leftSection={<IconWorld size={16} />}>
+            3. WebAssign
           </Tabs.Tab>
         </Tabs.List>
 
@@ -1208,23 +1208,6 @@ export default function AdminCargaExamenes() {
           </Card>
         </Tabs.Panel>
 
-        <Tabs.Panel value="webassign" pt="md">
-          <Card className={classes.card} padding="xl" radius="lg">
-            <Stack gap="lg">
-              <div>
-                <Title order={3} className={classes.title}>
-                  Procesar resultados de WebAssign
-                </Title>
-                <Text className={classes.subtitle}>
-                  Sube el archivo Excel de WebAssign de cada carrera. Los resultados se guardan en escala de 0 a 10.
-                </Text>
-              </div>
-
-              <WebAssignSection />
-            </Stack>
-          </Card>
-        </Tabs.Panel>
-
         <Tabs.Panel value="diagnostico" pt="md">
           <Card className={classes.card} padding="xl" radius="lg">
             <Stack gap="lg">
@@ -1238,6 +1221,23 @@ export default function AdminCargaExamenes() {
               </div>
 
               <DiagnosticoSection />
+            </Stack>
+          </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="webassign" pt="md">
+          <Card className={classes.card} padding="xl" radius="lg">
+            <Stack gap="lg">
+              <div>
+                <Title order={3} className={classes.title}>
+                  Procesar resultados de WebAssign
+                </Title>
+                <Text className={classes.subtitle}>
+                  Sube el archivo Excel de WebAssign de cada carrera. Los resultados se guardan en escala de 0 a 10.
+                </Text>
+              </div>
+
+              <WebAssignSection />
             </Stack>
           </Card>
         </Tabs.Panel>
