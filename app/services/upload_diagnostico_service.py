@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 import io
 import json
+import logging
 import re
 import unicodedata
 from datetime import date, datetime
@@ -19,11 +20,13 @@ from app.repositories.diagnostico_repository import DiagnosticoRepository
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
 from app.services.normalizacion import (
     clasificar_identificador,
+    normalizar_correo,
     normalizar_cuenta,
     normalizar_folio,
     normalizar_nombre,
 )
 
+logger = logging.getLogger(__name__)
 
 MATERIA_COLUMNS: dict[str, dict[str, int]] = {
     "algebra": {"prefix": "FA", "start_col": 7, "questions": 20},
@@ -340,10 +343,7 @@ def normalize_name_for_match(raw: str) -> str:
 
 
 def normalize_email(raw: object | None) -> str | None:
-    if raw is None:
-        return None
-    s = str(raw).strip().lower()
-    return s if "@" in s else None
+    return normalizar_correo(raw)
 
 
 def clave_identidad_no_encontrado(
@@ -518,10 +518,18 @@ async def load_all_alumnos(
     rows = result.all()
 
     for alumno, user in rows:
-        if user.correo_personal:
-            email_map[user.correo_personal.lower().strip()] = alumno.id
-        if user.correo_institucional:
-            email_map[user.correo_institucional.lower().strip()] = alumno.id
+        for correo in (user.correo_personal, user.correo_institucional):
+            correo_norm = normalizar_correo(correo)
+            if not correo_norm:
+                continue
+            previo = email_map.get(correo_norm)
+            if previo is None:
+                email_map[correo_norm] = alumno.id
+            elif previo != alumno.id:
+                logger.warning(
+                    "Correo normalizado '%s' compartido por alumnos %s y %s; se conserva %s",
+                    correo_norm, previo, alumno.id, previo,
+                )
         if alumno.numero_cuenta:
             cuenta_map[alumno.numero_cuenta] = alumno.id
         if alumno.numero_folio:

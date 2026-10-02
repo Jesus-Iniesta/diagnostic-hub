@@ -5,7 +5,7 @@ import xlrd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.webassign_repository import WebAssignRepository
-from app.services.normalizacion import normalizar_nombre
+from app.services.normalizacion import normalizar_correo, normalizar_nombre
 from app.services.upload_diagnostico_service import (
     find_alumno,
     find_candidates_legacy,
@@ -30,14 +30,7 @@ CARRERAS = ["ICI", "ICO", "IEL", "IIA", "IME", "ISES"]
 
 
 def clean_email(raw: str | None) -> str | None:
-    if not raw:
-        return None
-    email = raw.strip().lower()
-    if email.count("@") > 1:
-        email = email.rsplit("@", 1)[0]
-    if email.endswith(".con"):
-        email = email[:-4] + ".com"
-    return email if email.count("@") == 1 else None
+    return normalizar_correo(raw)
 
 
 def clean_score(raw) -> float | None:

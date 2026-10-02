@@ -1,5 +1,6 @@
 from app.services.normalizacion import (
     clasificar_identificador,
+    normalizar_correo,
     normalizar_cuenta,
     normalizar_folio,
     solo_digitos,
@@ -91,6 +92,29 @@ check(
     clasificar_columnas_cuenta_folio(708528120.0, 708528121.0),
     (None, "708528121"),
 )
+
+# --- normalizar_correo ---
+check("correo None", normalizar_correo(None), None)
+check('correo ""', normalizar_correo(""), None)
+check('correo sin @', normalizar_correo("juan.gmail.com"), None)
+check('correo basico', normalizar_correo("  Juan.Perez@Gmail.com "), "juan.perez@gmail.com")
+check('correo espacios internos', normalizar_correo("juan perez @ gmail .com"), "juanperez@gmail.com")
+check('correo WebAssign', normalizar_correo("juan@gmail.com@uaemex.mx"), "juan@gmail.com")
+check('correo WebAssign triple', normalizar_correo("a@b@c.com@uaemex.mx"), None)
+check('correo usuario vacio', normalizar_correo("@gmail.com"), None)
+check('correo dominio vacio', normalizar_correo("juan@"), None)
+check('correo .con', normalizar_correo("juan@hotmail.con"), "juan@hotmail.com")
+check('correo .con raro', normalizar_correo("juan@empresa.con"), "juan@empresa.com")
+check('correo gmial', normalizar_correo("juan@gmial.com"), "juan@gmail.com")
+check('correo gmail.co', normalizar_correo("juan@gmail.co"), "juan@gmail.com")
+check('correo hotmial', normalizar_correo("juan@hotmial.com"), "juan@hotmail.com")
+check('correo outlook.coom', normalizar_correo("juan@outlook.coom"), "juan@outlook.com")
+check('correo icoud', normalizar_correo("juan@icoud.com"), "juan@icloud.com")
+check('correo yahoo.com.mz', normalizar_correo("juan@yahoo.com.mz"), "juan@yahoo.com.mx")
+check('correo yaho', normalizar_correo("juan@yaho.com"), "juan@yahoo.com")
+check('correo gmail.con -> gmail.com', normalizar_correo("juan@gmail.con"), "juan@gmail.com")
+for valido in ("juan@gmx.com", "juan@live.com.mx", "juan@uaemex.mx", "juan@alumno.uaemex.mx", "juan@yahoo.com.mx"):
+    check(f"correo intacto {valido}", normalizar_correo(valido), valido)
 
 if FALLOS:
     print("\nFALLARON:", len(FALLOS))

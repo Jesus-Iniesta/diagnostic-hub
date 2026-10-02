@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from app.models.alumno import Alumno
 from app.models.role import Role
 from app.models.user import User
+from app.services.normalizacion import normalizar_correo
 
 
 class UserRepository:
@@ -60,17 +61,30 @@ class UserRepository:
         return items, total
 
     async def get_by_email(self, email: str) -> User | None:
+        # Se busca el correo tal como se escribió y normalizado: los correos
+        # guardados en BD no se migraron, así que pueden estar en cualquiera de las dos formas.
+        candidatos = {email}
+        correo_norm = normalizar_correo(email)
+        if correo_norm:
+            candidatos.add(correo_norm)
         result = await self.db.execute(
             select(User)
             .options(selectinload(User.role).selectinload(Role.permissions))
             .where(
                 or_(
-                    User.correo_personal == email,
-                    User.correo_institucional == email,
+                    User.correo_personal.in_(candidatos),
+                    User.correo_institucional.in_(candidatos),
                 )
             )
+            .order_by(User.id)
         )
-        return result.scalars().first()
+        usuarios = list(result.scalars().unique().all())
+        # Si la forma original y la normalizada apuntan a usuarios distintos,
+        # gana el que coincide exactamente con lo que se escribió.
+        for user in usuarios:
+            if email in (user.correo_personal, user.correo_institucional):
+                return user
+        return usuarios[0] if usuarios else None
 
     async def get_by_rfc(self, rfc: str) -> User | None:
         result = await self.db.execute(

@@ -1,5 +1,37 @@
 import unicodedata
 
+# Dominios mal escritos -> dominio correcto. Solo correcciones explícitas:
+# no se usa similitud para no tocar dominios raros pero válidos (gmx.com, uaemex.mx, ...).
+DOMINIOS_CORRECTOS: dict[str, str] = {
+    # gmail
+    "gmai.com": "gmail.com",
+    "gmial.com": "gmail.com",
+    "gmal.com": "gmail.com",
+    "gamil.com": "gmail.com",
+    "gmail.co": "gmail.com",
+    "gmail.cm": "gmail.com",
+    "gmail.om": "gmail.com",
+    "gmaill.com": "gmail.com",
+    # hotmail
+    "hotmial.com": "hotmail.com",
+    "hotmai.com": "hotmail.com",
+    "hotmal.com": "hotmail.com",
+    "hotmail.co": "hotmail.com",
+    "hotmail.cm": "hotmail.com",
+    # outlook
+    "outlook.coom": "outlook.com",
+    "outlok.com": "outlook.com",
+    "outllok.com": "outlook.com",
+    "outlook.co": "outlook.com",
+    # icloud
+    "icloud.co": "icloud.com",
+    "icoud.com": "icloud.com",
+    # yahoo
+    "yahoo.com.mz": "yahoo.com.mx",
+    "yaho.com": "yahoo.com",
+    "yahoo.co": "yahoo.com",
+}
+
 
 def normalizar_nombre(raw) -> str:
     """Normaliza un nombre: sin acentos, mayúsculas, sin comas/puntos/dígitos y con las palabras ordenadas."""
@@ -76,3 +108,29 @@ def clasificar_identificador(raw) -> tuple[str | None, str | None]:
     if len(digits) == 9:
         return "folio", digits
     return None, None
+
+
+def normalizar_correo(raw) -> str | None:
+    """Normaliza un correo para emparejar alumnos entre archivos.
+
+    Minúsculas, sin espacios, quita el "@dominio" extra que agrega WebAssign
+    (correo@gmail.com@uaemex.mx), corrige ".con" y dominios mal escritos.
+    Devuelve None si el valor no parece un correo.
+    """
+
+    if raw is None:
+        return None
+    s = "".join(str(raw).lower().split())
+    if "@" not in s:
+        return None
+    if s.count("@") > 1:
+        s = s.rsplit("@", 1)[0]
+    if s.count("@") != 1:
+        return None
+    usuario, dominio = s.split("@")
+    if not usuario or not dominio:
+        return None
+    if dominio.endswith(".con"):
+        dominio = dominio[:-4] + ".com"
+    dominio = DOMINIOS_CORRECTOS.get(dominio, dominio)
+    return f"{usuario}@{dominio}"

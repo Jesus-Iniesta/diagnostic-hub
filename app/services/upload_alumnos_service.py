@@ -12,7 +12,7 @@ from app.models.alumno import Alumno
 from app.models.ingenieria import Ingenieria
 from app.models.role import Role
 from app.models.user import AuthMethod, User
-from app.services.normalizacion import normalizar_cuenta, normalizar_folio
+from app.services.normalizacion import normalizar_correo, normalizar_cuenta, normalizar_folio
 
 
 # ── Columnas del Excel (índices 0-based) ──────────────────────────
@@ -105,10 +105,7 @@ _clean_numero_folio = normalizar_folio
 
 
 def _clean_email(value: object | None) -> str | None:
-    s = _clean_str(value).lower()
-    if not s or "@" not in s:
-        return None
-    return s
+    return normalizar_correo(value)
 
 
 def _build_datos_originales(
@@ -169,7 +166,8 @@ async def _load_dup_sets(db: AsyncSession) -> tuple[set[str], set[str], set[str]
     all_correos = await db.execute(
         select(User.correo_personal).where(User.correo_personal.isnot(None))
     )
-    existing_correos = {r[0] for r in all_correos}
+    # Las filas nuevas llegan normalizadas; los correos en BD se normalizan igual para compararlos.
+    existing_correos = {c for r in all_correos if (c := normalizar_correo(r[0]))}
 
     return existing_cuentas, existing_folios, existing_correos
 
