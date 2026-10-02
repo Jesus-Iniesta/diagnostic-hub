@@ -18,6 +18,8 @@ from app.models.user import User
 from app.repositories.configuracion_repository import ConfiguracionRepository
 from app.repositories.diagnostico_repository import DiagnosticoRepository
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
+from app.services.alumnos_provisionales import nombre_desde_completo
+from app.services.alumnos_provisionales_service import completar_nombre_si_falta
 from app.services.identificadores_service import (
     RegistroIdentificadores,
     cargar_identificadores_extra,
@@ -545,6 +547,7 @@ async def load_all_alumnos(
             "correo": user.correo_personal,
             "ingenieria": alumno.ingenieria.clave if alumno.ingenieria else "",
             "periodo_ingreso": alumno.periodo_ingreso,
+            "provisional": bool(alumno.es_provisional),
         }
 
     # Correos/cuentas/folios aprendidos en cargas anteriores (no pisan al registro).
@@ -578,9 +581,15 @@ def find_candidates_legacy(
     if not name:
         return []
     normalized = normalize_name_for_match(name)
+    if not normalized:
+        return []
     candidates = []
     for aid, info in alumno_details.items():
         db_name = normalize_name_for_match(info["nombre"])
+        # Un alumno provisional aún sin nombre ("") "estaría contenido" en
+        # cualquier nombre; no es candidato.
+        if not db_name:
+            continue
         if normalized in db_name or db_name in normalized:
             candidates.append({
                 "alumno_id": aid,
@@ -740,6 +749,7 @@ async def procesar_examen_diagnostico(
             "email": email,
             "cuenta": cuenta,
             "folio": folio,
+            "nombre": raw_name,
         })
 
     registro = RegistroIdentificadores(
@@ -760,6 +770,9 @@ async def procesar_examen_diagnostico(
             cuentas=[e["cuenta"]],
             folios=[e["folio"]],
             indice=e["idx"],
+        )
+        await completar_nombre_si_falta(
+            db, e["alumno_id"], nombre_desde_completo(e["nombre"]), alumno_details
         )
         if e["alumno_id"] in vistos:
             repetidos += 1
@@ -890,6 +903,7 @@ async def corregir_matching_diagnostico(
     omitidas_detalle: list[dict] = []
     candidatos: dict[int, list[tuple[int, object]]] = {}
     identificadores_fila: dict[int, tuple[str | None, str | None, str | None]] = {}
+    nombres_fila: dict[int, object] = {}
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
@@ -921,6 +935,7 @@ async def corregir_matching_diagnostico(
 
         candidatos.setdefault(alumno_id, []).append((idx, raw_timestamp))
         identificadores_fila[idx] = (email, cuenta, folio)
+        nombres_fila[idx] = row[COL_NAME] if len(row) > COL_NAME else None
 
     # El administrador confirmó estas filas: sus datos quedan ligados al alumno.
     registro = RegistroIdentificadores(
@@ -935,6 +950,9 @@ async def corregir_matching_diagnostico(
             email, cuenta, folio = identificadores_fila[idx]
             await registro.registrar(
                 alumno_id, correos=[email], cuentas=[cuenta], folios=[folio], indice=idx
+            )
+            await completar_nombre_si_falta(
+                db, alumno_id, nombre_desde_completo(nombres_fila[idx]), alumno_details
             )
         for j, (idx, _ts) in enumerate(items):
             if j > 0:

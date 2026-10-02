@@ -33,6 +33,14 @@ from app.services.upload_diagnostico_service import (
     rango_fechas_dict,
     ts_sort_key,
 )
+from app.services.alumnos_provisionales import (
+    clave_ingenieria_fila,
+    lugar_desde_usuario,
+)
+from app.services.alumnos_provisionales_service import (
+    crear_alumno_provisional,
+    datos_para_provisionales,
+)
 from app.services.identificadores_service import RegistroIdentificadores
 from app.services.upload_webassign_service import clean_email
 
@@ -96,6 +104,7 @@ def detectar_columnas_cuestionario(headers: list) -> dict:
         "timestamp": None,
         "nombre": None,
         "periodo_marcado": None,
+        "ingenieria": None,
         "preguntas": {},
     }
 
@@ -138,6 +147,9 @@ def detectar_columnas_cuestionario(headers: list) -> dict:
         elif "usuario" in low:
             if cols["usuario"] is None:
                 cols["usuario"] = idx
+        elif "ingenier" in _sin_acentos(low):
+            if cols["ingenieria"] is None:
+                cols["ingenieria"] = idx
         elif "score" in low:
             if cols["score"] is None:
                 cols["score"] = idx
@@ -436,6 +448,8 @@ async def procesar_cuestionario(
     encontrados_cola: list[dict] = []
     no_encontrados: list[dict] = []
     omitidas_detalle: list[dict] = []
+    # Filas del periodo sin alumno ni candidato: se crean como provisionales.
+    sin_registro: list[dict] = []
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
@@ -481,7 +495,7 @@ async def procesar_cuestionario(
                             "Sin coincidencia de correo/cuenta/folio; "
                             "usuario coincide con un solo alumno (carrera + lugar)"
                         )
-            no_encontrados.append(
+            fila_no_encontrada = (
                 {
                     "nombre_original": nombre,
                     "correo": emails[0] if emails else None,
@@ -503,6 +517,21 @@ async def procesar_cuestionario(
                     ),
                 }
             )
+            if not candidatos and emails:
+                sin_registro.append(
+                    {
+                        "idx": idx,
+                        "row": row,
+                        "ts": ts,
+                        "emails": emails,
+                        "cuentas": cuentas,
+                        "folios": folios,
+                        "usuario": usuario_raw,
+                        "no_encontrado": fila_no_encontrada,
+                    }
+                )
+            else:
+                no_encontrados.append(fila_no_encontrada)
             continue
 
         encontrados_cola.append(
@@ -517,12 +546,18 @@ async def procesar_cuestionario(
             }
         )
 
-    encontrados_cola.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
-
     registro = RegistroIdentificadores(
         db, email_map, cuenta_map, folio_map, alumno_details,
         fuente=f"cuestionario:{cuestionario}",
     )
+
+    provisionales = await _crear_provisionales(
+        db, sin_registro, cols, periodo, registro,
+        email_map, cuenta_map, folio_map, alumno_details,
+        encontrados_cola, no_encontrados,
+    )
+
+    encontrados_cola.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
     vistos: set[int] = set()
     repetidos = 0
     resultados: list[dict] = []
@@ -569,8 +604,117 @@ async def procesar_cuestionario(
         "intentos_repetidos_ignorados": repetidos,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
+        "alumnos_provisionales_creados": len(provisionales),
+        "alumnos_provisionales_detalle": provisionales,
         **registro.resumen(),
     }
+
+
+async def _crear_provisionales(
+    db: AsyncSession,
+    sin_registro: list[dict],
+    cols: dict,
+    periodo: str,
+    registro: RegistroIdentificadores,
+    email_map: dict[str, int],
+    cuenta_map: dict[str, int],
+    folio_map: dict[str, int],
+    alumno_details: dict[int, dict],
+    encontrados_cola: list[dict],
+    no_encontrados: list[dict],
+) -> list[dict]:
+    """Crea un alumno provisional por cada alumno del periodo que no está en el padrón.
+
+    Las filas se recorren de la más antigua a la más nueva; si un alumno tiene
+    varias, la primera crea el provisional y las demás ya lo encuentran por sus
+    correos/cuenta/folio. Todas pasan a encontrados_cola (ahí se aplica la regla
+    del primer intento). Si no se puede crear (sin ingeniería reconocible),
+    la fila se queda en no_encontrados como antes.
+    """
+    if not sin_registro:
+        return []
+
+    role_id, ingenierias, ingenieria_ids = await datos_para_provisionales(db)
+    creados: list[dict] = []
+    sin_registro.sort(key=lambda f: (ts_sort_key(f["ts"]), f["idx"]))
+
+    for f in sin_registro:
+        alumno_id = _buscar_por_identificadores(
+            f["emails"], f["cuentas"], f["folios"], email_map, cuenta_map, folio_map
+        )
+        if alumno_id is None:
+            clave = clave_ingenieria_fila(
+                _valor(f["row"], cols.get("ingenieria")), f["usuario"], ingenierias
+            )
+            if role_id is None or clave is None:
+                f["no_encontrado"]["motivo"] += (
+                    "; no se creó provisional (ingeniería no reconocida)"
+                )
+                no_encontrados.append(f["no_encontrado"])
+                continue
+            alumno_id = await crear_alumno_provisional(
+                db,
+                role_id=role_id,
+                ingenieria_id=ingenieria_ids[clave],
+                ingenieria_clave=clave,
+                periodo=normalizar_periodo(periodo) or periodo,
+                correo=f["emails"][0],
+                lugar_admision=lugar_desde_usuario(f["usuario"]),
+                email_map=email_map,
+                alumno_details=alumno_details,
+            )
+            if alumno_id is None:
+                f["no_encontrado"]["motivo"] += (
+                    "; no se creó provisional (el correo es de otro usuario)"
+                )
+                no_encontrados.append(f["no_encontrado"])
+                continue
+            creados.append(
+                {
+                    "alumno_id": alumno_id,
+                    "correo": f["emails"][0],
+                    "ingenieria": clave,
+                    "indice": f["idx"],
+                }
+            )
+        encontrados_cola.append(
+            {
+                "idx": f["idx"],
+                "alumno_id": alumno_id,
+                "row": f["row"],
+                "ts": f["ts"],
+                "emails": f["emails"],
+                "cuentas": f["cuentas"],
+                "folios": f["folios"],
+            }
+        )
+        # Se registran ya, para que la siguiente fila del mismo alumno lo encuentre.
+        await registro.registrar(
+            alumno_id,
+            correos=f["emails"],
+            cuentas=f["cuentas"],
+            folios=f["folios"],
+            indice=f["idx"],
+        )
+    return creados
+
+
+def _buscar_por_identificadores(
+    emails: list[str],
+    cuentas: list[str],
+    folios: list[str],
+    email_map: dict[str, int],
+    cuenta_map: dict[str, int],
+    folio_map: dict[str, int],
+) -> int | None:
+    for valor, mapa in (
+        *((e, email_map) for e in emails),
+        *((c, cuenta_map) for c in cuentas),
+        *((f, folio_map) for f in folios),
+    ):
+        if valor in mapa:
+            return mapa[valor]
+    return None
 
 
 async def _tiene_resultado_cuestionario(

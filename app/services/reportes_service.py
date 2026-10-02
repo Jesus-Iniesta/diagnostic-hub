@@ -298,7 +298,10 @@ async def _load_data(
         seen.add(alumno.id)
         data.append({
             "alumno_id": alumno.id,
-            "nombre": f"{user.apellido_paterno} {user.apellido_materno} {user.nombre}".strip(),
+            # Un alumno provisional puede no tener nombre todavía: se muestra su correo.
+            "nombre": " ".join(
+                p for p in (user.apellido_paterno, user.apellido_materno, user.nombre) if p
+            ) or f"SIN NOMBRE ({user.correo_personal})",
             "numero_cuenta": alumno.numero_cuenta or "",
             "ingenieria": ingenieria.clave if ingenieria else "",
             "puntaje_algebra": diag.puntaje_algebra if diag else None,

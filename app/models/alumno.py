@@ -84,6 +84,14 @@ class Alumno(Base):
         nullable=True,
         index=True
     )
+    # True si se creó desde un cuestionario porque el alumno no estaba en el
+    # padrón; al subir el padrón con sus datos se completa y pasa a False.
+    es_provisional: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default="false",
+        index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.now,

@@ -5,6 +5,8 @@ import xlrd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.webassign_repository import WebAssignRepository
+from app.services.alumnos_provisionales import nombre_desde_webassign
+from app.services.alumnos_provisionales_service import completar_nombre_si_falta
 from app.services.normalizacion import normalizar_correo, normalizar_nombre
 from app.services.upload_diagnostico_service import (
     find_alumno,
@@ -180,6 +182,10 @@ async def procesar_webassign(
                 })
                 continue
 
+        # Si es un alumno provisional sin nombre, toma el de WebAssign.
+        await completar_nombre_si_falta(
+            db, alumno_id, nombre_desde_webassign(nombre_original), alumno_details
+        )
         detail = alumno_details[alumno_id]
         scores = {}
         for materia in ("algebra", "trigonometria", "geometria"):

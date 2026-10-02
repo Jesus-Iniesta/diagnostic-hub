@@ -8,7 +8,10 @@ from app.models.ingenieria import Ingenieria
 from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.schemas.registro_alumno import RegistroAlumnoCreate, RegistroAlumnoUpdate
+from app.services.alumnos_provisionales import COMPLETAR, destino_fila_padron
+from app.services.alumnos_provisionales_service import completar_provisional_con_padron
 from app.services.normalizacion import normalizar_correo
+from app.services.upload_diagnostico_service import load_all_alumnos
 
 USER_FIELDS = {"nombre", "apellido_paterno", "apellido_materno", "correo_personal", "correo_institucional"}
 
@@ -91,6 +94,12 @@ class RegistroAlumnoRepository:
         await self._get_ingenieria(data.ingenieria_id)
         correo_personal = normalizar_correo(data.correo_personal) or data.correo_personal
 
+        # Si ya presentó el cuestionario sin estar registrado, existe como alumno
+        # provisional: se completa ese registro en vez de rechazarlo por duplicado.
+        completado = await self._completar_provisional(data, correo_personal)
+        if completado is not None:
+            return completado
+
         if await self._existe_numero_cuenta(data.numero_cuenta):
             raise HTTPException(
                 status_code=409, detail="El número de cuenta ya está registrado"
@@ -138,6 +147,56 @@ class RegistroAlumnoRepository:
         await self.db.commit()
 
         return await self._fetch_or_raise(user.id)
+
+    async def _completar_provisional(
+        self, data: RegistroAlumnoCreate, correo_personal: str
+    ) -> Alumno | None:
+        email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(self.db)
+        duenos = {
+            mapa.get(valor)
+            for mapa, valor in (
+                (email_map, correo_personal),
+                (cuenta_map, data.numero_cuenta),
+                (folio_map, data.numero_folio),
+            )
+            if valor
+        } - {None}
+        provisionales = {aid for aid, d in alumno_details.items() if d.get("provisional")}
+        destino, alumno_id = destino_fila_padron(duenos, provisionales)
+        if destino != COMPLETAR:
+            return None
+
+        await completar_provisional_con_padron(
+            self.db,
+            alumno_id,
+            nombre=data.nombre,
+            ap_paterno=data.apellido_paterno,
+            ap_materno=data.apellido_materno,
+            correo=correo_personal,
+            correo_inst=None,
+            num_cuenta=data.numero_cuenta,
+            num_folio=data.numero_folio,
+            ingenieria_id=data.ingenieria_id,
+            datos_alumno={
+                "periodo_ingreso": data.periodo_ingreso,
+                "promedio_bachillerato": data.promedio_bachillerato,
+                "indice_uaem": data.indice_uaem,
+                "lugar_admision": data.lugar_admision,
+                "escuela_procedencia": data.escuela_procedencia,
+                "tiene_internet": data.tiene_internet,
+                "tiene_computadora": data.tiene_computadora,
+                "es_foraneo": data.es_foraneo,
+                "convivencia": data.convivencia,
+                "vulnerabilidad_economica": data.vulnerabilidad_economica,
+            },
+            email_map=email_map,
+            cuenta_map=cuenta_map,
+            folio_map=folio_map,
+            alumno_details=alumno_details,
+        )
+        await self.db.commit()
+        alumno = await self.db.get(Alumno, alumno_id)
+        return await self._fetch_or_raise(alumno.usuario_id)
 
     async def update(
         self, alumno: Alumno, data: RegistroAlumnoUpdate

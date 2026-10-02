@@ -12,7 +12,10 @@ from app.models.alumno import Alumno
 from app.models.ingenieria import Ingenieria
 from app.models.role import Role
 from app.models.user import AuthMethod, User
+from app.services.alumnos_provisionales import COMPLETAR, destino_fila_padron
+from app.services.alumnos_provisionales_service import completar_provisional_con_padron
 from app.services.normalizacion import normalizar_correo, normalizar_cuenta, normalizar_folio
+from app.services.upload_diagnostico_service import load_all_alumnos
 
 
 # ── Columnas del Excel (índices 0-based) ──────────────────────────
@@ -280,6 +283,79 @@ def _create_user_and_alumno(
     return user, alumno
 
 
+async def _completar_si_provisional(
+    db: AsyncSession,
+    mapas: tuple[dict[str, int], dict[str, int], dict[str, int], dict[int, dict]],
+    ingenierias_map: dict[str, int],
+    *,
+    nombre: str,
+    ap_paterno: str,
+    ap_materno: str,
+    correo: str | None,
+    correo_inst: str | None,
+    num_cuenta: str | None,
+    num_folio: str | None,
+    ingenieria_raw: str,
+    periodo: str,
+    promedio: float | None,
+    indice: float | None,
+    lugar: int | None,
+    internet: bool,
+    computadora: bool,
+    foraneo: bool,
+    convivencia: str | None,
+    vulnerabilidad: bool,
+    escuela: str | None,
+) -> bool:
+    """Si los datos de la fila son de un alumno provisional, lo completa. True si lo hizo."""
+    email_map, cuenta_map, folio_map, alumno_details = mapas
+    duenos = {
+        mapa.get(valor)
+        for mapa, valor in (
+            (email_map, correo),
+            (email_map, correo_inst),
+            (cuenta_map, num_cuenta),
+            (folio_map, num_folio),
+        )
+        if valor
+    } - {None}
+    provisionales = {aid for aid, d in alumno_details.items() if d.get("provisional")}
+    destino, alumno_id = destino_fila_padron(duenos, provisionales)
+    if destino != COMPLETAR:
+        return False
+
+    clave = _extract_clave_ingenieria(ingenieria_raw)
+    await completar_provisional_con_padron(
+        db,
+        alumno_id,
+        nombre=nombre,
+        ap_paterno=ap_paterno,
+        ap_materno=ap_materno,
+        correo=correo,
+        correo_inst=correo_inst,
+        num_cuenta=num_cuenta,
+        num_folio=num_folio,
+        ingenieria_id=ingenierias_map[clave],
+        datos_alumno={
+            "periodo_ingreso": periodo,
+            "promedio_bachillerato": promedio,
+            "indice_uaem": indice,
+            "lugar_admision": lugar,
+            "escuela_procedencia": escuela,
+            "tiene_internet": internet,
+            "tiene_computadora": computadora,
+            "es_foraneo": foraneo,
+            "convivencia": convivencia,
+            "vulnerabilidad_economica": vulnerabilidad,
+        },
+        email_map=email_map,
+        cuenta_map=cuenta_map,
+        folio_map=folio_map,
+        alumno_details=alumno_details,
+    )
+    return True
+
+
 async def procesar_excel(db: AsyncSession, file_bytes: bytes) -> ResultadoCarga:
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     ws = wb[wb.sheetnames[0]]
@@ -301,6 +377,7 @@ async def procesar_excel(db: AsyncSession, file_bytes: bytes) -> ResultadoCarga:
         return result
 
     existing_cuentas, existing_folios, existing_correos = await _load_dup_sets(db)
+    mapas = await load_all_alumnos(db)
     seen_cuentas: set[str] = set()
     seen_folios: set[str] = set()
     seen_correos: set[str] = set()
@@ -351,6 +428,26 @@ async def procesar_excel(db: AsyncSession, file_bytes: bytes) -> ResultadoCarga:
                     computadora=computadora, foraneo=foraneo, convivencia=convivencia,
                     vulnerabilidad=vulnerabilidad, escuela=escuela,
                 ),
+            ))
+            continue
+
+        if await _completar_si_provisional(
+            db, mapas, ingenierias_map,
+            nombre=nombre, ap_paterno=ap_paterno, ap_materno=ap_materno,
+            correo=correo, correo_inst=correo_inst, num_cuenta=num_cuenta,
+            num_folio=num_folio, ingenieria_raw=ingenieria_raw, periodo=periodo,
+            promedio=promedio, indice=indice, lugar=lugar, internet=internet,
+            computadora=computadora, foraneo=foraneo, convivencia=convivencia,
+            vulnerabilidad=vulnerabilidad, escuela=escuela,
+        ):
+            for valor, vistos in ((num_cuenta, seen_cuentas), (num_folio, seen_folios), (correo, seen_correos)):
+                if valor:
+                    vistos.add(valor)
+            result.exitosos += 1
+            result.detalle.append(FilaResultado(
+                fila=fila_num, nombre_completo=nombre_completo,
+                numero_cuenta=num_cuenta, estado="exitoso",
+                motivo="Se completó el alumno provisional creado desde el cuestionario",
             ))
             continue
 
@@ -423,6 +520,7 @@ async def procesar_correcciones(
         return result
 
     existing_cuentas, existing_folios, existing_correos = await _load_dup_sets(db)
+    mapas = await load_all_alumnos(db)
     seen_cuentas: set[str] = set()
     seen_folios: set[str] = set()
     seen_correos: set[str] = set()
@@ -466,6 +564,26 @@ async def procesar_correcciones(
                 numero_cuenta=num_cuenta, estado="error",
                 motivo="; ".join(c["motivo"] for c in campos_con_error),
                 campos_con_error=campos_con_error,
+            ))
+            continue
+
+        if await _completar_si_provisional(
+            db, mapas, ingenierias_map,
+            nombre=nombre, ap_paterno=ap_paterno, ap_materno=ap_materno,
+            correo=correo, correo_inst=correo_inst, num_cuenta=num_cuenta,
+            num_folio=num_folio, ingenieria_raw=ingenieria_raw, periodo=periodo,
+            promedio=promedio, indice=indice, lugar=lugar, internet=internet,
+            computadora=computadora, foraneo=foraneo, convivencia=convivencia,
+            vulnerabilidad=vulnerabilidad, escuela=escuela,
+        ):
+            for valor, vistos in ((num_cuenta, seen_cuentas), (num_folio, seen_folios), (correo, seen_correos)):
+                if valor:
+                    vistos.add(valor)
+            result.exitosos += 1
+            result.detalle.append(FilaResultado(
+                fila=fila_num, nombre_completo=nombre_completo,
+                numero_cuenta=num_cuenta, estado="exitoso",
+                motivo="Se completó el alumno provisional creado desde el cuestionario",
             ))
             continue
 

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import openpyxl
 from fastapi import HTTPException
 
+from app.repositories import registro_alumno_repository as registro_repo
 from app.repositories.registro_alumno_repository import RegistroAlumnoRepository
 from app.schemas.registro_alumno import RegistroAlumnoCreate
 
@@ -52,6 +53,17 @@ class FakeSession:
         self.commits += 1
 
 
+async def _sin_alumnos(_db):
+    """load_all_alumnos sin alumnos registrados (ni provisionales)."""
+    return {}, {}, {}, {}
+
+
+def _con_provisional(correo: str, alumno_id: int = 77):
+    async def fake(_db):
+        return {correo: alumno_id}, {}, {}, {alumno_id: {"nombre": "", "provisional": True}}
+    return fake
+
+
 def _excel_alumno(correo: str) -> bytes:
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -82,7 +94,8 @@ def test_resubir_alumno_con_dominio_mal_escrito_es_duplicado():
     async def fake_roles(_db):
         return rol, {"ICO": 1}
 
-    with patch.object(alumnos_svc, "_get_role_and_ingenierias", fake_roles):
+    with patch.object(alumnos_svc, "_get_role_and_ingenierias", fake_roles), \
+            patch.object(alumnos_svc, "load_all_alumnos", _sin_alumnos):
         resultado = asyncio.run(alumnos_svc.procesar_excel(db, _excel_alumno("x@gmail.com")))
 
     assert resultado.duplicados == 1, resultado
@@ -112,7 +125,8 @@ def test_resubir_correccion_con_dominio_mal_escrito_es_duplicado():
             "periodo": "2025B",
         },
     }
-    with patch.object(alumnos_svc, "_get_role_and_ingenierias", fake_roles):
+    with patch.object(alumnos_svc, "_get_role_and_ingenierias", fake_roles), \
+            patch.object(alumnos_svc, "load_all_alumnos", _sin_alumnos):
         resultado = asyncio.run(alumnos_svc.procesar_correcciones(db, [fila]))
 
     assert resultado.duplicados == 1, resultado
@@ -131,7 +145,7 @@ class _CapturaLogs(logging.Handler):
 def _fila_bd(alumno_id, correo_personal, correo_inst=None):
     alumno = SimpleNamespace(
         id=alumno_id, numero_cuenta=None, numero_folio=None,
-        ingenieria=None, periodo_ingreso="2025B",
+        ingenieria=None, periodo_ingreso="2025B", es_provisional=False,
     )
     user = SimpleNamespace(
         nombre="N", apellido_paterno="P", apellido_materno="M",
@@ -181,7 +195,8 @@ def test_registro_con_dominio_mal_escrito_es_duplicado():
         ["x@gmail.com"],      # correos personales en BD
     ])
     repo = RegistroAlumnoRepository(db)
-    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok):
+    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok), \
+            patch.object(registro_repo, "load_all_alumnos", _sin_alumnos):
         try:
             asyncio.run(repo.create(_registro("x@gmial.com")))
         except HTTPException as e:
@@ -196,7 +211,8 @@ def test_registro_detecta_duplicado_guardado_mal_escrito():
     # Al revés: en BD quedó x@gmial.com (sin migrar) y se registra x@gmail.com.
     db = FakeSession([[], ["X@Gmial.com"]])
     repo = RegistroAlumnoRepository(db)
-    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok):
+    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok), \
+            patch.object(registro_repo, "load_all_alumnos", _sin_alumnos):
         try:
             asyncio.run(repo.create(_registro("x@gmail.com")))
         except HTTPException as e:
@@ -215,11 +231,64 @@ def test_registro_guarda_correo_normalizado():
     async def fake_fetch(self, _user_id):
         return None
 
-    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok),             patch.object(RegistroAlumnoRepository, "_get_alumno_role", fake_rol),             patch.object(RegistroAlumnoRepository, "_fetch_or_raise", fake_fetch):
+    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok), \
+            patch.object(RegistroAlumnoRepository, "_get_alumno_role", fake_rol), \
+            patch.object(RegistroAlumnoRepository, "_fetch_or_raise", fake_fetch), \
+            patch.object(registro_repo, "load_all_alumnos", _sin_alumnos):
         asyncio.run(repo.create(_registro("x@gmial.com")))
 
     user = db.agregados[0]
     assert user.correo_personal == "x@gmail.com", user.correo_personal
+
+
+def test_padron_completa_alumno_provisional():
+    # El correo ya es de un alumno provisional (creado desde el cuestionario):
+    # la fila lo completa en lugar de marcarse como duplicado.
+    db = FakeSession([[], [], [("x@gmail.com",)]])
+    rol = SimpleNamespace(id=1)
+    llamadas = []
+
+    async def fake_roles(_db):
+        return rol, {"ICO": 1}
+
+    async def fake_completar(_db, alumno_id, **kw):
+        llamadas.append((alumno_id, kw["nombre"], kw["num_cuenta"]))
+
+    with patch.object(alumnos_svc, "_get_role_and_ingenierias", fake_roles), \
+            patch.object(alumnos_svc, "load_all_alumnos", _con_provisional("x@gmail.com")), \
+            patch.object(alumnos_svc, "completar_provisional_con_padron", fake_completar):
+        resultado = asyncio.run(alumnos_svc.procesar_excel(db, _excel_alumno("x@gmail.com")))
+
+    assert resultado.exitosos == 1 and resultado.duplicados == 0, resultado
+    assert "provisional" in resultado.detalle[0].motivo
+    assert llamadas == [(77, "Juan", "2221316")], llamadas
+    assert db.agregados == []  # no se creó un usuario nuevo
+
+
+def test_registro_completa_alumno_provisional():
+    db = FakeSession([])
+    repo = RegistroAlumnoRepository(db)
+    llamadas = []
+
+    async def fake_completar(_db, alumno_id, **kw):
+        llamadas.append((alumno_id, kw["correo"]))
+
+    async def fake_get(_cls, _id):
+        return SimpleNamespace(usuario_id=500)
+
+    async def fake_fetch(self, user_id):
+        return user_id
+
+    db.get = fake_get
+    with patch.object(RegistroAlumnoRepository, "_get_ingenieria", _ingenieria_ok), \
+            patch.object(RegistroAlumnoRepository, "_fetch_or_raise", fake_fetch), \
+            patch.object(registro_repo, "load_all_alumnos", _con_provisional("x@gmail.com")), \
+            patch.object(registro_repo, "completar_provisional_con_padron", fake_completar):
+        resultado = asyncio.run(repo.create(_registro("x@gmail.com")))
+
+    assert llamadas == [(77, "x@gmail.com")], llamadas
+    assert resultado == 500
+    assert db.commits == 1
 
 
 if __name__ == "__main__":
