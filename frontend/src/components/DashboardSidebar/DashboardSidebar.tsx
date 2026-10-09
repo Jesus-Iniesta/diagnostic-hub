@@ -19,7 +19,6 @@ import {
   IconLink,
   IconUpload,
   IconUserPlus,
-  IconUserSearch,
   IconUsers,
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
@@ -33,7 +32,6 @@ const NAV_ITEMS = [
   { id: 'alumnos', label: 'Carga de alumnos', icon: IconUserPlus, to: '/admin/alumnos' },
   { id: 'carga', label: 'Carga de exámenes', icon: IconUpload, to: '/admin/carga' },
   { id: 'reportes', label: 'Reportes', icon: IconReport, to: '/admin/reportes' },
-  { id: 'resultados', label: 'Resultados', icon: IconUserSearch },
   { id: 'configuracion', label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
   { id: 'usuarios', label: 'Usuarios', icon: IconUsers, to: '/admin/usuarios' },
   { id: 'ligas', label: 'Ligas exámenes', icon: IconLink, to: '/admin/ligas' },
