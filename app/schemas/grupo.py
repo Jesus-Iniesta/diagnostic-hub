@@ -3,7 +3,10 @@ from pydantic import BaseModel
 
 class GrupoCreate(BaseModel):
     nombre: str
-    materia_clave: str
+    # El profesor escribe el nombre de la materia; materia_clave se conserva
+    # para quien ya la mande.
+    materia_nombre: str | None = None
+    materia_clave: str | None = None
     periodo: str
 
 

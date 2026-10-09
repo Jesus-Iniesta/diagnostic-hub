@@ -36,7 +36,8 @@ export interface GrupoResumen {
 
 export interface GrupoCreate {
   nombre: string;
-  materia_clave: string;
+  materia_nombre?: string;
+  materia_clave?: string;
   periodo: string;
 }
 

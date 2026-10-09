@@ -7,7 +7,6 @@ import {
   FileInput,
   Group,
   Modal,
-  NativeSelect,
   Stack,
   Table,
   Text,
@@ -27,7 +26,6 @@ import { useEffect, useState } from 'react';
 
 import {
   fetchMisGrupos,
-  fetchMaterias,
   crearGrupo,
   eliminarGrupo,
   fetchAlumnosGrupo,
@@ -35,12 +33,11 @@ import {
   quitarAlumno,
   cargarAlumnosExcel,
 } from '../../lib/profesorApi';
-import type { Grupo, GrupoAlumno, Materia, CargaAlumnosResponse } from '../../types/profesor';
+import type { Grupo, GrupoAlumno, CargaAlumnosResponse } from '../../types/profesor';
 import classes from './ProfesorGrupo.module.css';
 
 export default function ProfesorGrupo() {
   const [grupos, setGrupos] = useState<Grupo[]>([]);
-  const [materias, setMaterias] = useState<Materia[]>([]);
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<Grupo | null>(null);
   const [alumnos, setAlumnos] = useState<GrupoAlumno[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +45,7 @@ export default function ProfesorGrupo() {
 
   const [showCrearModal, setShowCrearModal] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState('');
-  const [nuevaMateriaClave, setNuevaMateriaClave] = useState('');
+  const [nuevaMateria, setNuevaMateria] = useState('');
   const [nuevoPeriodo, setNuevoPeriodo] = useState('2026B');
   const [creando, setCreando] = useState(false);
 
@@ -72,15 +69,8 @@ export default function ProfesorGrupo() {
     setLoading(true);
     setError(null);
     try {
-      const [gruposData, materiasData] = await Promise.all([
-        fetchMisGrupos(),
-        fetchMaterias(),
-      ]);
+      const gruposData = await fetchMisGrupos();
       setGrupos(gruposData);
-      setMaterias(materiasData);
-      if (materiasData.length > 0) {
-        setNuevaMateriaClave(materiasData[0].clave);
-      }
       if (gruposData.length > 0 && !grupoSeleccionado) {
         seleccionarGrupo(gruposData[0]);
       }
@@ -105,17 +95,18 @@ export default function ProfesorGrupo() {
   }
 
   async function handleCrearGrupo() {
-    if (!nuevoNombre.trim()) return;
+    if (!nuevoNombre.trim() || !nuevaMateria.trim()) return;
     setCreando(true);
     setError(null);
     try {
       await crearGrupo({
         nombre: nuevoNombre.trim(),
-        materia_clave: nuevaMateriaClave,
+        materia_nombre: nuevaMateria.trim(),
         periodo: nuevoPeriodo,
       });
       setShowCrearModal(false);
       setNuevoNombre('');
+      setNuevaMateria('');
       setSuccess('Unidad de aprendizaje creada correctamente');
       await cargarDatos();
     } catch (err) {
@@ -266,7 +257,7 @@ export default function ProfesorGrupo() {
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Unidad</Table.Th>
+                <Table.Th>Grupo</Table.Th>
                 <Table.Th>Materia</Table.Th>
                 <Table.Th>Periodo</Table.Th>
                 <Table.Th>Alumnos</Table.Th>
@@ -443,16 +434,16 @@ export default function ProfesorGrupo() {
       >
         <Stack gap="md">
           <TextInput
-            label="Nombre de la unidad"
-            placeholder="Ej: Calculo III - Seccion 01"
+            label="Grupo"
+            placeholder="Ej: 02"
             value={nuevoNombre}
             onChange={(e) => setNuevoNombre(e.currentTarget.value)}
           />
-          <NativeSelect
+          <TextInput
             label="Materia"
-            data={materias.map((m) => ({ value: m.clave, label: `${m.nombre} (${m.clave})` }))}
-            value={nuevaMateriaClave}
-            onChange={(e) => setNuevaMateriaClave(e.currentTarget.value)}
+            placeholder="Ej: Cálculo III"
+            value={nuevaMateria}
+            onChange={(e) => setNuevaMateria(e.currentTarget.value)}
           />
           <TextInput
             label="Periodo"
@@ -472,7 +463,7 @@ export default function ProfesorGrupo() {
               color="indigo"
               onClick={handleCrearGrupo}
               loading={creando}
-              disabled={!nuevoNombre.trim()}
+              disabled={!nuevoNombre.trim() || !nuevaMateria.trim()}
             >
               Crear
             </Button>

@@ -12,7 +12,7 @@ from app.models.materia import Materia
 from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.repositories.grupo_repository import GrupoRepository
-from app.repositories.materia_repository import MateriaRepository
+from app.repositories.materia_repository import MateriaRepository, limpiar_nombre_materia
 from app.schemas.grupo import (
     GrupoAlumnoAdd,
     GrupoAlumnoResponse,
@@ -68,11 +68,21 @@ async def crear_grupo(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> GrupoResponse:
-    materia = await db.scalar(
-        select(Materia).where(Materia.clave == data.materia_clave)
-    )
-    if not materia:
-        raise HTTPException(status_code=400, detail="Materia no encontrada")
+    materia_nombre = limpiar_nombre_materia(data.materia_nombre or "")
+    if materia_nombre:
+        if len(materia_nombre) > 100:
+            raise HTTPException(
+                status_code=400, detail="El nombre de la materia es muy largo"
+            )
+        materia = await MateriaRepository(db).get_or_create_by_nombre(materia_nombre)
+    elif data.materia_clave:
+        materia = await db.scalar(
+            select(Materia).where(Materia.clave == data.materia_clave)
+        )
+        if not materia:
+            raise HTTPException(status_code=400, detail="Materia no encontrada")
+    else:
+        raise HTTPException(status_code=400, detail="Escribe la materia")
 
     repo = GrupoRepository(db)
     grupo = await repo.create(
