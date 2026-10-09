@@ -1,12 +1,12 @@
 import logging
 import unicodedata
 
-import xlrd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.webassign_repository import WebAssignRepository
 from app.services.alumnos_provisionales import nombre_desde_webassign
 from app.services.alumnos_provisionales_service import completar_nombre_si_falta
+from app.services.excel_utils import como_xlrd, leer_hoja
 from app.services.normalizacion import normalizar_correo, normalizar_nombre
 from app.services.upload_diagnostico_service import (
     find_alumno,
@@ -124,31 +124,36 @@ def _es_fila_profesor(nombre: str, nombre_profesor: str, nombre_hoja: str) -> bo
 def parse_webassign_excel(
     file_bytes: bytes, carrera: str
 ) -> tuple[list[dict], dict]:
-    wb = xlrd.open_workbook(file_contents=file_bytes)
-    ws = wb.sheet_by_index(0)
+    hoja = leer_hoja(file_bytes)
+    # Las reglas de abajo se escribieron con los valores de xlrd ("" en
+    # vacías, números como float); se conservan igual para .xls y .xlsx.
+    filas = [[como_xlrd(v) for v in fila] for fila in hoja.filas]
 
-    nombre_profesor = str(ws.cell_value(1, 0)) if ws.nrows > 1 else ""
-    nombre_hoja = ws.name
+    def cell_value(i: int, col: int):
+        return filas[i][col]
+
+    nombre_profesor = str(cell_value(1, 0)) if len(filas) > 1 else ""
+    nombre_hoja = hoja.nombre
 
     rows_data: list[dict] = []
 
-    for i in range(9, ws.nrows):
-        name = ws.cell_value(i, 0)
+    for i in range(9, len(filas)):
+        name = cell_value(i, 0)
         if not name or name in ("", "Totals", "Fullname"):
             continue
         if _es_fila_profesor(str(name), nombre_profesor, nombre_hoja):
             continue
 
-        raw_email = ws.cell_value(i, 1)
+        raw_email = cell_value(i, 1)
         email = clean_email(raw_email)
 
         materia_scores: dict[str, dict] = {}
         for materia, cols in EXERCISE_COLS.items():
             exercise_scores = []
             for col in cols["trabajo"]:
-                val = clean_score(ws.cell_value(i, col))
+                val = clean_score(cell_value(i, col))
                 exercise_scores.append(val)
-            exam_val = clean_score(ws.cell_value(i, cols["examen"]))
+            exam_val = clean_score(cell_value(i, cols["examen"]))
             materia_scores[materia] = {
                 "trabajo_raw": exercise_scores,
                 "examen_raw": exam_val,

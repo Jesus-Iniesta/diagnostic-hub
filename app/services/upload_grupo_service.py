@@ -1,4 +1,4 @@
-import xlrd
+from app.services.excel_utils import ArchivoExcelError, como_xlrd, leer_filas
 
 
 def parse_profesor_excel(contents: bytes, filename: str) -> tuple[list[dict], list[str]]:
@@ -16,15 +16,19 @@ def parse_profesor_excel(contents: bytes, filename: str) -> tuple[list[dict], li
     alumnos = []
 
     try:
-        wb = xlrd.open_workbook(file_contents=contents)
-        ws = wb.sheet_by_index(0)
-    except (xlrd.XLRDError, IndexError) as e:
+        # Las reglas de abajo se escribieron con los valores de xlrd ("" en
+        # vacías, números como float); se conservan igual para .xls y .xlsx.
+        filas = [[como_xlrd(v) for v in fila] for fila in leer_filas(contents)]
+    except ArchivoExcelError as e:
         return [], [f"No se pudo abrir el archivo: {e}"]
 
-    if ws.nrows < 2:
+    def cell_value(i: int, col: int):
+        return filas[i][col]
+
+    if len(filas) < 2:
         return [], ["El archivo está vacío o no tiene datos"]
 
-    headers = [str(ws.cell_value(0, c)).strip().upper() for c in range(ws.ncols)]
+    headers = [str(v).strip().upper() for v in filas[0]]
     expected = ["CUENTA", "APELLIDO PATERNO", "APELLIDO MATERNO", "NOMBRE"]
     for exp in expected:
         if exp not in headers:
@@ -35,17 +39,17 @@ def parse_profesor_excel(contents: bytes, filename: str) -> tuple[list[dict], li
     plan_idx = headers.index("PLAN DE ESTUDIOS") if has_plan else None
     correo_idx = headers.index("CORREO INSTITUCIONAL") if has_correo else None
 
-    for row_idx in range(1, ws.nrows):
+    for row_idx in range(1, len(filas)):
         try:
-            cuenta = str(ws.cell_value(row_idx, 0)).strip()
+            cuenta = str(cell_value(row_idx, 0)).strip()
             if not cuenta or cuenta == "0":
                 continue
 
             cuenta = cuenta.removesuffix(".0")
 
-            apellido_paterno = str(ws.cell_value(row_idx, 1)).strip()
-            apellido_materno = str(ws.cell_value(row_idx, 2)).strip()
-            nombre = str(ws.cell_value(row_idx, 3)).strip()
+            apellido_paterno = str(cell_value(row_idx, 1)).strip()
+            apellido_materno = str(cell_value(row_idx, 2)).strip()
+            nombre = str(cell_value(row_idx, 3)).strip()
 
             if not all([cuenta, apellido_paterno, apellido_materno, nombre]):
                 errores.append(f"Fila {row_idx + 1}: Campos vacíos")
@@ -53,13 +57,13 @@ def parse_profesor_excel(contents: bytes, filename: str) -> tuple[list[dict], li
 
             plan_estudios = None
             if plan_idx is not None:
-                plan_raw = str(ws.cell_value(row_idx, plan_idx)).strip()
+                plan_raw = str(cell_value(row_idx, plan_idx)).strip()
                 if plan_raw and plan_raw != "0.0":
                     plan_estudios = plan_raw
 
             correo_institucional = None
             if correo_idx is not None:
-                correo_raw = str(ws.cell_value(row_idx, correo_idx)).strip()
+                correo_raw = str(cell_value(row_idx, correo_idx)).strip()
                 if correo_raw and correo_raw != "0.0" and "@" in correo_raw:
                     correo_institucional = correo_raw
 

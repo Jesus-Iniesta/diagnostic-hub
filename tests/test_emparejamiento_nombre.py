@@ -12,6 +12,7 @@ from app.services.upload_diagnostico_service import (
     find_candidates_legacy,
     procesar_examen_diagnostico,
 )
+from app.services.excel_utils import HojaExcel
 from app.services.upload_webassign_service import parse_webassign_excel
 
 FALLOS: list[str] = []
@@ -89,28 +90,6 @@ check("legacy ''", res, [])
 
 
 # ── WebAssign: exclusión de la fila del profesor ─────────────────
-class FakeSheet:
-    def __init__(self, rows, name):
-        self._rows = rows
-        self.name = name
-
-    @property
-    def nrows(self):
-        return len(self._rows)
-
-    def cell_value(self, i, col):
-        row = self._rows[i]
-        return row[col] if col < len(row) else ""
-
-
-class FakeWb:
-    def __init__(self, sheet):
-        self._sheet = sheet
-
-    def sheet_by_index(self, idx):
-        return self._sheet
-
-
 def _fila(nombre, email):
     return [nombre, email] + [None] * 23  # cols 2..24 para scores
 
@@ -131,9 +110,9 @@ filas = [
     ["Fullname"],
     _fila("AlbiterBernalVladimirAngel", "p2@x.com"),  # 13 -> excluida por hoja
 ]
-fake_wb = FakeWb(FakeSheet(filas, "AlbiterBernalVladimirAngel"))
+hoja = HojaExcel(nombre="AlbiterBernalVladimirAngel", filas=filas)
 
-with patch("xlrd.open_workbook", return_value=fake_wb):
+with patch("app.services.upload_webassign_service.leer_hoja", return_value=hoja):
     rows_data, _ = parse_webassign_excel(b"", "ICO")
 
 check("webassign: filas totales", len(rows_data), 1)
@@ -183,7 +162,8 @@ async def diagnostico_test():
     )
 
 
-asyncio.run(diagnostico_test())
+# psycopg en modo async no funciona con el ProactorEventLoop de Windows.
+asyncio.run(diagnostico_test(), loop_factory=asyncio.SelectorEventLoop)
 
 if FALLOS:
     print("\nFALLARON:", len(FALLOS))

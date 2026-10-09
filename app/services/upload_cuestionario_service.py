@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import io
 import json
 import re
 import unicodedata
 
-import openpyxl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +39,7 @@ from app.services.alumnos_provisionales_service import (
     crear_alumno_provisional,
     datos_para_provisionales,
 )
+from app.services.excel_utils import leer_filas
 from app.services.identificadores_service import RegistroIdentificadores
 from app.services.upload_webassign_service import clean_email
 
@@ -184,12 +183,9 @@ def parse_usuario(usuario: object | None) -> tuple[str | None, int | None]:
 
 
 def _leer_workbook(file_bytes: bytes) -> tuple[list[str], list[tuple]]:
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-    ws = wb[wb.sheetnames[0]]
-
-    header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), None)
-    rows = list(ws.iter_rows(min_row=2, values_only=True))
-    wb.close()
+    filas = leer_filas(file_bytes)
+    header_row = filas[0] if filas else None
+    rows = filas[1:]
 
     if header_row is None:
         raise ValueError("El archivo no tiene fila de encabezados")

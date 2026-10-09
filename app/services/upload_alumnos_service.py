@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import io
 import re
 from dataclasses import dataclass, field
 
-import openpyxl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +12,7 @@ from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.services.alumnos_provisionales import COMPLETAR, destino_fila_padron
 from app.services.alumnos_provisionales_service import completar_provisional_con_padron
+from app.services.excel_utils import leer_filas
 from app.services.normalizacion import normalizar_correo, normalizar_cuenta, normalizar_folio
 from app.services.upload_diagnostico_service import load_all_alumnos
 
@@ -357,11 +356,7 @@ async def _completar_si_provisional(
 
 
 async def procesar_excel(db: AsyncSession, file_bytes: bytes) -> ResultadoCarga:
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-    ws = wb[wb.sheetnames[0]]
-
-    rows = list(ws.iter_rows(min_row=2, values_only=True))
-    wb.close()
+    rows = leer_filas(file_bytes)[1:]  # sin la fila de encabezados
 
     result = ResultadoCarga(total_filas=len(rows))
 

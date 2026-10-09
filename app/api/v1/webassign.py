@@ -5,6 +5,7 @@ from app.core.security import require_permission
 from app.models.user import User
 from app.repositories.webassign_repository import WebAssignRepository
 from app.schemas.webassign import CorregirMatchingWebAssignPayload
+from app.services.excel_utils import ArchivoExcelError
 from app.services.upload_webassign_service import CARRERAS, procesar_webassign
 
 router = APIRouter()
@@ -34,7 +35,10 @@ async def upload_webassign(
         )
 
     content = await file.read()
-    result = await procesar_webassign(db, content, carrera.upper(), periodo)
+    try:
+        result = await procesar_webassign(db, content, carrera.upper(), periodo)
+    except ArchivoExcelError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     await db.commit()
     return result
 

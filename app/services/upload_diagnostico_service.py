@@ -20,6 +20,7 @@ from app.repositories.diagnostico_repository import DiagnosticoRepository
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
 from app.services.alumnos_provisionales import nombre_desde_completo
 from app.services.alumnos_provisionales_service import completar_nombre_si_falta
+from app.services.excel_utils import leer_filas
 from app.services.identificadores_service import (
     RegistroIdentificadores,
     cargar_identificadores_extra,
@@ -681,10 +682,7 @@ async def procesar_examen_diagnostico(
 
     email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(db)
 
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-    ws = wb[wb.sheetnames[0]]
-    rows = list(ws.iter_rows(min_row=2, values_only=True))
-    wb.close()
+    rows = leer_filas(file_bytes)[1:]  # sin la fila de encabezados
 
     resultados = []
     no_encontrados = []
@@ -894,10 +892,7 @@ async def corregir_matching_diagnostico(
 
     correction_map = {c["indice"]: c["alumno_id"] for c in correcciones}
 
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-    ws = wb[wb.sheetnames[0]]
-    rows = list(ws.iter_rows(min_row=2, values_only=True))
-    wb.close()
+    rows = leer_filas(file_bytes)[1:]  # sin la fila de encabezados
 
     resultados = []
     omitidas_detalle: list[dict] = []
