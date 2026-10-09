@@ -9,6 +9,7 @@ from app.schemas.upload import (
     FilaResultadoResponse,
     ResultadoCargaResponse,
 )
+from app.services.catalogo_control_escolar_service import CatalogoError, procesar_catalogo
 from app.services.upload_alumnos_service import (
     ResultadoCarga,
     procesar_correcciones,
@@ -98,3 +99,41 @@ async def corregir_filas(
         )
 
     return _build_response(resultado)
+
+
+@router.post(
+    "/catalogo",
+    summary="Completar alumnos con el catálogo de Control Escolar (hoja Datos catalogo)",
+)
+async def upload_catalogo(
+    db: DbSession,
+    _current_user: User = Depends(require_permission("cargar_excel")),
+    file: UploadFile = File(...),
+) -> dict:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No se proporcionó un archivo")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ("xlsx", "xls"):
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se permiten archivos .xlsx o .xls",
+        )
+
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+    try:
+        resultado = await procesar_catalogo(db, content, file.filename)
+    except CatalogoError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al procesar el archivo: {exc}",
+        )
+
+    await db.commit()
+    return resultado

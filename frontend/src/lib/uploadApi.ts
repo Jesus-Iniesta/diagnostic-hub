@@ -1,5 +1,5 @@
-import { UPLOAD_ALUMNOS_URL } from '../config';
-import type { FilaCorregida, ResultadoCarga } from '../types/upload';
+import { CATALOGO_ALUMNOS_URL, UPLOAD_ALUMNOS_URL } from '../config';
+import type { FilaCorregida, ResultadoCarga, ResultadoCatalogo } from '../types/upload';
 
 export async function uploadAlumnosExcel(file: File): Promise<ResultadoCarga> {
   const formData = new FormData();
@@ -47,4 +47,29 @@ export async function corregirFilas(filas: FilaCorregida[]): Promise<ResultadoCa
   }
 
   return data as ResultadoCarga;
+}
+
+export async function uploadCatalogoControlEscolar(file: File): Promise<ResultadoCatalogo> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(CATALOGO_ALUMNOS_URL, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const detail = (data as { detail?: string })?.detail;
+    throw new Error(detail ?? `Error ${response.status}`);
+  }
+
+  return data as ResultadoCatalogo;
 }

@@ -18,6 +18,7 @@ import { useCallback, useRef, useState } from 'react';
 import { corregirFilas, uploadAlumnosExcel } from '../../lib/uploadApi';
 import type { CampoError, FilaCorregida, FilaResultado, ResultadoCarga } from '../../types/upload';
 import classes from './AdminCargaAlumnos.module.css';
+import CatalogoControlEscolarSection from './CatalogoControlEscolarSection';
 
 type ViewState = 'idle' | 'uploading' | 'result' | 'error';
 
@@ -458,6 +459,8 @@ export default function AdminCargaAlumnos() {
           )}
         </Stack>
       </Card>
+
+      <CatalogoControlEscolarSection />
 
       <Modal
         opened={editingRow !== null}
