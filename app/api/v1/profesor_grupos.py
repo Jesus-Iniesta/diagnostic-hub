@@ -1,16 +1,12 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core.security import get_current_user, require_permission
-from app.models.alumno import Alumno
 from app.models.grupo import Grupo
-from app.models.ingenieria import Ingenieria
 from app.models.materia import Materia
-from app.models.role import Role
-from app.models.user import AuthMethod, User
+from app.models.user import User
 from app.repositories.grupo_repository import GrupoRepository
 from app.repositories.materia_repository import MateriaRepository, limpiar_nombre_materia
 from app.schemas.grupo import (
@@ -23,7 +19,9 @@ from app.schemas.grupo import (
     GrupoResponse,
     MateriaResponse,
 )
+from app.services.normalizacion import normalizar_correo, normalizar_cuenta
 from app.services.reportes_service import resumen_creani_alumnos
+from app.services.upload_diagnostico_service import find_alumno, load_all_alumnos
 from app.services.upload_grupo_service import parse_profesor_excel
 
 # Solo profesor y administrador tienen este permiso; alumno y acreditador
@@ -262,64 +260,34 @@ async def cargar_alumnos_excel(
     contents = await file.read()
     alumnos_data, errores = parse_profesor_excel(contents, file.filename)
 
-    # Get the grupo to know its period
-    stmt_grupo = select(Grupo).where(Grupo.id == grupo_id)
-    result_grupo = await db.execute(stmt_grupo)
-    grupo_obj = result_grupo.scalars().first()
-    grupo_periodo = grupo_obj.periodo if grupo_obj else periodo
-
-    # Get role "alumno" for auto-registration
-    role_alumno = await db.scalar(select(Role).where(Role.name == "alumno"))
+    # Solo se agregan alumnos que ya existen: se buscan por número de cuenta o
+    # correo institucional, incluidos los aprendidos en otras cargas
+    # (identificador_alumno). Los que no existen se reportan, no se crean.
+    email_map, cuenta_map, folio_map, _ = await load_all_alumnos(db)
 
     added = 0
     skipped = 0
-    registered = 0
+    no_encontrados: list[dict] = []
 
     for alumno_data in alumnos_data:
-        alumno = await repo.find_alumno_by_cuenta(alumno_data["numero_cuenta"])
-        if not alumno:
-            # Auto-register: create User + Alumno
-            try:
-                # Extract carrera clave from plan_estudios (e.g. "ICO-F19" → "ICO")
-                ingenieria = None
-                plan = alumno_data.get("plan_estudios")
-                if plan:
-                    clave_carrera = plan.split("-")[0].strip().upper()
-                    ingenieria = await db.scalar(
-                        select(Ingenieria).where(Ingenieria.clave == clave_carrera)
-                    )
+        cuenta = normalizar_cuenta(alumno_data["numero_cuenta"])
+        correo = normalizar_correo(alumno_data.get("correo_institucional"))
+        alumno_id = find_alumno(correo, cuenta, None, email_map, cuenta_map, folio_map)
+        if alumno_id is None:
+            no_encontrados.append({
+                "numero_cuenta": alumno_data["numero_cuenta"],
+                "nombre": " ".join(
+                    p for p in (
+                        alumno_data["nombre"],
+                        alumno_data["apellido_paterno"],
+                        alumno_data["apellido_materno"],
+                    ) if p
+                ),
+                "correo": alumno_data.get("correo_institucional"),
+            })
+            continue
 
-                # Create User
-                user = User(
-                    nombre=alumno_data["nombre"],
-                    apellido_paterno=alumno_data["apellido_paterno"],
-                    apellido_materno=alumno_data["apellido_materno"],
-                    correo_personal=f"{alumno_data['numero_cuenta']}@pendiente.edu.mx",
-                    correo_institucional=alumno_data.get("correo_institucional"),
-                    auth_method=AuthMethod.NUMERO_CUENTA,
-                    activo=True,
-                    role_id=role_alumno.id if role_alumno else None,
-                )
-                db.add(user)
-                await db.flush()
-
-                # Create Alumno
-                nuevo_alumno = Alumno(
-                    usuario_id=user.id,
-                    ingenieria_id=ingenieria.id if ingenieria else None,
-                    numero_cuenta=alumno_data["numero_cuenta"],
-                    periodo_ingreso=grupo_periodo,
-                )
-                db.add(nuevo_alumno)
-                await db.flush()
-
-                alumno = nuevo_alumno
-                registered += 1
-            except (IntegrityError, ValueError):
-                # Skip if creation fails (e.g. duplicate)
-                continue
-
-        result = await repo.add_alumno(grupo_id, alumno.id, periodo)
+        result = await repo.add_alumno(grupo_id, alumno_id, periodo)
         if result:
             added += 1
         else:
@@ -339,8 +307,8 @@ async def cargar_alumnos_excel(
         "ok": True,
         "total_en_archivo": len(alumnos_data),
         "agregados": added,
-        "registrados_nuevos": registered,
         "duplicados_en_grupo": skipped,
+        "no_encontrados": no_encontrados,
         "errores_archivo": len(errores),
         "detalles_errores": errores[:10],
     }

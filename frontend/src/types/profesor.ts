@@ -69,10 +69,16 @@ export interface CargaAlumnosResponse {
   ok: boolean;
   total_en_archivo: number;
   agregados: number;
-  registrados_nuevos: number;
   duplicados_en_grupo: number;
+  no_encontrados: AlumnoNoEncontrado[];
   errores_archivo: number;
   detalles_errores: string[];
+}
+
+export interface AlumnoNoEncontrado {
+  numero_cuenta: string;
+  nombre: string;
+  correo: string | null;
 }
 
 export interface NivelDistribucion {

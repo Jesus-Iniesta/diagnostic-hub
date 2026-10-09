@@ -535,9 +535,24 @@ export default function ProfesorGrupo() {
               <Text size="sm">
                 Total en archivo: {resultadoCarga.total_en_archivo} |
                 Agregados: {resultadoCarga.agregados} |
-                Nuevos registrados: {resultadoCarga.registrados_nuevos} |
-                Duplicados: {resultadoCarga.duplicados_en_grupo}
+                Duplicados: {resultadoCarga.duplicados_en_grupo} |
+                No encontrados: {resultadoCarga.no_encontrados.length}
               </Text>
+              {resultadoCarga.no_encontrados.length > 0 && (
+                <Stack gap={4} mt="sm">
+                  <Text size="sm" fw={600}>
+                    No se agregaron porque no están registrados en el sistema:
+                  </Text>
+                  <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                    {resultadoCarga.no_encontrados.map((a) => (
+                      <Text key={a.numero_cuenta} size="xs">
+                        • {a.nombre} — {a.numero_cuenta}
+                        {a.correo ? ` (${a.correo})` : ''}
+                      </Text>
+                    ))}
+                  </div>
+                </Stack>
+              )}
               {resultadoCarga.detalles_errores.length > 0 && (
                 <Text size="xs" mt="xs" c="dimmed">
                   Errores: {resultadoCarga.detalles_errores.join('; ')}
