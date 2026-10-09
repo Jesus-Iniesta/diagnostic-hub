@@ -28,6 +28,21 @@ export interface RespuestaCuestionario {
   correcta: boolean;
 }
 
+/** Omitida de otro periodo que sí corresponde a un alumno del periodo cargado. */
+export interface OmitidaPeriodoActual {
+  nombre: string;
+  correo: string | null;
+  fecha: string | null;
+}
+
+/** Intento repetido ignorado (se conservó el intento más antiguo). */
+export interface RepetidoDetalle {
+  nombre: string | null;
+  correo: string | null;
+  fecha_tomado: string | null;
+  fecha_ignorado: string | null;
+}
+
 export interface CuestionarioAlumnoResultado {
   alumno_id: number;
   nombre_completo: string;
@@ -54,6 +69,8 @@ export interface ResultadoProcesamientoCuestionario {
   intentos_repetidos_ignorados: number;
   omitidas_ya_tenian_resultado?: number[];
   omitidas_detalle?: OmitidaDetalle[];
+  omitidas_periodo_detalle?: OmitidaPeriodoActual[];
+  repetidos_detalle?: RepetidoDetalle[];
   resultados: CuestionarioAlumnoResultado[];
   no_encontrados_detalle: CuestionarioNoEncontrado[];
 }

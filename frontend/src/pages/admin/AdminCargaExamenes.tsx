@@ -1,6 +1,5 @@
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Group,
@@ -21,7 +20,7 @@ import {
   IconUpload,
   IconWorld,
 } from '@tabler/icons-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 
 import CorreccionModal from '../../components/CorreccionModal/CorreccionModal';
@@ -764,6 +763,92 @@ function DiagnosticoSection() {
   );
 }
 
+type ListaTipo = 'noEncontrados' | 'omitidas' | 'repetidos';
+
+const PAGE_SIZE = 20;
+
+function buscarSugerido(item: { candidatos: CandidatoCoincidencia[] }): CandidatoCoincidencia | undefined {
+  return item.candidatos.find((c) => c.sugerido);
+}
+
+function formatFechaHora(valor: string | null): string {
+  if (!valor) return '—';
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) return valor;
+  return fecha.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+interface ListaPaginadaProps<T> {
+  items: T[];
+  headers: string[];
+  getSearchText: (item: T) => string;
+  renderRow: (item: T, index: number) => React.ReactNode;
+}
+
+/** Lista desplegable con buscador (sobre toda la lista) y paginación de 20 en 20. */
+function ListaPaginada<T>({ items, headers, getSearchText, renderRow }: ListaPaginadaProps<T>) {
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+
+  const filtrados = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) => getSearchText(item).toLowerCase().includes(q));
+  }, [items, query, getSearchText]);
+
+  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
+  const pagina = Math.min(page, totalPaginas);
+  const visibles = filtrados.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
+
+  return (
+    <div>
+      <TextInput
+        size="xs"
+        className={classes.listSearch}
+        placeholder="Buscar por nombre, correo o cuenta"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.currentTarget.value);
+          setPage(1);
+        }}
+      />
+      <div className={classes.scrollTable}>
+        <table className={classes.table}>
+          <thead>
+            <tr>
+              {headers.map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.length === 0 ? (
+              <tr>
+                <td colSpan={headers.length} style={{ textAlign: 'center', color: '#667085' }}>
+                  Sin resultados
+                </td>
+              </tr>
+            ) : (
+              visibles.map((item, idx) => renderRow(item, idx))
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className={classes.paginationBar}>
+        <Button size="compact-xs" variant="default" disabled={pagina <= 1} onClick={() => setPage(pagina - 1)}>
+          Anterior
+        </Button>
+        <Text className={classes.paginationInfo}>
+          Página {pagina} de {totalPaginas}
+        </Text>
+        <Button size="compact-xs" variant="default" disabled={pagina >= totalPaginas} onClick={() => setPage(pagina + 1)}>
+          Siguiente
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 interface TarjetaCuestionarioProps {
   cuestionario: 1 | 2;
   label: string;
@@ -773,6 +858,15 @@ interface TarjetaCuestionarioProps {
   archivo: File | null;
   onUpload: (cuestionario: 1 | 2, file: File) => void;
   onReemplazar: (cuestionario: 1 | 2) => void;
+  listaAbierta: ListaTipo | null;
+  onToggleLista: (tipo: ListaTipo, count: number) => void;
+  correcciones: Map<number, number>;
+  nSugeridos: number;
+  aplicando: boolean;
+  onConfirmarSugerido: (item: CuestionarioNoEncontrado) => void;
+  onConfirmarTodos: () => void;
+  onCorregir: (item: CuestionarioNoEncontrado) => void;
+  onAplicar: () => void;
 }
 
 function TarjetaCuestionario({
@@ -784,10 +878,31 @@ function TarjetaCuestionario({
   archivo,
   onUpload,
   onReemplazar,
+  listaAbierta,
+  onToggleLista,
+  correcciones,
+  nSugeridos,
+  aplicando,
+  onConfirmarSugerido,
+  onConfirmarTodos,
+  onCorregir,
+  onAplicar,
 }: TarjetaCuestionarioProps) {
-  const [verOmitidas, setVerOmitidas] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const noEncontradosList = resultado?.no_encontrados_detalle ?? [];
+  const omitidasPeriodo = resultado?.omitidas_periodo_detalle ?? [];
+  const repetidosDetalle = resultado?.repetidos_detalle ?? [];
+
+  const omitidasResumen = useMemo(() => {
+    const conteo = new Map<string, number>();
+    for (const o of resultado?.omitidas_detalle ?? []) {
+      const clave = o.periodo_detectado || 'Sin periodo';
+      conteo.set(clave, (conteo.get(clave) ?? 0) + 1);
+    }
+    return [...conteo.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [resultado]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -807,6 +922,11 @@ function TarjetaCuestionario({
     const file = e.target.files?.[0];
     if (file) onUpload(cuestionario, file);
     e.target.value = '';
+  };
+
+  const toggle = (tipo: ListaTipo, count: number) => {
+    if (count <= 0) return;
+    onToggleLista(tipo, count);
   };
 
   return (
@@ -845,12 +965,6 @@ function TarjetaCuestionario({
 
         {!uploading && resultado && (
           <Stack gap="md">
-            <OmitidasModal
-              opened={verOmitidas}
-              onClose={() => setVerOmitidas(false)}
-              omitidas={resultado.omitidas_detalle ?? []}
-              periodo={resultado.periodo}
-            />
             {resultado.total_filas === 0 && (
               <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
                 El archivo no tiene filas para procesar. Revisa que sea el archivo correcto.
@@ -861,24 +975,163 @@ function TarjetaCuestionario({
                 <div className={classes.statNumber}>{resultado.encontrados}</div>
                 <div className={classes.statLabel}>Encontrados</div>
               </div>
-              <div className={`${classes.statBox} ${classes.statBoxRed}`}>
+
+              <div
+                className={`${classes.statBox} ${classes.statBoxRed} ${noEncontradosList.length > 0 ? classes.statBoxClickable : ''} ${listaAbierta === 'noEncontrados' ? classes.statBoxActive : ''}`}
+                onClick={() => toggle('noEncontrados', noEncontradosList.length)}
+                role={noEncontradosList.length > 0 ? 'button' : undefined}
+                tabIndex={noEncontradosList.length > 0 ? 0 : undefined}
+                onKeyDown={(e) => { if (noEncontradosList.length > 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle('noEncontrados', noEncontradosList.length); } }}
+              >
                 <div className={classes.statNumber}>{resultado.no_encontrados}</div>
                 <div className={classes.statLabel}>No encontrados</div>
-              </div>
-              <div className={`${classes.statBox} ${classes.statBoxYellow}`}>
-                <div className={classes.statNumber}>{resultado.omitidas_otro_periodo}</div>
-                <div className={classes.statLabel}>Omitidas (otro periodo)</div>
-                {(resultado.omitidas_detalle?.length ?? 0) > 0 && (
-                  <Button size="compact-xs" variant="subtle" color="dark" mt={4} onClick={() => setVerOmitidas(true)}>
-                    Ver omitidas
-                  </Button>
+                {noEncontradosList.length > 0 && (
+                  <div className={classes.statExtra}>
+                    {listaAbierta === 'noEncontrados' ? 'Ocultar lista' : 'Ver lista'}
+                  </div>
                 )}
               </div>
-              <div className={`${classes.statBox} ${classes.statBoxGray}`}>
+
+              <div className={`${classes.statBox} ${classes.statBoxYellow} ${listaAbierta === 'omitidas' ? classes.statBoxActive : ''}`}>
+                <div className={classes.statNumber}>{resultado.omitidas_otro_periodo}</div>
+                <div className={classes.statLabel}>Omitidas (otro periodo)</div>
+                {omitidasResumen.length > 0 && (
+                  <div className={classes.statExtra}>
+                    {omitidasResumen.map(([periodo, n]) => `${periodo}: ${n}`).join(' · ')}
+                  </div>
+                )}
+                {omitidasPeriodo.length > 0 && (
+                  <span
+                    className={classes.omitidasAviso}
+                    onClick={() => toggle('omitidas', omitidasPeriodo.length)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle('omitidas', omitidasPeriodo.length); } }}
+                  >
+                    {listaAbierta === 'omitidas' ? 'Ocultar' : `${omitidasPeriodo.length} alumno(s) de ${resultado.periodo} contestaron fuera del rango de fechas`}
+                  </span>
+                )}
+              </div>
+
+              <div
+                className={`${classes.statBox} ${classes.statBoxGray} ${repetidosDetalle.length > 0 ? classes.statBoxClickable : ''} ${listaAbierta === 'repetidos' ? classes.statBoxActive : ''}`}
+                onClick={() => toggle('repetidos', repetidosDetalle.length)}
+                role={repetidosDetalle.length > 0 ? 'button' : undefined}
+                tabIndex={repetidosDetalle.length > 0 ? 0 : undefined}
+                onKeyDown={(e) => { if (repetidosDetalle.length > 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle('repetidos', repetidosDetalle.length); } }}
+              >
                 <div className={classes.statNumber}>{resultado.intentos_repetidos_ignorados}</div>
-                <div className={classes.statLabel}>Intentos repetidos (se tomó el primero)</div>
+                <div className={classes.statLabel}>Repetidos (1er intento)</div>
+                {repetidosDetalle.length > 0 && (
+                  <div className={classes.statExtra}>
+                    {listaAbierta === 'repetidos' ? 'Ocultar lista' : 'Ver lista'}
+                  </div>
+                )}
               </div>
             </div>
+
+            {listaAbierta === 'noEncontrados' && (
+              <Card padding="md" radius="md" className={classes.expandCard}>
+                <div className={classes.listHeaderBar}>
+                  <Text fw={600} size="sm">
+                    Alumnos no encontrados ({noEncontradosList.length})
+                  </Text>
+                  <Group gap="sm">
+                    {nSugeridos > 0 && (
+                      <Button size="xs" variant="outline" color="green" onClick={onConfirmarTodos}>
+                        Confirmar todos los sugeridos ({nSugeridos})
+                      </Button>
+                    )}
+                    {correcciones.size > 0 && (
+                      <Button size="xs" variant="filled" color="blue" loading={aplicando} onClick={onAplicar}>
+                        Aplicar correcciones ({correcciones.size})
+                      </Button>
+                    )}
+                  </Group>
+                </div>
+                <ListaPaginada
+                  items={noEncontradosList}
+                  headers={['Nombre', 'Correo', 'Cuenta', 'Folio', 'Motivo', 'Acción']}
+                  getSearchText={(item) => `${item.nombre_original} ${item.correo ?? ''} ${item.cuenta ?? ''}`}
+                  renderRow={(item) => {
+                    const sugerido = buscarSugerido(item);
+                    const asignado = correcciones.has(item.indice);
+                    return (
+                      <tr key={item.indice}>
+                        <td className={classes.wrapCell}>{item.nombre_original || '—'}</td>
+                        <td className={classes.wrapCell}>{item.correo || '—'}</td>
+                        <td>{item.cuenta || '—'}</td>
+                        <td>{item.folio || '—'}</td>
+                        <td className={classes.wrapCell}>{item.motivo || '—'}</td>
+                        <td>
+                          {asignado ? (
+                            <Text size="xs" c="green" fw={600}>Asignado</Text>
+                          ) : (
+                            <Stack gap={4}>
+                              {sugerido && (
+                                <Group gap="xs" wrap="nowrap">
+                                  <Text size="xs" c="dimmed">
+                                    Sugerido: <strong>{sugerido.nombre}</strong> · {sugerido.cuenta}
+                                  </Text>
+                                  <Button size="compact-xs" variant="filled" color="green" onClick={() => onConfirmarSugerido(item)}>
+                                    Confirmar
+                                  </Button>
+                                </Group>
+                              )}
+                              <Button size="compact-xs" variant="subtle" color="blue" onClick={() => onCorregir(item)}>
+                                Corregir
+                              </Button>
+                            </Stack>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }}
+                />
+              </Card>
+            )}
+
+            {listaAbierta === 'omitidas' && (
+              <Card padding="md" radius="md" className={classes.expandCard}>
+                <Text fw={600} size="sm" mb="sm">
+                  Alumnos de {resultado.periodo} que contestaron fuera del rango de fechas ({omitidasPeriodo.length})
+                </Text>
+                <ListaPaginada
+                  items={omitidasPeriodo}
+                  headers={['Nombre', 'Correo', 'Fecha de respuesta']}
+                  getSearchText={(item) => `${item.nombre} ${item.correo ?? ''}`}
+                  renderRow={(item, idx) => (
+                    <tr key={idx}>
+                      <td className={classes.wrapCell}>{item.nombre || '—'}</td>
+                      <td className={classes.wrapCell}>{item.correo || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatFechaHora(item.fecha)}</td>
+                    </tr>
+                  )}
+                />
+              </Card>
+            )}
+
+            {listaAbierta === 'repetidos' && (
+              <Card padding="md" radius="md" className={classes.expandCard}>
+                <Text fw={600} size="sm" mb="sm">
+                  Intentos repetidos ignorados ({repetidosDetalle.length})
+                </Text>
+                <ListaPaginada
+                  items={repetidosDetalle}
+                  headers={['Nombre', 'Correo', 'Intento tomado', 'Intento ignorado']}
+                  getSearchText={(item) => `${item.nombre ?? ''} ${item.correo ?? ''}`}
+                  renderRow={(item, idx) => (
+                    <tr key={idx}>
+                      <td className={classes.wrapCell}>{item.nombre || '—'}</td>
+                      <td className={classes.wrapCell}>{item.correo || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatFechaHora(item.fecha_tomado)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{formatFechaHora(item.fecha_ignorado)}</td>
+                    </tr>
+                  )}
+                />
+              </Card>
+            )}
+
             <Group justify="space-between">
               {archivo && (
                 <Text size="xs" c="dimmed" className={classes.wrapCell}>
@@ -910,13 +1163,12 @@ function CuestionarioSection() {
     2: new Map(),
   });
   const [corrigiendoItem, setCorrigiendoItem] = useState<CuestionarioNoEncontrado | null>(null);
+  const [listaAbierta, setListaAbierta] = useState<{ cuestionario: 1 | 2; tipo: ListaTipo } | null>(null);
 
   const noEncontrados: CuestionarioNoEncontrado[] = [
     ...(resultadoC1?.no_encontrados_detalle ?? []),
     ...(resultadoC2?.no_encontrados_detalle ?? []),
   ];
-  const totalCorrecciones = correcciones[1].size + correcciones[2].size;
-  const nSugeridos = noEncontrados.filter((n) => n.candidatos.some((c) => c.sugerido)).length;
 
   const handleFile = useCallback(async (cuestionario: 1 | 2, file: File) => {
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
@@ -973,19 +1225,23 @@ function CuestionarioSection() {
     });
   };
 
-  const confirmarTodosSugeridos = () => {
+  const confirmarTodosSugeridos = (cuestionario: 1 | 2) => {
     setCorrecciones((prev) => {
       const next = { ...prev, 1: new Map(prev[1]), 2: new Map(prev[2]) };
-      noEncontrados.forEach((item) => {
-        const cand = sugeridoDe(item);
-        if (cand) next[item.cuestionario as 1 | 2].set(item.indice, cand.alumno_id);
-      });
+      noEncontrados
+        .filter((item) => Number(item.cuestionario) === cuestionario)
+        .forEach((item) => {
+          const cand = sugeridoDe(item);
+          if (cand) next[cuestionario].set(item.indice, cand.alumno_id);
+        });
       return next;
     });
   };
 
-  const aplicarCorrecciones = async () => {
-    const pendientes = ([1, 2] as const).filter((c) => correcciones[c].size > 0 && Boolean(archivos[c]));
+  const aplicarCorrecciones = async (solo?: 1 | 2) => {
+    const pendientes = ([1, 2] as const).filter(
+      (c) => correcciones[c].size > 0 && Boolean(archivos[c]) && (solo === undefined || c === solo),
+    );
     if (pendientes.length === 0) return;
     setAplicando(true);
     setError(null);
@@ -1030,6 +1286,15 @@ function CuestionarioSection() {
     }
   };
 
+  const toggleLista = (cuestionario: 1 | 2, tipo: ListaTipo, count: number) => {
+    if (count <= 0) return;
+    setListaAbierta((prev) =>
+      prev && prev.cuestionario === cuestionario && prev.tipo === tipo
+        ? null
+        : { cuestionario, tipo },
+    );
+  };
+
   return (
     <Stack gap="lg">
       <Group gap="md" wrap="wrap">
@@ -1053,6 +1318,15 @@ function CuestionarioSection() {
           archivo={archivos[1] ?? null}
           onUpload={handleFile}
           onReemplazar={reemplazarArchivo}
+          listaAbierta={listaAbierta?.cuestionario === 1 ? listaAbierta.tipo : null}
+          onToggleLista={(tipo, count) => toggleLista(1, tipo, count)}
+          correcciones={correcciones[1]}
+          nSugeridos={(resultadoC1?.no_encontrados_detalle ?? []).filter((n) => buscarSugerido(n)).length}
+          aplicando={aplicando}
+          onConfirmarSugerido={confirmarSugerido}
+          onConfirmarTodos={() => confirmarTodosSugeridos(1)}
+          onCorregir={setCorrigiendoItem}
+          onAplicar={() => aplicarCorrecciones(1)}
         />
         <TarjetaCuestionario
           cuestionario={2}
@@ -1063,6 +1337,15 @@ function CuestionarioSection() {
           archivo={archivos[2] ?? null}
           onUpload={handleFile}
           onReemplazar={reemplazarArchivo}
+          listaAbierta={listaAbierta?.cuestionario === 2 ? listaAbierta.tipo : null}
+          onToggleLista={(tipo, count) => toggleLista(2, tipo, count)}
+          correcciones={correcciones[2]}
+          nSugeridos={(resultadoC2?.no_encontrados_detalle ?? []).filter((n) => buscarSugerido(n)).length}
+          aplicando={aplicando}
+          onConfirmarSugerido={confirmarSugerido}
+          onConfirmarTodos={() => confirmarTodosSugeridos(2)}
+          onCorregir={setCorrigiendoItem}
+          onAplicar={() => aplicarCorrecciones(2)}
         />
       </SimpleGrid>
 
@@ -1081,83 +1364,6 @@ function CuestionarioSection() {
             </Button>
           </Group>
         </Alert>
-      )}
-
-      {noEncontrados.length > 0 && (
-        <Card padding="md" radius="md" className={classes.expandCard}>
-          <Group justify="space-between" mb="sm">
-            <Text fw={600} size="sm">
-              Alumnos no encontrados ({noEncontrados.length})
-            </Text>
-            <Group gap="sm">
-              {nSugeridos > 0 && (
-                <Button size="xs" variant="outline" color="green" onClick={confirmarTodosSugeridos}>
-                  Confirmar todos los sugeridos ({nSugeridos})
-                </Button>
-              )}
-              {totalCorrecciones > 0 && (
-                <Button size="xs" variant="filled" color="blue" loading={aplicando} onClick={aplicarCorrecciones}>
-                  Aplicar correcciones ({totalCorrecciones})
-                </Button>
-              )}
-            </Group>
-          </Group>
-          <div className={classes.scrollTable}>
-            <table className={classes.table}>
-              <thead>
-                <tr>
-                  <th>Correo</th>
-                  <th>Folio</th>
-                  <th>Cuenta</th>
-                  <th>Usuario</th>
-                  <th>Motivo</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {noEncontrados.map((item, idx) => {
-                  const sugerido = sugeridoDe(item);
-                  const asignado = correcciones[item.cuestionario as 1 | 2].has(item.indice);
-                  return (
-                    <tr key={`${item.cuestionario}-${idx}`}>
-                      <td className={classes.wrapCell}>{item.correo || '—'}</td>
-                      <td>{item.folio || '—'}</td>
-                      <td>{item.cuenta || '—'}</td>
-                      <td>
-                        <Group gap={6} wrap="nowrap">
-                          <Badge size="xs" variant="light" color="indigo">C{item.cuestionario}</Badge>
-                          <Text size="sm">{item.usuario || '—'}</Text>
-                        </Group>
-                      </td>
-                      <td className={classes.wrapCell}>{item.motivo || '—'}</td>
-                      <td>
-                        {asignado ? (
-                          <Text size="xs" c="green" fw={600}>Asignado</Text>
-                        ) : (
-                          <Stack gap={4}>
-                            {sugerido && (
-                              <Group gap="xs" wrap="nowrap">
-                                <Text size="xs" c="dimmed">
-                                  Sugerido: <strong>{sugerido.nombre}</strong> · {sugerido.cuenta}
-                                </Text>
-                                <Button size="compact-xs" variant="filled" color="green" onClick={() => confirmarSugerido(item)}>
-                                  Confirmar
-                                </Button>
-                              </Group>
-                            )}
-                            <Button size="compact-xs" variant="subtle" color="blue" onClick={() => setCorrigiendoItem(item)}>
-                              Corregir
-                            </Button>
-                          </Stack>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
       )}
 
       {noEncontrados.length === 0 &&

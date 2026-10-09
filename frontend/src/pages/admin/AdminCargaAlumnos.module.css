@@ -115,6 +115,63 @@
   margin-top: 2px;
 }
 
+.statBoxClickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+.statBoxClickable:hover {
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+}
+
+.statBoxActive {
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
+}
+
+.statExtra {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #667085;
+  line-height: 1.4;
+}
+
+.omitidasAviso {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b45309;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.listHeaderBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.listSearch {
+  margin-bottom: 0.5rem;
+}
+
+.paginationBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.paginationInfo {
+  font-size: 12px;
+  color: #667085;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

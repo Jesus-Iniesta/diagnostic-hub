@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,6 +89,15 @@ def _sin_acentos(texto: str) -> str:
     return "".join(
         c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn"
     )
+
+
+def _fecha_desde_ts(raw: object | None) -> str | None:
+    """Representación de una marca temporal para mostrar en el frontend."""
+    if isinstance(raw, (datetime, date)):
+        return raw.isoformat()
+    if raw is None or str(raw).strip() == "":
+        return None
+    return str(raw).strip()
 
 
 def detectar_columnas_cuestionario(headers: list) -> dict:
@@ -444,8 +454,11 @@ async def procesar_cuestionario(
     encontrados_cola: list[dict] = []
     no_encontrados: list[dict] = []
     omitidas_detalle: list[dict] = []
+    # Omitidas que sí corresponden a un alumno del periodo que se está cargando.
+    omitidas_periodo_detalle: list[dict] = []
     # Filas del periodo sin alumno ni candidato: se crean como provisionales.
     sin_registro: list[dict] = []
+    periodo_key = normalizar_periodo(periodo) or "".join(str(periodo).upper().split())
 
     for idx, row in enumerate(rows):
         ts = _obtener_timestamp(row, cols)
@@ -460,6 +473,20 @@ async def procesar_cuestionario(
         )
         if omitida is not None:
             omitidas_detalle.append(omitida)
+            info = alumno_details.get(alumno_id) if alumno_id is not None else None
+            registro_periodo = (
+                normalizar_periodo(str(info.get("periodo_ingreso") or ""))
+                if info
+                else None
+            )
+            if registro_periodo and registro_periodo == periodo_key:
+                omitidas_periodo_detalle.append(
+                    {
+                        "nombre": info["nombre"],
+                        "correo": emails[0] if emails else info["correo"],
+                        "fecha": _fecha_desde_ts(ts),
+                    }
+                )
             continue
 
         usuario_raw = _valor(row, cols["usuario"])
@@ -556,6 +583,8 @@ async def procesar_cuestionario(
     encontrados_cola.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
     vistos: set[int] = set()
     repetidos = 0
+    repetidos_detalle: list[dict] = []
+    ts_tomado: dict[int, object] = {}
     resultados: list[dict] = []
 
     for e in encontrados_cola:
@@ -569,8 +598,18 @@ async def procesar_cuestionario(
         )
         if e["alumno_id"] in vistos:
             repetidos += 1
+            info = alumno_details.get(e["alumno_id"], {})
+            repetidos_detalle.append(
+                {
+                    "nombre": info.get("nombre"),
+                    "correo": e["emails"][0] if e["emails"] else info.get("correo"),
+                    "fecha_tomado": _fecha_desde_ts(ts_tomado.get(e["alumno_id"])),
+                    "fecha_ignorado": _fecha_desde_ts(e["ts"]),
+                }
+            )
             continue
         vistos.add(e["alumno_id"])
+        ts_tomado[e["alumno_id"]] = e["ts"]
 
         aciertos, detalle = calcular_aciertos_cuestionario(
             e["row"], preguntas, respuestas_key, CUESTIONARIO_CODES[cuestionario]
@@ -597,7 +636,9 @@ async def procesar_cuestionario(
         "no_encontrados": len(no_encontrados),
         "omitidas_otro_periodo": len(omitidas_detalle),
         "omitidas_detalle": omitidas_detalle,
+        "omitidas_periodo_detalle": omitidas_periodo_detalle,
         "intentos_repetidos_ignorados": repetidos,
+        "repetidos_detalle": repetidos_detalle,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
         "alumnos_provisionales_creados": len(provisionales),
@@ -754,6 +795,8 @@ async def corregir_matching_cuestionario(
     correction_map = {c["indice"]: c["alumno_id"] for c in correcciones}
     resultados: list[dict] = []
     omitidas_detalle: list[dict] = []
+    omitidas_periodo_detalle: list[dict] = []
+    periodo_key = normalizar_periodo(periodo) or "".join(str(periodo).upper().split())
     candidatos: dict[int, list[tuple[int, object]]] = {}
     identificadores_fila: dict[int, tuple[list[str], list[str], list[str]]] = {}
 
@@ -769,6 +812,20 @@ async def corregir_matching_cuestionario(
         )
         if omitida is not None:
             omitidas_detalle.append(omitida)
+            info = alumno_details.get(emparejado) if emparejado is not None else None
+            registro_periodo = (
+                normalizar_periodo(str(info.get("periodo_ingreso") or ""))
+                if info
+                else None
+            )
+            if registro_periodo and registro_periodo == periodo_key:
+                omitidas_periodo_detalle.append(
+                    {
+                        "nombre": info["nombre"],
+                        "correo": emails[0] if emails else info["correo"],
+                        "fecha": _fecha_desde_ts(ts),
+                    }
+                )
             continue
         if idx not in correction_map:
             continue
@@ -826,7 +883,9 @@ async def corregir_matching_cuestionario(
         "no_encontrados": 0,
         "omitidas_otro_periodo": len(omitidas_detalle),
         "omitidas_detalle": omitidas_detalle,
+        "omitidas_periodo_detalle": omitidas_periodo_detalle,
         "intentos_repetidos_ignorados": 0,
+        "repetidos_detalle": [],
         "omitidas_ya_tenian_resultado": omitidas_ya_tenian_resultado,
         "resultados": resultados,
         "no_encontrados_detalle": [],
