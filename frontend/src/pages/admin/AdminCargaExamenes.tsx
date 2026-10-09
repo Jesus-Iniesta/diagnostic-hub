@@ -141,19 +141,29 @@ function DiagnosticoSection() {
   const noEncontradoActual = corrigiendoIdx !== null ? noEncontrados.find((n) => n.indice === corrigiendoIdx) : null;
   const nSugeridos = noEncontrados.filter((n) => n.candidatos.some((c) => c.sugerido)).length;
 
+  // Cada consulta lleva un número; solo se aplica la respuesta de la última,
+  // para que una respuesta lenta de un periodo anterior (p. ej. "2024" mientras
+  // se escribe "2024B") no tape a la del periodo actual.
+  const ultimaConsultaStatus = useRef(0);
+
   const loadStatus = useCallback(async () => {
+    const consulta = ++ultimaConsultaStatus.current;
     setLoadingStatus(true);
     try {
       const keys = await getRespuestaKeyStatus(periodo);
-      setMateriasConfig(keys);
+      if (consulta === ultimaConsultaStatus.current) setMateriasConfig(keys);
     } catch {
       // silently fail
     } finally {
-      setLoadingStatus(false);
+      if (consulta === ultimaConsultaStatus.current) setLoadingStatus(false);
     }
   }, [periodo]);
 
-  useEffect(() => { loadStatus(); }, [loadStatus]);
+  // Espera a que se deje de escribir el periodo antes de consultar.
+  useEffect(() => {
+    const t = setTimeout(() => { loadStatus(); }, 400);
+    return () => clearTimeout(t);
+  }, [loadStatus]);
 
   const allKeysConfigured = MATERIAS_ORDER.every((m) => materiasConfig[m]?.configurada);
   const allDone = MATERIAS_ORDER.every((m) => wizardResults.has(m));
