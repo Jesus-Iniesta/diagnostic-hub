@@ -295,11 +295,11 @@ export default function ProfesorResultados() {
                     placeholder="Seleccionar grupo"
                     data={grupos.map((g) => ({
                       value: String(g.id),
-                      label: `${g.nombre} (${g.materia_clave})`,
+                      label: g.materia_nombre ? `${g.nombre} - ${g.materia_nombre}` : g.nombre,
                     }))}
                     value={grupoId}
                     onChange={(value) => setGrupoId(value)}
-                    w={220}
+                    w={300}
                     size="md"
                     variant="default"
                     radius="md"
