@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_permission
 from app.models.alumno import Alumno
 from app.models.grupo import Grupo
 from app.models.ingenieria import Ingenieria
@@ -26,7 +26,13 @@ from app.schemas.grupo import (
 from app.services.reportes_service import resumen_creani_alumnos
 from app.services.upload_grupo_service import parse_profesor_excel
 
-router = APIRouter(prefix="/profesor", tags=["profesor-grupos"])
+# Solo profesor y administrador tienen este permiso; alumno y acreditador
+# reciben 403 en todas las rutas de /profesor/*.
+router = APIRouter(
+    prefix="/profesor",
+    tags=["profesor-grupos"],
+    dependencies=[Depends(require_permission("consultar_resultados_grupo"))],
+)
 
 
 @router.get("/materias", response_model=list[MateriaResponse])
