@@ -1,6 +1,11 @@
 import { ALUMNO_ME_URL } from '../config';
 import { apiFetch } from './api';
-import type { AlumnoPerfil, DatosContactoUpdate, DiagnosticoAlumnoResponse } from '../types/alumno';
+import type {
+  AlumnoPerfil,
+  CuestionarioAlumnoResponse,
+  DatosContactoUpdate,
+  DiagnosticoAlumnoResponse,
+} from '../types/alumno';
 
 const API_BASE = ALUMNO_ME_URL.replace('/me', '');
 
@@ -37,7 +42,7 @@ export async function fetchMiDiagnostico(periodo?: string): Promise<DiagnosticoA
         periodo: '',
         promedio: null,
         nivel_general: 'Sin datos',
-        retroalimentacion_general: 'Aún no tienes resultados de diagnóstico registrados.',
+        retroalimentacion_general: 'Aún no tienes resultados del examen final registrados.',
         materias: [
           { materia: 'algebra', nombre: 'Álgebra', puntaje: null, maximo: 10, nivel: 'Sin datos', retroalimentacion: '' },
           { materia: 'trigonometria', nombre: 'Trigonometría', puntaje: null, maximo: 10, nivel: 'Sin datos', retroalimentacion: '' },
@@ -49,6 +54,16 @@ export async function fetchMiDiagnostico(periodo?: string): Promise<DiagnosticoA
     throw new Error('No se pudieron cargar tus resultados');
   }
   return res.json() as Promise<DiagnosticoAlumnoResponse>;
+}
+
+/** Examen diagnóstico (cuestionarios 1 y 2); null si aún no hay resultados. */
+export async function fetchMiCuestionario(): Promise<CuestionarioAlumnoResponse | null> {
+  const res = await fetch(`${API_BASE}/me/cuestionario`, { credentials: 'include' });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error('No se pudieron cargar tus resultados del examen diagnóstico');
+  }
+  return res.json() as Promise<CuestionarioAlumnoResponse>;
 }
 
 export interface WebAssignMateriaResultado {

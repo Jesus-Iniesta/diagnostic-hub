@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.api.deps import DbSession
 from app.core.security import get_current_user, require_permission
 from app.models.alumno import Alumno
+from app.models.resultado_cuestionario_diagnostico import ResultadoCuestionarioDiagnostico
 from app.models.resultado_diagnostico import ResultadoDiagnostico
 from app.models.resultado_webassign import ResultadoWebAssign
 from app.models.user import User
@@ -13,6 +14,8 @@ from app.repositories.diagnostico_repository import DiagnosticoRepository
 from app.schemas.alumno import (
     AlumnoListResponse,
     AlumnoRead,
+    CuestionarioAlumnoResponse,
+    CuestionarioMateriaResultado,
     DiagnosticoAlumnoResponse,
     MateriaResultado,
 )
@@ -21,8 +24,10 @@ from app.services.feedback_service import (
     feedback_final,
     feedback_general,
     feedback_materia,
+    nivel_puntaje,
 )
 from app.services.pdf_service import generar_pdf_correo, generar_pdf_resultado
+from app.services.upload_diagnostico_service import normalizar_periodo
 
 router = APIRouter()
 
@@ -128,6 +133,59 @@ async def mi_diagnostico(
         promedio=resultado.promedio_diagnostico,
         nivel_general=nivel_gen,
         retroalimentacion_general=texto_gen,
+        materias=materias,
+    )
+
+
+@router.get(
+    "/me/cuestionario",
+    response_model=CuestionarioAlumnoResponse,
+    summary="Consultar mis resultados del examen diagnóstico (cuestionarios 1 y 2)",
+)
+async def mi_cuestionario(
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(Alumno).where(Alumno.usuario_id == current_user.id)
+    alumno = (await db.execute(stmt)).scalars().first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+
+    resultados = (await db.execute(
+        select(ResultadoCuestionarioDiagnostico).where(
+            ResultadoCuestionarioDiagnostico.alumno_id == alumno.id
+        )
+    )).scalars().all()
+    if not resultados:
+        raise HTTPException(
+            status_code=404, detail="No tienes resultados del examen diagnóstico registrados"
+        )
+    # El más reciente: por periodo (2026B > 2026A) y luego por actualización.
+    resultado = max(
+        resultados, key=lambda r: (normalizar_periodo(r.periodo) or "", r.updated_at)
+    )
+
+    materias: list[CuestionarioMateriaResultado] = []
+    for materia_key in ("algebra", "trigonometria", "geometria", "calculo"):
+        c1 = getattr(resultado, f"aciertos_c1_{materia_key}")
+        c2 = getattr(resultado, f"aciertos_c2_{materia_key}")
+        # Igual que en los reportes: (aciertos c1 + aciertos c2) * 0.5, sobre 10.
+        calificacion = None if c1 is None and c2 is None else ((c1 or 0) + (c2 or 0)) * 0.5
+        materias.append(CuestionarioMateriaResultado(
+            materia=materia_key,
+            nombre=MATERIAS_NOMBRES.get(materia_key, materia_key),
+            aciertos_c1=c1,
+            aciertos_c2=c2,
+            calificacion=calificacion,
+            nivel=nivel_puntaje(calificacion) if calificacion is not None else "Sin datos",
+        ))
+
+    calificaciones = [m.calificacion for m in materias if m.calificacion is not None]
+    promedio = round(sum(calificaciones) / len(calificaciones), 2) if calificaciones else None
+    return CuestionarioAlumnoResponse(
+        periodo=resultado.periodo,
+        promedio=promedio,
+        nivel_general=nivel_puntaje(promedio) if promedio is not None else "Sin datos",
         materias=materias,
     )
 

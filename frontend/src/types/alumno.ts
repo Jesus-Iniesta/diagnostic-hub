@@ -94,6 +94,25 @@ export interface DiagnosticoAlumnoResponse {
   materias: MateriaResultado[];
 }
 
+export interface CuestionarioMateriaResultado {
+  materia: string;
+  nombre: string;
+  aciertos_c1: number | null;
+  aciertos_c2: number | null;
+  preguntas_por_cuestionario: number;
+  calificacion: number | null;
+  maximo: number;
+  nivel: string;
+}
+
+/** Examen diagnóstico (cuestionarios 1 y 2). */
+export interface CuestionarioAlumnoResponse {
+  periodo: string;
+  promedio: number | null;
+  nivel_general: string;
+  materias: CuestionarioMateriaResultado[];
+}
+
 export interface WebAssignMateriaResultado {
   materia: string;
   nombre: string;

@@ -75,3 +75,23 @@ class DiagnosticoAlumnoResponse(BaseModel):
     nivel_general: str
     retroalimentacion_general: str
     materias: list[MateriaResultado]
+
+
+class CuestionarioMateriaResultado(BaseModel):
+    materia: str
+    nombre: str
+    aciertos_c1: int | None
+    aciertos_c2: int | None
+    preguntas_por_cuestionario: int = 10
+    calificacion: float | None
+    maximo: float = 10.0
+    nivel: str
+
+
+class CuestionarioAlumnoResponse(BaseModel):
+    """Examen diagnóstico (cuestionarios 1 y 2) del alumno."""
+
+    periodo: str
+    promedio: float | None
+    nivel_general: str
+    materias: list[CuestionarioMateriaResultado]
