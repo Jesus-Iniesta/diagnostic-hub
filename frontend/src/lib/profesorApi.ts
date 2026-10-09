@@ -80,19 +80,19 @@ export async function quitarAlumno(
 
 export async function fetchResumenGrupo(
   grupoId: number,
-  periodo: string,
+  periodo?: string,
 ): Promise<GrupoResumen> {
-  return fetchJson<GrupoResumen>(
-    `${API_BASE_URL}/profesor/grupos/${grupoId}/resumen?periodo=${encodeURIComponent(periodo)}`,
-  );
+  const params = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
+  return fetchJson<GrupoResumen>(`${API_BASE_URL}/profesor/grupos/${grupoId}/resumen${params}`);
 }
 
 export async function fetchEstadisticasGrupo(
   grupoId: number,
-  periodo: string,
+  periodo?: string,
 ): Promise<GrupoEstadisticas> {
+  const params = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
   return fetchJson<GrupoEstadisticas>(
-    `${API_BASE_URL}/profesor/grupos/${grupoId}/estadisticas?periodo=${encodeURIComponent(periodo)}`,
+    `${API_BASE_URL}/profesor/grupos/${grupoId}/estadisticas${params}`,
   );
 }
 
@@ -139,7 +139,7 @@ export async function fetchResumenGrupoLegacy(): Promise<ResumenGrupo> {
       };
     }
     const primero = grupos[0];
-    const resumen = await fetchResumenGrupo(primero.id, '2026B');
+    const resumen = await fetchResumenGrupo(primero.id);
     return {
       grupoCargado: true,
       nombreGrupo: resumen.nombre,
@@ -164,7 +164,7 @@ export async function fetchAlumnosGrupoLegacy(): Promise<AlumnoGrupo[]> {
   try {
     const grupos = await fetchMisGrupos();
     if (grupos.length === 0) return [];
-    const alumnos = await fetchAlumnosGrupo(grupos[0].id, '2026B');
+    const alumnos = await fetchAlumnosGrupo(grupos[0].id);
     return alumnos.map((a) => ({
       id: String(a.alumno_id),
       nombre: a.nombre,

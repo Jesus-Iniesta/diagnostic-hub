@@ -122,8 +122,8 @@ export default function ProfesorResultados() {
     let mounted = true;
     setCargandoAlumnos(true);
     void Promise.all([
-      fetchAlumnosGrupo(Number(grupoId), '2026B'),
-      fetchEstadisticasGrupo(Number(grupoId), '2026B').catch(() => null),
+      fetchAlumnosGrupo(Number(grupoId)),
+      fetchEstadisticasGrupo(Number(grupoId)).catch(() => null),
       fetchCreaniGrupo(Number(grupoId)).catch(() => null),
     ]).then(([alumnosData, stats, creaniData]) => {
       if (mounted) {

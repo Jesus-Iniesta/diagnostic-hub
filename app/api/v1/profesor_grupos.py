@@ -33,6 +33,14 @@ router = APIRouter(
 )
 
 
+async def _periodo_grupo(db: AsyncSession, grupo_id: int) -> str:
+    """Periodo con el que se inscribe a los alumnos en el grupo."""
+    periodo = await db.scalar(select(Grupo.periodo).where(Grupo.id == grupo_id))
+    if not periodo:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    return periodo
+
+
 @router.get("/materias", response_model=list[MateriaResponse])
 async def listar_materias(
     db: AsyncSession = Depends(get_db),
@@ -130,21 +138,9 @@ async def alumnos_grupo(
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
         raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
 
-    if periodo:
-        rows = await repo.get_grupo_alumno_with_diagnostico(grupo_id, periodo)
-    else:
-        alumnos = await repo.get_alumnos(grupo_id)
-        rows = []
-        for a in alumnos:
-            rows.append({
-                "alumno_id": a.id,
-                "nombre": f"{a.usuario.nombre} {a.usuario.apellido_paterno} {a.usuario.apellido_materno}",
-                "numero_cuenta": a.numero_cuenta or "",
-                "ingenieria_clave": a.ingenieria.clave if a.ingenieria else "",
-                "puntaje": None,
-                "nivel": None,
-            })
-
+    # Puntaje y nivel del examen final: el del periodo pedido o, si no se
+    # indica, el más reciente de cada alumno.
+    rows = await repo.get_grupo_alumno_with_diagnostico(grupo_id, periodo)
     return [GrupoAlumnoResponse(**r) for r in rows]
 
 
@@ -154,11 +150,11 @@ async def agregar_alumno(
     data: GrupoAlumnoAdd,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    periodo: str = "2026B",
 ) -> dict:
     repo = GrupoRepository(db)
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
         raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
+    periodo = await _periodo_grupo(db, grupo_id)
 
     alumno = await repo.find_alumno_by_cuenta(data.numero_cuenta)
     if not alumno:
@@ -195,7 +191,7 @@ async def resumen_grupo(
     grupo_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    periodo: str = "2026B",
+    periodo: str | None = None,
 ) -> GrupoResumen:
     repo = GrupoRepository(db)
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
@@ -210,7 +206,7 @@ async def estadisticas_grupo(
     grupo_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    periodo: str = "2026B",
+    periodo: str | None = None,
 ) -> GrupoEstadisticas:
     repo = GrupoRepository(db)
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
@@ -242,7 +238,6 @@ async def cargar_alumnos_excel(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    periodo: str = "2026B",
 ) -> dict:
     repo = GrupoRepository(db)
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
@@ -259,6 +254,7 @@ async def cargar_alumnos_excel(
 
     contents = await file.read()
     alumnos_data, errores = parse_profesor_excel(contents, file.filename)
+    periodo = await _periodo_grupo(db, grupo_id)
 
     # Solo se agregan alumnos que ya existen: se buscan por número de cuenta o
     # correo institucional, incluidos los aprendidos en otras cargas

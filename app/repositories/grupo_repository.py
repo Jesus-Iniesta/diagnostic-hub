@@ -9,6 +9,13 @@ from app.models.grupo import Grupo
 from app.models.grupo_alumno import grupo_alumno
 from app.models.grupo_profesor import grupo_profesor
 from app.models.resultado_diagnostico import ResultadoDiagnostico
+from app.services.upload_diagnostico_service import normalizar_periodo
+
+
+def _orden_reciente(resultado: ResultadoDiagnostico) -> tuple:
+    """Orden para elegir el examen final más reciente: por periodo (2026B >
+    2026A > 2025B) y, si empatan o no tienen formato, por última actualización."""
+    return (normalizar_periodo(resultado.periodo) or "", resultado.updated_at)
 
 
 class GrupoRepository:
@@ -125,8 +132,27 @@ class GrupoRepository:
         await self.db.flush()
         return result.rowcount > 0
 
+    async def resultados_examen_final(
+        self, alumno_ids: list[int], periodo: str | None = None
+    ) -> dict[int, ResultadoDiagnostico]:
+        """Examen final de cada alumno: el del periodo indicado o, sin periodo,
+        el más reciente que tenga."""
+        if not alumno_ids:
+            return {}
+        stmt = select(ResultadoDiagnostico).where(
+            ResultadoDiagnostico.alumno_id.in_(alumno_ids)
+        )
+        if periodo:
+            stmt = stmt.where(ResultadoDiagnostico.periodo == periodo)
+        por_alumno: dict[int, ResultadoDiagnostico] = {}
+        for r in (await self.db.execute(stmt)).scalars().all():
+            previo = por_alumno.get(r.alumno_id)
+            if previo is None or _orden_reciente(r) > _orden_reciente(previo):
+                por_alumno[r.alumno_id] = r
+        return por_alumno
+
     async def get_resumen(
-        self, grupo_id: int, periodo: str
+        self, grupo_id: int, periodo: str | None = None
     ) -> dict:
         grupo = await self.db.get(Grupo, grupo_id)
         nombre = grupo.nombre if grupo else ""
@@ -143,16 +169,9 @@ class GrupoRepository:
                 "alumnos_con_resultados": 0,
             }
 
-        alumno_ids = [a.id for a in alumnos]
-
-        result = await self.db.execute(
-            select(ResultadoDiagnostico).where(
-                ResultadoDiagnostico.alumno_id.in_(alumno_ids),
-                ResultadoDiagnostico.periodo == periodo,
-            )
+        diagnostico_map = await self.resultados_examen_final(
+            [a.id for a in alumnos], periodo
         )
-        diagnosticos = result.scalars().all()
-        diagnostico_map = {d.alumno_id: d for d in diagnosticos}
 
         evaluados = 0
         suma = 0.0
@@ -177,18 +196,12 @@ class GrupoRepository:
         }
 
     async def get_grupo_alumno_with_diagnostico(
-        self, grupo_id: int, periodo: str
+        self, grupo_id: int, periodo: str | None = None
     ) -> list[dict]:
         alumnos = await self.get_alumnos(grupo_id)
-        alumno_ids = [a.id for a in alumnos]
-
-        result = await self.db.execute(
-            select(ResultadoDiagnostico).where(
-                ResultadoDiagnostico.alumno_id.in_(alumno_ids),
-                ResultadoDiagnostico.periodo == periodo,
-            )
+        diagnostico_map = await self.resultados_examen_final(
+            [a.id for a in alumnos], periodo
         )
-        diagnostico_map = {d.alumno_id: d for d in result.scalars().all()}
 
         rows = []
         for alumno in alumnos:
@@ -237,7 +250,7 @@ class GrupoRepository:
         return result.scalars().first()
 
     async def get_estadisticas_grupo(
-        self, grupo_id: int, periodo: str
+        self, grupo_id: int, periodo: str | None = None
     ) -> dict:
         alumnos = await self.get_alumnos(grupo_id)
         alumno_ids = [a.id for a in alumnos]
@@ -260,15 +273,7 @@ class GrupoRepository:
                 },
             }
 
-        # Fetch diagnostic results
-        result = await self.db.execute(
-            select(ResultadoDiagnostico).where(
-                ResultadoDiagnostico.alumno_id.in_(alumno_ids),
-                ResultadoDiagnostico.periodo == periodo,
-            )
-        )
-        diagnosticos = result.scalars().all()
-        diagnostico_map = {d.alumno_id: d for d in diagnosticos}
+        diagnostico_map = await self.resultados_examen_final(alumno_ids, periodo)
 
         # Compute level distribution
         nivel_counts: dict[str, int] = {}

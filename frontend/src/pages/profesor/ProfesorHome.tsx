@@ -80,7 +80,7 @@ export default function ProfesorHome() {
         const grupos = await fetchMisGrupos();
         if (grupos.length > 0) {
           const [stats, creaniData] = await Promise.all([
-            fetchEstadisticasGrupo(grupos[0].id, '2026B'),
+            fetchEstadisticasGrupo(grupos[0].id),
             fetchCreaniGrupo(grupos[0].id).catch(() => null),
           ]);
           if (mounted) {

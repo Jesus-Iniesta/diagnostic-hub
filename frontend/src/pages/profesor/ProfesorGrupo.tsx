@@ -33,6 +33,7 @@ import {
   quitarAlumno,
   cargarAlumnosExcel,
 } from '../../lib/profesorApi';
+import { getCurrentPeriodo } from '../../lib/periodo';
 import type { Grupo, GrupoAlumno, CargaAlumnosResponse } from '../../types/profesor';
 import classes from './ProfesorGrupo.module.css';
 
@@ -46,7 +47,7 @@ export default function ProfesorGrupo() {
   const [showCrearModal, setShowCrearModal] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState('');
   const [nuevaMateria, setNuevaMateria] = useState('');
-  const [nuevoPeriodo, setNuevoPeriodo] = useState('2026B');
+  const [nuevoPeriodo, setNuevoPeriodo] = useState(getCurrentPeriodo());
   const [creando, setCreando] = useState(false);
 
   const [showAgregarModal, setShowAgregarModal] = useState(false);
@@ -85,7 +86,7 @@ export default function ProfesorGrupo() {
     setGrupoSeleccionado(grupo);
     setLoadingAlumnos(true);
     try {
-      const data = await fetchAlumnosGrupo(grupo.id, '2026B');
+      const data = await fetchAlumnosGrupo(grupo.id);
       setAlumnos(data);
     } catch {
       setAlumnos([]);
