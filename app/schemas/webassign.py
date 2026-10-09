@@ -24,6 +24,18 @@ class WebAssignNoEncontrado(BaseModel):
     candidatos: list[dict] = []
 
 
+class WebAssignFilaDuplicada(BaseModel):
+    alumno_id: int
+    nombre_completo: str
+    origen: str  # esta_carga | otra_carrera | carga_anterior
+    carrera_ignorada: str
+    indice_ignorada: int | None
+    avance_ignorada: float
+    carrera_conservada: str
+    indice_conservada: int | None
+    avance_conservada: float
+
+
 class ResultadoProcesamientoWebAssign(BaseModel):
     carrera: str
     periodo: str
@@ -32,6 +44,7 @@ class ResultadoProcesamientoWebAssign(BaseModel):
     no_encontrados: int
     resultados: list[WebAssignAlumnoResultado]
     no_encontrados_detalle: list[WebAssignNoEncontrado]
+    filas_duplicadas_ignoradas: list[WebAssignFilaDuplicada] = []
 
 
 class CorregirMatchingWebAssignItem(BaseModel):

@@ -30,6 +30,39 @@ EXERCISE_COLS = {
 
 CARRERAS = ["ICI", "ICO", "IEL", "IIA", "IME", "ISES"]
 
+CAMPOS_CALIFICACION = (
+    "algebra_trabajo",
+    "algebra_examen",
+    "trigonometria_trabajo",
+    "trigonometria_examen",
+    "geometria_trabajo",
+    "geometria_examen",
+)
+
+# De dónde viene el resultado que ya tenía el alumno en el periodo.
+ORIGEN_ESTA_CARGA = "esta_carga"
+ORIGEN_OTRA_CARRERA = "otra_carrera"
+ORIGEN_CARGA_ANTERIOR = "carga_anterior"
+
+
+def calcular_avance(scores: dict[str, float | None]) -> float:
+    """Suma de las 6 calificaciones de una fila; las vacías cuentan como 0."""
+    return round(sum(scores.get(c) or 0.0 for c in CAMPOS_CALIFICACION), 2)
+
+
+def debe_reemplazar(avance_nuevo: float, avance_previo: float, origen: str) -> bool:
+    """Decide si una fila sustituye el resultado que el alumno ya tenía.
+
+    Un alumno puede venir en dos filas (dos secciones o dos correos), en el
+    mismo archivo o en el de otra carrera: gana la fila con más avance y en
+    empate se queda la primera. Si el resultado es de una carga anterior de
+    la misma carrera, el archivo nuevo lo actualiza (pueden haber corregido
+    calificaciones), pero nunca con una fila vacía.
+    """
+    if origen == ORIGEN_CARGA_ANTERIOR:
+        return not (avance_nuevo == 0 and avance_previo > 0)
+    return avance_nuevo > avance_previo
+
 
 def clean_email(raw: str | None) -> str | None:
     return normalizar_correo(raw)
@@ -156,8 +189,11 @@ async def procesar_webassign(
     rows_data, _ = parse_webassign_excel(file_bytes, carrera)
 
     repo = WebAssignRepository(db)
-    resultados = []
+    resultados: dict[int, dict] = {}
     no_encontrados = []
+    filas_duplicadas: list[dict] = []
+    # alumno_id -> avance e índice de la fila que quedó guardada en esta carga
+    en_esta_carga: dict[int, dict] = {}
 
     for row in rows_data:
         email = row["email"]
@@ -200,6 +236,54 @@ async def procesar_webassign(
             v for v in scores.values() if v is not None
         ]
         promedio = round(sum(promedio_vals) / len(promedio_vals), 2) if promedio_vals else None
+        avance = calcular_avance(scores)
+
+        # ¿El alumno ya tiene resultado en el periodo? (otra fila de este
+        # archivo, el archivo de otra carrera o una carga anterior)
+        previo = en_esta_carga.get(alumno_id)
+        if previo is not None:
+            origen = ORIGEN_ESTA_CARGA
+            avance_previo = previo["avance"]
+            carrera_previa = carrera
+            indice_previo = previo["indice"]
+        else:
+            existente = await repo.get_resultado(alumno_id, periodo)
+            if existente is not None:
+                origen = (
+                    ORIGEN_CARGA_ANTERIOR
+                    if existente.carrera == carrera
+                    else ORIGEN_OTRA_CARRERA
+                )
+                avance_previo = calcular_avance(
+                    {c: getattr(existente, c) for c in CAMPOS_CALIFICACION}
+                )
+                carrera_previa = existente.carrera
+                indice_previo = None
+            else:
+                origen = None
+
+        if origen is not None:
+            reemplaza = debe_reemplazar(avance, avance_previo, origen)
+            if not reemplaza or origen != ORIGEN_CARGA_ANTERIOR:
+                ignorada = {
+                    "carrera": carrera_previa, "indice": indice_previo, "avance": avance_previo,
+                }
+                conservada = {"carrera": carrera, "indice": row["indice"], "avance": avance}
+                if not reemplaza:
+                    ignorada, conservada = conservada, ignorada
+                filas_duplicadas.append({
+                    "alumno_id": alumno_id,
+                    "nombre_completo": detail["nombre"],
+                    "origen": origen,
+                    "carrera_ignorada": ignorada["carrera"],
+                    "indice_ignorada": ignorada["indice"],
+                    "avance_ignorada": ignorada["avance"],
+                    "carrera_conservada": conservada["carrera"],
+                    "indice_conservada": conservada["indice"],
+                    "avance_conservada": conservada["avance"],
+                })
+            if not reemplaza:
+                continue
 
         await repo.upsert_resultado(
             alumno_id=alumno_id,
@@ -213,7 +297,9 @@ async def procesar_webassign(
             geometria_examen=scores["geometria_examen"],
         )
 
-        resultados.append({
+        # Una sola entrada por alumno: si otra fila de este archivo gana, la
+        # sustituye.
+        resultados[alumno_id] = {
             "alumno_id": alumno_id,
             "nombre_completo": detail["nombre"],
             "numero_cuenta": detail.get("cuenta"),
@@ -222,7 +308,8 @@ async def procesar_webassign(
             "carrera": carrera,
             **scores,
             "promedio": promedio,
-        })
+        }
+        en_esta_carga[alumno_id] = {"avance": avance, "indice": row["indice"]}
 
     return {
         "carrera": carrera,
@@ -230,6 +317,7 @@ async def procesar_webassign(
         "total_filas": len(rows_data),
         "encontrados": len(resultados),
         "no_encontrados": len(no_encontrados),
-        "resultados": resultados,
+        "resultados": list(resultados.values()),
         "no_encontrados_detalle": no_encontrados,
+        "filas_duplicadas_ignoradas": filas_duplicadas,
     }
