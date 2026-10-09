@@ -206,6 +206,12 @@ export default function AdminCargaAlumnos() {
   };
 
   const errorRows = resultado?.detalle.filter((r) => r.estado === 'error') ?? [];
+  // Hubo errores en el archivo y ninguna fila se guardó: se muestra en rojo.
+  const nadaProcesado =
+    resultado !== null &&
+    resultado.exitosos === 0 &&
+    resultado.duplicados === 0 &&
+    (resultado.errores > 0 || resultado.total_filas === 0);
 
   return (
     <>
@@ -287,12 +293,16 @@ export default function AdminCargaAlumnos() {
           {viewState === 'result' && resultado && (
             <Stack gap="lg">
               <Alert
-                color="green"
+                color={nadaProcesado ? 'red' : 'green'}
                 variant="light"
                 radius="md"
-                icon={<IconCircleCheck size={18} />}
+                icon={nadaProcesado ? <IconInfoCircle size={18} /> : <IconCircleCheck size={18} />}
               >
-                Archivo procesado correctamente.
+                {nadaProcesado
+                  ? resultado.total_filas === 0
+                    ? 'El archivo no tiene filas para procesar.'
+                    : 'No se guardó ninguna fila: todas tienen errores. Revisa el detalle.'
+                  : 'Archivo procesado correctamente.'}
               </Alert>
 
               <div className={classes.statsRow}>

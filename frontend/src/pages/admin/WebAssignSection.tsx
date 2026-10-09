@@ -103,12 +103,29 @@ export default function WebAssignSection() {
       )}
 
       {result && (
-        <Card withBorder p="xl">
+        <Card
+          withBorder
+          p="xl"
+          style={result.total_filas === 0 ? { borderColor: 'var(--mantine-color-red-5)' } : undefined}
+        >
           <Stack gap="md">
-            <Group>
-              <IconCheck size={20} color="var(--mantine-color-green-6)" />
-              <Title order={4}>Resultado del procesamiento</Title>
-            </Group>
+            {result.total_filas === 0 ? (
+              <Group>
+                <IconX size={20} color="var(--mantine-color-red-6)" />
+                <Title order={4} c="red">No se procesó ninguna fila</Title>
+              </Group>
+            ) : (
+              <Group>
+                <IconCheck size={20} color="var(--mantine-color-green-6)" />
+                <Title order={4}>Resultado del procesamiento</Title>
+              </Group>
+            )}
+            {result.total_filas === 0 && (
+              <Text size="sm" c="red">
+                El archivo no tiene filas de alumnos (se leen a partir de la fila 10). Revisa que sea
+                el reporte de WebAssign.
+              </Text>
+            )}
 
             <SimpleGrid cols={{ base: 2, sm: 4 }}>
               <div>

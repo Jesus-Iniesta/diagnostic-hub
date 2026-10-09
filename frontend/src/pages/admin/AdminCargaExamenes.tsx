@@ -426,9 +426,16 @@ function DiagnosticoSection() {
     return (
       <Stack gap="md">
         {res && !resultado && (
-          <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
-            {MATERIAS_LABELS[currentMateria]} ya fue procesado — {res.encontrados} alumnos, {res.no_encontrados} no encontrados.
-            Puedes subir otro archivo para reemplazar.
+          <Alert
+            color={res.total_filas === 0 ? 'red' : 'green'}
+            variant="light"
+            radius="md"
+            icon={res.total_filas === 0 ? <IconInfoCircle size={18} /> : <IconCircleCheck size={18} />}
+          >
+            {res.total_filas === 0
+              ? `El archivo de ${MATERIAS_LABELS[currentMateria]} no tenía filas para procesar.`
+              : `${MATERIAS_LABELS[currentMateria]} ya fue procesado — ${res.encontrados} alumnos, ${res.no_encontrados} no encontrados.`}
+            {' '}Puedes subir otro archivo para reemplazar.
           </Alert>
         )}
 
@@ -477,6 +484,11 @@ function DiagnosticoSection() {
               omitidas={resultado.omitidas_detalle ?? []}
               periodo={resultado.periodo}
             />
+            {resultado.total_filas === 0 && (
+              <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+                El archivo no tiene filas para procesar. Revisa que sea el archivo correcto.
+              </Alert>
+            )}
             <div className={classes.statsRow}>
               <div className={`${classes.statBox} ${classes.statBoxGray}`}>
                 <div className={classes.statNumber}>{resultado.total_filas}</div>
@@ -620,7 +632,12 @@ function DiagnosticoSection() {
                       : config?.configurada ? 'No procesado' : 'Sin respuestas'}
                   </Text>
                 </div>
-                {res && <IconCircleCheck size={20} color="green" />}
+                {res &&
+                  (res.total_filas === 0 ? (
+                    <IconInfoCircle size={20} color="red" />
+                  ) : (
+                    <IconCircleCheck size={20} color="green" />
+                  ))}
               </Group>
             </div>
           );
@@ -824,6 +841,11 @@ function TarjetaCuestionario({
               omitidas={resultado.omitidas_detalle ?? []}
               periodo={resultado.periodo}
             />
+            {resultado.total_filas === 0 && (
+              <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+                El archivo no tiene filas para procesar. Revisa que sea el archivo correcto.
+              </Alert>
+            )}
             <div className={classes.statsRow}>
               <div className={`${classes.statBox} ${classes.statBoxGreen}`}>
                 <div className={classes.statNumber}>{resultado.encontrados}</div>
@@ -1128,7 +1150,8 @@ function CuestionarioSection() {
         </Card>
       )}
 
-      {noEncontrados.length === 0 && (Boolean(resultadoC1) || Boolean(resultadoC2)) && (
+      {noEncontrados.length === 0 &&
+        [resultadoC1, resultadoC2].some((r) => r !== null && r.total_filas > 0) && (
         <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
           Todos los alumnos de los cuestionarios cargados fueron encontrados y quedaron guardados para el periodo {periodo}.
         </Alert>

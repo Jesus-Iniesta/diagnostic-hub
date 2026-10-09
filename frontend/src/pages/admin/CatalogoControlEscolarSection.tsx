@@ -74,9 +74,15 @@ export default function CatalogoControlEscolarSection() {
 
         {result && (
           <Stack gap="lg">
-            <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
-              Catálogo procesado: {result.total_filas} filas.
-            </Alert>
+            {result.total_filas === 0 ? (
+              <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+                La hoja &quot;Datos catalogo&quot; no tiene filas con correo o número de cuenta.
+              </Alert>
+            ) : (
+              <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
+                Catálogo procesado: {result.total_filas} filas.
+              </Alert>
+            )}
 
             <div className={classes.statsRow}>
               <div className={`${classes.statBox} ${classes.statBoxGreen}`}>

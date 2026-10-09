@@ -532,7 +532,17 @@ export default function ProfesorGrupo() {
             leftSection={<IconFileSpreadsheet size={16} />}
           />
           {resultadoCarga && (
-            <Alert color={resultadoCarga.ok ? 'green' : 'red'} variant="light">
+            <Alert
+              color={
+                !resultadoCarga.ok ||
+                (resultadoCarga.agregados === 0 &&
+                  resultadoCarga.duplicados_en_grupo === 0 &&
+                  (resultadoCarga.errores_archivo > 0 || resultadoCarga.total_en_archivo === 0))
+                  ? 'red'
+                  : 'green'
+              }
+              variant="light"
+            >
               <Text size="sm">
                 Total en archivo: {resultadoCarga.total_en_archivo} |
                 Agregados: {resultadoCarga.agregados} |
