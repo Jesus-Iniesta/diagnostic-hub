@@ -169,18 +169,18 @@ async def procesar_webassign(
         )
 
         if alumno_id is None:
+            # Nunca se asigna solo por nombre (hay homónimos): aunque haya un
+            # único candidato, se manda como sugerencia para que lo confirme
+            # el administrador.
             candidates = find_candidates_legacy(nombre_normalizado, alumno_details)
-            if len(candidates) == 1:
-                alumno_id = candidates[0]["alumno_id"]
-            else:
-                no_encontrados.append({
-                    "nombre_original": nombre_original,
-                    "correo": email,
-                    "motivo": "No se encontró alumno con email",
-                    "candidatos": candidates,
-                    "indice": row["indice"],
-                })
-                continue
+            no_encontrados.append({
+                "nombre_original": nombre_original,
+                "correo": email,
+                "motivo": "No se encontró alumno con email",
+                "candidatos": candidates,
+                "indice": row["indice"],
+            })
+            continue
 
         # Si es un alumno provisional sin nombre, toma el de WebAssign.
         await completar_nombre_si_falta(
