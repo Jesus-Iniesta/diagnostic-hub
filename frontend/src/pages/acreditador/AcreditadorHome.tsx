@@ -191,7 +191,7 @@ export default function AcreditadorHome() {
                       </Group>
                       <SimpleGrid cols={2}>
                         <div>
-                          <Text size="xs" c="dimmed">Diagnósticos</Text>
+                          <Text size="xs" c="dimmed">Exámenes finales</Text>
                           <Text fw={700} size="xl">{lic.diagnosticos}</Text>
                         </div>
                         <div>

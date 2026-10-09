@@ -62,7 +62,7 @@ const STAT_CONFIGS: StatConfig[] = [
     color: dashboardColors.orange,
     lightColor: dashboardColors.orangeLight,
     title: 'Evaluaciones',
-    description: 'Diagnósticos en el periodo',
+    description: 'Exámenes finales en el periodo',
     getValue: (s) => s.evaluaciones_diagnostico,
   },
   {

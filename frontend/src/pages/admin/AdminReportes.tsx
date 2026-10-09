@@ -170,7 +170,7 @@ export default function AdminReportes() {
 
             <SimpleGrid cols={{ base: 2, sm: 3 }}>
               <div>
-                <Text size="xs" c="dimmed">Diagnósticos</Text>
+                <Text size="xs" c="dimmed">Exámenes finales</Text>
                 <Text fw={700} size="xl">{stats.diagnosticos}</Text>
               </div>
               <div>
