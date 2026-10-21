@@ -286,7 +286,8 @@ export default function IndiceFiSection() {
             <NumberInput
               key={key}
               label={label}
-              value={valores[key]}
+              // Sin asistencia se ve 0; el valor guardado no cambia.
+              value={key === 'asistencia' && !usarAsistencia ? 0 : valores[key]}
               onChange={(v) => setValor(key, v)}
               min={0}
               step={0.5}
@@ -307,13 +308,13 @@ export default function IndiceFiSection() {
           {fmtValor(maximo)}. El comentario aparece en la carta del alumno; da clic para editarlo.
         </Text>
 
-        <Table.ScrollContainer minWidth={640} mt="xs">
+        <Table.ScrollContainer minWidth={720} mt="xs">
           <Table verticalSpacing={6} className={classes.tablaCategorias}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th w={180}>Nombre</Table.Th>
-                <Table.Th w={100}>Mínimo</Table.Th>
-                <Table.Th w={100}>Máximo</Table.Th>
+                <Table.Th w={190}>Nombre</Table.Th>
+                <Table.Th w={120}>Mínimo</Table.Th>
+                <Table.Th w={120}>Máximo</Table.Th>
                 <Table.Th>Comentario</Table.Th>
                 <Table.Th w={44} />
               </Table.Tr>
@@ -357,7 +358,7 @@ export default function IndiceFiSection() {
                           aria-label={`Máximo de ${c.nombre || 'la categoría'}`}
                         />
                       </Table.Td>
-                      <Table.Td className={classes.celdaComentario}>
+                      <Table.Td>
                         <UnstyledButton
                           className={classes.comentario}
                           onClick={() => setComentarioId(c.id)}

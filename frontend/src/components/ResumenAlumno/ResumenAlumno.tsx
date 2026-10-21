@@ -3,14 +3,13 @@ import { IconInfoCircle } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
 import { fetchMiPerfil } from '../../lib/alumnoApi';
+import { obligatoriosFaltantes } from '../../lib/datosContacto';
 import type { AlumnoPerfil } from '../../types/alumno';
 import classes from './ResumenAlumno.module.css';
 
 interface Dato {
   label: string;
   value: string | null;
-  /** Los mismos que pide el formulario para terminar el registro. */
-  obligatorio?: boolean;
 }
 
 function siNo(valor: boolean | null): string | null {
@@ -89,13 +88,13 @@ export default function ResumenAlumno() {
     .join(' ');
 
   const principales: Dato[] = [
-    { label: 'Nombre completo', value: nombreCompleto || null, obligatorio: true },
-    { label: 'Número de cuenta', value: perfil.numero_cuenta, obligatorio: true },
-    { label: 'Ingeniería', value: perfil.ingenieria?.nombre ?? null, obligatorio: true },
+    { label: 'Nombre completo', value: nombreCompleto || null },
+    { label: 'Número de cuenta', value: perfil.numero_cuenta },
+    { label: 'Ingeniería', value: perfil.ingenieria?.nombre ?? null },
     { label: 'Periodo', value: perfil.periodo_ingreso || null },
   ];
   const contacto: Dato[] = [
-    { label: 'Correo personal', value: u.correo_personal, obligatorio: true },
+    { label: 'Correo personal', value: u.correo_personal },
     { label: 'Correo institucional', value: u.correo_institucional },
   ];
   const academicos: Dato[] = [
@@ -113,11 +112,8 @@ export default function ResumenAlumno() {
     { label: 'Vulnerabilidad económica', value: siNo(perfil.vulnerabilidad_economica) },
   ];
 
-  // Solo cuentan los obligatorios; el nombre está pendiente si le falta alguna parte.
-  const nombreIncompleto = !u.nombre || !u.apellido_paterno || !u.apellido_materno;
-  const faltan = [...principales, ...contacto].filter(
-    (d) => d.obligatorio && (d.label === 'Nombre completo' ? nombreIncompleto : !d.value),
-  ).length;
+  // Lo mismo que cuenta el formulario: solo los obligatorios.
+  const faltan = obligatoriosFaltantes(perfil).length;
 
   return (
     <Card className={classes.card} padding="xl" radius="lg">

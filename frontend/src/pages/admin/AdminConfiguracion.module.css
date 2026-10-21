@@ -81,14 +81,15 @@
   white-space: nowrap;
 }
 
+/* Anchos fijos: el comentario toma lo que sobra y no le quita espacio a
+   nombre, mínimo y máximo. */
+.tablaCategorias {
+  table-layout: fixed;
+}
+
 .tablaCategorias th {
   font-size: 12.5px;
   color: #667085;
-}
-
-.celdaComentario {
-  max-width: 0;
-  width: 100%;
 }
 
 /* Comentario en una sola línea recortada; al dar clic se edita en un modal. */
