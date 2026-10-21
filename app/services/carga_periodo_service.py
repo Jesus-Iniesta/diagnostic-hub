@@ -141,6 +141,10 @@ async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
         "total_filas": r["total_filas"],
         "encontrados": r["encontrados"],
         "registrados_nuevos": r.get("registrados_nuevos", 0),
+        # Filas de otro periodo y filas repetidas del mismo alumno (se queda una).
+        "omitidas": r.get("omitidas_otro_periodo", 0),
+        "repetidos": r.get("intentos_repetidos_ignorados", len(r.get("filas_duplicadas_ignoradas", []))),
+        "unidos_por_nombre": r.get("unidos_por_nombre", 0),
         "no_registrados": r["no_encontrados"],
         # Filas que no se pudieron registrar; las de cuestionarios y finales se
         # pueden asignar a mano con corregir_archivo.

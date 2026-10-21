@@ -73,9 +73,19 @@ async def prueba_db():
                   (len(r["no_registrados_detalle"]), r["corregible"]), (1, True))
             estado = await carga.estado_periodo(db, PERIODO)
             check("estado: procesado", estado["procesado"], True)
-            check("estado: por revisar (2 duplicados + 1 sin cuenta + 1 fila)",
+            check("estado: por revisar (1 pareja de duplicados + 1 sin cuenta + 1 fila)",
                   (estado["por_revisar"]["posibles_duplicados"], estado["por_revisar"]["sin_cuenta"],
-                   estado["por_revisar"]["no_registradas"]), (2, 1, 1))
+                   estado["por_revisar"]["no_registradas"]), (1, 1, 1))
+            from app.services.alumnos_admin_service import revision_periodo
+
+            rev = await revision_periodo(db, PERIODO)
+            check("revisión: 2 alumnos con examen", rev["alumnos_del_periodo"] >= 2, True)
+            mias = [p for p in rev["posibles_duplicados"] if p["alumno"]["correo_personal"].startswith(P)]
+            check("revisión: la pareja lado a lado",
+                  sorted((mias[0]["alumno"]["correo_personal"], mias[0]["otro"]["correo_personal"])) if mias else None,
+                  [f"{P}.a@gmail.com", f"{P}.b@gmail.com"])
+            check("revisión: el sin cuenta ya está en la pareja",
+                  any(f["correo_personal"] == f"{P}.b@gmail.com" for f in rev["sin_cuenta"]), False)
             check("estado: CREANI aún no", estado["creani_descargado"], False)
             await carga.marcar_creani_descargado(db, PERIODO)
             check("estado: CREANI descargado", (await carga.estado_periodo(db, PERIODO))["creani_descargado"], True)

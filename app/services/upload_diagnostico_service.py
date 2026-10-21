@@ -548,6 +548,7 @@ async def load_all_alumnos(
             folio_map[alumno.numero_folio] = alumno.id
         alumno_details[alumno.id] = {
             "nombre": f"{user.nombre} {user.apellido_paterno} {user.apellido_materno}",
+            "partes": (user.nombre or "", user.apellido_paterno or "", user.apellido_materno or ""),
             "cuenta": alumno.numero_cuenta,
             "folio": alumno.numero_folio,
             "correo": user.correo_personal,

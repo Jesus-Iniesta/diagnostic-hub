@@ -3,19 +3,25 @@ import unicodedata
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.alumno import Alumno
+from app.models.user import User
 from app.repositories.webassign_repository import WebAssignRepository
 from app.services.alumnos_provisionales import nombre_desde_webassign
+from app.services.alumnos_provisionales_service import marcar_posible_duplicado
+from app.services.emparejar_nombre import IDENTICO, buscar_por_nombre, es_institucional
 from app.services.excel_utils import como_xlrd, leer_hoja
 from app.services.identificadores_service import RegistroIdentificadores
 from app.services.normalizacion import normalizar_correo, normalizar_nombre
 from app.services.registro_automatico_service import (
     MOTIVO_SIN_IDENTIFICADORES,
     RegistroAutomatico,
+    buscar_por_identificadores,
     guardar_filas_no_registradas,
 )
 from app.services.upload_diagnostico_service import (
     find_candidates_legacy,
     load_all_alumnos,
+    normalizar_periodo,
 )
 
 logger = logging.getLogger(__name__)
@@ -184,6 +190,39 @@ def parse_webassign_name(raw_name: str) -> tuple[str, str]:
     return name
 
 
+def candidatos_del_periodo(alumno_details: dict[int, dict], periodo: str) -> dict[int, dict]:
+    """Alumnos que ingresaron en el periodo (con quienes se compara el nombre)."""
+    clave = normalizar_periodo(periodo) or "".join(periodo.upper().split())
+    candidatos = {}
+    for aid, d in alumno_details.items():
+        p = str(d.get("periodo_ingreso") or "")
+        if (normalizar_periodo(p) or "".join(p.upper().split())) == clave:
+            candidatos[aid] = d
+    return candidatos
+
+
+async def guardar_correo_webassign(
+    db: AsyncSession,
+    registro: RegistroIdentificadores,
+    alumno_id: int,
+    correo: str | None,
+    indice: int,
+) -> None:
+    """Guarda el correo de WebAssign del alumno encontrado por nombre.
+
+    Queda como identificador (las siguientes cargas lo encuentran por correo) y,
+    si es el institucional y el alumno no lo tenía, también en su registro.
+    """
+    if not correo:
+        return
+    await registro.registrar(alumno_id, correos=[correo], indice=indice)
+    if es_institucional(correo) and registro.email_map.get(correo) == alumno_id:
+        alumno = await db.get(Alumno, alumno_id)
+        user = await db.get(User, alumno.usuario_id)
+        if not user.correo_institucional:
+            user.correo_institucional = correo
+
+
 async def procesar_webassign(
     db: AsyncSession,
     file_bytes: bytes,
@@ -207,6 +246,8 @@ async def procesar_webassign(
     resultados: dict[int, dict] = {}
     no_encontrados = []
     filas_duplicadas: list[dict] = []
+    unidos_por_nombre: list[dict] = []
+    posibles_duplicados = 0
     # alumno_id -> avance e índice de la fila que quedó guardada en esta carga
     en_esta_carga: dict[int, dict] = {}
 
@@ -215,15 +256,36 @@ async def procesar_webassign(
         nombre_original = row["nombre_original"]
         nombre_normalizado = parse_webassign_name(nombre_original)
 
-        # Si no existe (por correo o identificadores guardados) se registra con
-        # el correo, el nombre de Fullname y la carrera. Nunca se empareja por
-        # nombre (hay homónimos).
-        alumno_id = await registrador.buscar_o_registrar(
-            correos=[email],
-            nombre=nombre_desde_webassign(nombre_original),
-            ingenieria=carrera,
-            indice=row["indice"],
+        # Por correo (o identificadores guardados); si no, por nombre idéntico
+        # y único en el periodo. Si tampoco, se registra con el correo, el
+        # nombre de Fullname y la carrera, y los parecidos quedan como posibles
+        # duplicados (ver emparejar_nombre.py).
+        alumno_id = buscar_por_identificadores(
+            [email], (), (), registro.email_map, registro.cuenta_map, registro.folio_map
         )
+        parecidos: list[int] = []
+        motivo_parecido = None
+        if alumno_id is None:
+            tipo, ids, motivo_parecido = buscar_por_nombre(
+                nombre_original, email, candidatos_del_periodo(alumno_details, periodo)
+            )
+            if tipo == IDENTICO:
+                alumno_id = ids[0]
+                await guardar_correo_webassign(db, registro, alumno_id, email, row["indice"])
+                unidos_por_nombre.append({"alumno_id": alumno_id, "nombre": nombre_original, "correo": email})
+            else:
+                parecidos = ids
+        if alumno_id is None:
+            alumno_id = await registrador.buscar_o_registrar(
+                correos=[email],
+                nombre=nombre_desde_webassign(nombre_original),
+                ingenieria=carrera,
+                indice=row["indice"],
+            )
+            if alumno_id is not None:
+                for otro in parecidos:
+                    if await marcar_posible_duplicado(db, alumno_id, otro, motivo_parecido):
+                        posibles_duplicados += 1
 
         if alumno_id is None:
             # Solo sugerencias para revisar a mano; no se asignan solas.
@@ -354,6 +416,9 @@ async def procesar_webassign(
         "resultados": list(resultados.values()),
         "no_encontrados_detalle": no_encontrados,
         "filas_duplicadas_ignoradas": filas_duplicadas,
+        "unidos_por_nombre": len(unidos_por_nombre),
+        "unidos_por_nombre_detalle": unidos_por_nombre,
+        "posibles_duplicados": posibles_duplicados,
         **registrador.resumen(),
         **registro.resumen(),
     }

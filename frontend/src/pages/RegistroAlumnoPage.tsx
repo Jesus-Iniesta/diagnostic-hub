@@ -79,6 +79,7 @@ export default function RegistroAlumnoPage() {
       apellidoMaterno: '',
       correoPersonal: '',
       correoPersonalConfirmacion: '',
+      correoInstitucional: '',
       numeroCuenta: '',
       numeroCuentaConfirmacion: '',
       numeroFolio: '',
@@ -107,6 +108,11 @@ export default function RegistroAlumnoPage() {
       correoPersonalConfirmacion: (v, values) => {
         if (!v.trim()) return 'Confirma tu correo personal';
         if (v.trim() !== values.correoPersonal.trim()) return 'Los correos no coinciden';
+        return null;
+      },
+      correoInstitucional: (v) => {
+        if (!v.trim()) return null;
+        if (!EMAIL_REGEX.test(v.trim())) return 'Ingresa un correo válido';
         return null;
       },
       numeroCuenta: (v) => {
@@ -170,7 +176,7 @@ export default function RegistroAlumnoPage() {
 
   const stepFields: Record<number, string[]> = {
     0: ['nombre', 'apellidoPaterno', 'apellidoMaterno'],
-    1: ['correoPersonal', 'correoPersonalConfirmacion'],
+    1: ['correoPersonal', 'correoPersonalConfirmacion', 'correoInstitucional'],
     2: tieneCuenta === 'no'
       ? ['numeroFolio', 'numeroFolioConfirmacion']
       : ['numeroCuenta', 'numeroCuentaConfirmacion'],
@@ -205,6 +211,7 @@ export default function RegistroAlumnoPage() {
         apellido_paterno: values.apellidoPaterno.trim(),
         apellido_materno: values.apellidoMaterno.trim(),
         correo_personal: values.correoPersonal.trim(),
+        correo_institucional: values.correoInstitucional.trim() || null,
         numero_cuenta: tieneCuenta === 'si' ? values.numeroCuenta.trim() : null,
         numero_folio: values.numeroFolio.trim() || null,
         ingenieria_id: Number(values.ingenieriaId),
@@ -367,6 +374,13 @@ export default function RegistroAlumnoPage() {
                   withAsterisk
                   size="md"
                   {...form.getInputProps('correoPersonalConfirmacion')}
+                />
+                <TextInput
+                  label="Correo institucional (opcional)"
+                  placeholder="usuario@alumno.uaemex.mx"
+                  description="Si ya tienes uno, escríbelo: así encontramos tus exámenes."
+                  size="md"
+                  {...form.getInputProps('correoInstitucional')}
                 />
               </Stack>
             )}

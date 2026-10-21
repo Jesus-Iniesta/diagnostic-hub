@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '../config';
 import type { CandidatoCoincidencia } from '../types/cuestionario';
+import type { AlumnoAdmin, ParejaDuplicada } from './alumnosAdminApi';
 import { apiFetch } from './api';
 
 const URL_BASE = `${API_BASE_URL}/carga-periodo`;
@@ -49,6 +50,12 @@ export interface ResumenArchivo {
   total_filas: number;
   encontrados: number;
   registrados_nuevos: number;
+  /** Filas de otro periodo. */
+  omitidas: number;
+  /** Filas repetidas del mismo alumno (se queda una). */
+  repetidos: number;
+  /** WebAssign: encontrados por nombre idéntico. */
+  unidos_por_nombre: number;
   no_registrados: number;
   no_registrados_detalle: FilaNoRegistrada[];
   /** Cuestionarios y finales: sus filas se pueden asignar a mano. */
@@ -58,6 +65,20 @@ export interface ResumenArchivo {
 export interface ResultadoJuntar {
   juntados: number;
   detalle: Array<{ alumno_id: number; eliminado_id: number; nombre: string; examen: string }>;
+}
+
+/** Recuadros al terminar "Procesar todo". */
+export interface RevisionPeriodo {
+  periodo: string;
+  /** Alumnos con algún examen en el periodo. */
+  alumnos_del_periodo: number;
+  posibles_duplicados: ParejaDuplicada[];
+  /** Sin número de cuenta y que no están en una pareja. */
+  sin_cuenta: AlumnoAdmin[];
+}
+
+export function obtenerRevision(periodo: string): Promise<RevisionPeriodo> {
+  return apiFetch<RevisionPeriodo>(`${URL_BASE}/revision?periodo=${encodeURIComponent(periodo)}`);
 }
 
 export function listarArchivos(periodo: string): Promise<ArchivoGuardado[]> {

@@ -16,6 +16,7 @@ from app.services.alumnos_provisionales import (
 )
 from app.services.alumnos_provisionales_service import completar_provisional_con_padron
 from app.services.normalizacion import normalizar_correo, normalizar_nombre
+from app.services.unir_alumnos_service import UnionError, unir_alumnos
 from app.services.upload_diagnostico_service import load_all_alumnos
 
 USER_FIELDS = {"nombre", "apellido_paterno", "apellido_materno", "correo_personal", "correo_institucional"}
@@ -120,6 +121,11 @@ class RegistroAlumnoRepository:
     async def create(self, data: RegistroAlumnoCreate) -> Alumno:
         await self._get_ingenieria(data.ingenieria_id)
         correo_personal = normalizar_correo(data.correo_personal) or data.correo_personal
+        correo_inst = (
+            normalizar_correo(data.correo_institucional) or data.correo_institucional
+            if data.correo_institucional
+            else None
+        )
 
         email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(self.db)
         provisionales = {aid for aid, d in alumno_details.items() if d.get("provisional")}
@@ -128,6 +134,7 @@ class RegistroAlumnoRepository:
                 "cuenta": cuenta_map.get(data.numero_cuenta) if data.numero_cuenta else None,
                 "folio": folio_map.get(data.numero_folio) if data.numero_folio else None,
                 "correo": email_map.get(correo_personal),
+                "correo_institucional": email_map.get(correo_inst) if correo_inst else None,
             },
             provisionales,
         )
@@ -138,16 +145,26 @@ class RegistroAlumnoRepository:
         if destino == COMPLETAR:
             # Ya presentó exámenes sin estar registrado: existe como alumno
             # provisional y se completa ese mismo registro (conserva sus
-            # calificaciones). Si sus datos apuntaban a otro provisional más, no
-            # se adivina: queda como posible duplicado para el administrador.
+            # calificaciones). Si sus datos apuntan a varios provisionales, son
+            # la misma persona registrada desde distintos exámenes: se juntan
+            # todos en uno (pasan resultados e identificadores).
+            for otro in otros:
+                try:
+                    await unir_alumnos(self.db, alumno_id, otro)
+                except UnionError:
+                    # No se pueden juntar solos: que lo revise el administrador.
+                    self._posible_duplicado(
+                        alumno_id, otro, "Sus datos de registro coinciden con los dos"
+                    )
+                    continue
+                for mapa in (email_map, cuenta_map, folio_map):
+                    for k, v in mapa.items():
+                        if v == otro:
+                            mapa[k] = alumno_id
             await self._completar_provisional(
-                data, correo_personal, alumno_id,
+                data, correo_personal, correo_inst, alumno_id,
                 email_map, cuenta_map, folio_map, alumno_details,
             )
-            for otro in otros:
-                self._posible_duplicado(
-                    alumno_id, otro, "Sus datos de registro coinciden con los dos"
-                )
             await self.db.commit()
             alumno = await self.db.get(Alumno, alumno_id)
             return await self._fetch_or_raise(alumno.usuario_id)
@@ -162,6 +179,10 @@ class RegistroAlumnoRepository:
             raise HTTPException(
                 status_code=409, detail="El correo personal ya está registrado"
             )
+        if correo_inst and await self._existe_correo(correo_inst):
+            raise HTTPException(
+                status_code=409, detail="El correo institucional ya está registrado"
+            )
 
         role = await self._get_alumno_role()
 
@@ -170,6 +191,7 @@ class RegistroAlumnoRepository:
             apellido_paterno=data.apellido_paterno,
             apellido_materno=data.apellido_materno,
             correo_personal=correo_personal,
+            correo_institucional=correo_inst,
             auth_method=AuthMethod.NUMERO_CUENTA,
             activo=True,
             role_id=role.id,
@@ -220,6 +242,7 @@ class RegistroAlumnoRepository:
         self,
         data: RegistroAlumnoCreate,
         correo_personal: str,
+        correo_inst: str | None,
         alumno_id: int,
         email_map: dict[str, int],
         cuenta_map: dict[str, int],
@@ -234,7 +257,7 @@ class RegistroAlumnoRepository:
             ap_paterno=data.apellido_paterno,
             ap_materno=data.apellido_materno,
             correo=correo_personal,
-            correo_inst=None,
+            correo_inst=correo_inst,
             num_cuenta=data.numero_cuenta,
             num_folio=data.numero_folio,
             ingenieria_id=data.ingenieria_id,

@@ -11,6 +11,8 @@ class RegistroAlumnoBase(BaseModel):
     apellido_paterno: str = Field(min_length=1)
     apellido_materno: str = Field(min_length=1)
     correo_personal: EmailStr
+    # Opcional: sirve para encontrar al alumno si WebAssign lo trae con él.
+    correo_institucional: EmailStr | None = None
 
     # --- Datos del formulario (Alumno) ---
     numero_cuenta: str | None = Field(default=None, pattern=NUMERO_CUENTA_PATTERN)

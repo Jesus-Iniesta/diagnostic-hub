@@ -10,6 +10,7 @@ from app.services.alumnos_admin_service import (
     actualizar_datos,
     listar_alumnos,
     obtener_alumno,
+    posibles_duplicados,
 )
 from app.services.unir_alumnos_service import UnionError, unir_alumnos
 
@@ -42,6 +43,15 @@ async def get_alumnos(
     return await listar_alumnos(
         db, busqueda=busqueda, periodo=periodo, filtro=filtro, limit=limit, offset=offset
     )
+
+
+@router.get("/duplicados", summary="Parejas de posibles duplicados, lado a lado")
+async def get_duplicados(
+    db: DbSession,
+    periodo: str | None = Query(default=None),
+    _current_user: User = Depends(require_permission("administrar_sistema")),
+):
+    return await posibles_duplicados(db, periodo)
 
 
 @router.patch("/{alumno_id}", summary="Editar cuenta, folio e ingeniería de un alumno")

@@ -79,6 +79,7 @@ async def crear_alumno_provisional(
         email_map[correo] = alumno.id
     alumno_details[alumno.id] = {
         "nombre": " ".join(p for p in nombres if p),
+        "partes": tuple(nombres),
         "cuenta": None,
         "folio": None,
         "correo": correo,
@@ -108,6 +109,7 @@ async def completar_nombre_si_falta(
     user = await db.get(User, alumno.usuario_id)
     user.nombre, user.apellido_paterno, user.apellido_materno = nombre
     detalle["nombre"] = " ".join(p for p in nombre if p)
+    detalle["partes"] = tuple(nombre)
     return True
 
 
@@ -198,6 +200,7 @@ async def completar_provisional_con_padron(
     if detalle is not None:
         detalle.update(
             nombre=f"{nombre} {ap_paterno} {ap_materno}",
+            partes=(nombre, ap_paterno, ap_materno),
             cuenta=alumno.numero_cuenta,
             folio=alumno.numero_folio,
             correo=user.correo_personal,
@@ -220,3 +223,23 @@ async def _conservar_correo(db: AsyncSession, alumno_id: int, correo: str | None
                 alumno_id=alumno_id, tipo="correo", valor=correo, fuente="padron"
             )
         )
+
+
+async def marcar_posible_duplicado(
+    db: AsyncSession, alumno_id: int, otro_id: int, motivo: str
+) -> bool:
+    """Guarda la pareja para "Posibles duplicados" si no estaba ya. True si la agregó."""
+    from app.models.posible_duplicado import PosibleDuplicado
+
+    if alumno_id == otro_id:
+        return False
+    existe = await db.scalar(
+        select(PosibleDuplicado.id).where(
+            ((PosibleDuplicado.alumno_id == alumno_id) & (PosibleDuplicado.otro_id == otro_id))
+            | ((PosibleDuplicado.alumno_id == otro_id) & (PosibleDuplicado.otro_id == alumno_id))
+        )
+    )
+    if existe is not None:
+        return False
+    db.add(PosibleDuplicado(alumno_id=alumno_id, otro_id=otro_id, motivo=motivo[:120]))
+    return True

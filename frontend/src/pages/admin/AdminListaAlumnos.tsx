@@ -6,7 +6,6 @@ import {
   Group,
   Loader,
   Modal,
-  Radio,
   SegmentedControl,
   Select,
   SimpleGrid,
@@ -21,28 +20,34 @@ import { IconArrowsJoin, IconInfoCircle, IconPencil, IconSearch } from '@tabler/
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
+import UnirAlumnosModal, { FichaAlumno } from '../../components/UnirAlumnosModal/UnirAlumnosModal';
 import { usePeriodo } from '../../contexts/PeriodoContext';
 import {
   editarDatosAlumno,
   listarAlumnosAdmin,
-  unirAlumnos,
+  listarDuplicados,
   type AlumnoAdmin,
   type FiltroAlumnos,
   type MarcaExamen,
+  type ParejaDuplicada,
 } from '../../lib/alumnosAdminApi';
 import { getProgramas, type Ingenieria } from '../../lib/dashboardApi';
 import classes from './AdminCargaAlumnos.module.css';
 
 const PAGE_SIZE = 20;
 
-const FILTROS: { value: FiltroAlumnos; label: string }[] = [
+/** 'duplicados' muestra las parejas lado a lado en vez de la tabla. */
+type FiltroPagina = FiltroAlumnos | 'duplicados';
+
+const FILTROS: { value: FiltroPagina; label: string }[] = [
   { value: 'todos', label: 'Todos' },
   { value: 'por_revisar', label: 'Por revisar' },
+  { value: 'duplicados', label: 'Posibles duplicados' },
   { value: 'provisionales', label: 'Provisionales' },
   { value: 'sin_cuenta', label: 'Sin cuenta' },
 ];
 
-function esFiltro(v: string | null): v is FiltroAlumnos {
+function esFiltro(v: string | null): v is FiltroPagina {
   return FILTROS.some((f) => f.value === v);
 }
 
@@ -198,206 +203,102 @@ function EditarModal({ alumno, ingenierias, onClose, onGuardado }: EditarModalPr
   );
 }
 
-// ── Unir dos alumnos ─────────────────────────────────────────────
+// ── Posibles duplicados (lado a lado) ───────────────────────────
 
-function FichaAlumno({ alumno }: { alumno: AlumnoAdmin }) {
-  const dato = (label: string, valor: string | null | undefined) => (
-    <Text size="xs">
-      <Text span c="dimmed" size="xs">
-        {label}:{' '}
-      </Text>
-      {valor || '—'}
-    </Text>
-  );
-  return (
-    <Stack gap={2}>
-      <Group gap="xs">
-        <Text fw={600} size="sm">
-          {alumno.nombre || 'Sin nombre'}
-        </Text>
-        {alumno.es_provisional && (
-          <Badge size="xs" variant="light" color="orange">
-            Provisional
-          </Badge>
-        )}
-      </Group>
-      {dato('Correo', alumno.correo_personal)}
-      {alumno.correo_institucional && dato('Correo institucional', alumno.correo_institucional)}
-      {dato('Cuenta', alumno.numero_cuenta)}
-      {dato('Folio', alumno.numero_folio)}
-      {dato('Ingeniería', alumno.ingenieria)}
-      {dato('Periodo de ingreso', alumno.periodo_ingreso)}
-      {dato('Exámenes', alumno.examenes.join(', '))}
-    </Stack>
-  );
+interface ListaDuplicadosProps {
+  periodo: string | undefined;
+  busqueda: string;
+  version: number;
+  onUnir: (pareja: ParejaDuplicada) => void;
 }
 
-interface UnirModalProps {
-  alumno: AlumnoAdmin | null;
-  onClose: () => void;
-  onUnido: () => void;
+function coincide(p: ParejaDuplicada, q: string): boolean {
+  if (!q) return true;
+  const texto = [p.alumno, p.otro]
+    .flatMap((a) => [a.nombre, a.correo_personal, a.correo_institucional, a.numero_cuenta, a.numero_folio])
+    .join(' ')
+    .toLowerCase();
+  return texto.includes(q.toLowerCase());
 }
 
-function UnirModal({ alumno, onClose, onUnido }: UnirModalProps) {
-  const [busqueda, setBusqueda] = useState('');
-  const busquedaDebounced = useDebounced(busqueda);
-  const [resultados, setResultados] = useState<AlumnoAdmin[]>([]);
-  const [buscando, setBuscando] = useState(false);
-  const [otro, setOtro] = useState<AlumnoAdmin | null>(null);
-  const [conservar, setConservar] = useState<string>('');
-  const [uniendo, setUniendo] = useState(false);
+function ListaDuplicados({ periodo, busqueda, version, onUnir }: ListaDuplicadosProps) {
+  const [parejas, setParejas] = useState<ParejaDuplicada[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    setBusqueda(alumno?.nombre ?? '');
-    setResultados([]);
-    setOtro(null);
-    setError(null);
-  }, [alumno]);
-
-  useEffect(() => {
-    if (!alumno || otro) return;
-    const q = busquedaDebounced.trim();
-    if (!q) {
-      setResultados([]);
-      return;
-    }
     let vigente = true;
-    setBuscando(true);
-    listarAlumnosAdmin({ busqueda: q, limit: 10 })
+    setLoading(true);
+    listarDuplicados(periodo)
       .then((r) => {
-        if (vigente) setResultados(r.items.filter((a) => a.id !== alumno.id));
+        if (vigente) {
+          setParejas(r);
+          setError(null);
+        }
       })
       .catch((err) => {
-        if (vigente) setError(errorTexto(err, 'Error al buscar'));
+        if (vigente) setError(errorTexto(err, 'No se pudieron cargar los posibles duplicados'));
       })
       .finally(() => {
-        if (vigente) setBuscando(false);
+        if (vigente) setLoading(false);
       });
     return () => {
       vigente = false;
     };
-  }, [alumno, otro, busquedaDebounced]);
+  }, [periodo, version]);
 
-  const elegir = (a: AlumnoAdmin) => {
-    if (!alumno) return;
-    setOtro(a);
-    // Por defecto se conserva el que no es provisional (el del padrón).
-    setConservar(String(alumno.es_provisional && !a.es_provisional ? a.id : alumno.id));
-  };
+  useEffect(() => setPage(1), [busqueda, periodo]);
 
-  const confirmar = async () => {
-    if (!alumno || !otro) return;
-    const conservarId = Number(conservar);
-    const eliminarId = conservarId === alumno.id ? otro.id : alumno.id;
-    setUniendo(true);
-    setError(null);
-    try {
-      await unirAlumnos(conservarId, eliminarId);
-      onUnido();
-    } catch (err) {
-      setError(errorTexto(err, 'No se pudieron unir'));
-    } finally {
-      setUniendo(false);
-    }
-  };
+  const filtradas = parejas.filter((p) => coincide(p, busqueda.trim()));
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
+  const visibles = filtradas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <Modal opened={alumno !== null} onClose={onClose} title="Unir alumnos" size="xl" centered>
-      {alumno && !otro && (
-        <Stack gap="md">
-          <Text size="sm">
-            Busca el otro registro de <strong>{alumno.nombre || correoDe(alumno)}</strong> (la misma persona registrada dos
-            veces).
-          </Text>
-          <TextInput
-            placeholder="Nombre, correo, cuenta o folio"
-            leftSection={<IconSearch size={16} />}
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.currentTarget.value)}
-            rightSection={buscando ? <Loader size="xs" /> : null}
-            data-autofocus
-          />
-          <Stack gap={6}>
-            {resultados.map((a) => (
-              <div
-                key={a.id}
-                className={classes.searchResult}
-                onClick={() => elegir(a)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    elegir(a);
-                  }
-                }}
-              >
-                <div className={classes.searchResultName}>{a.nombre || 'Sin nombre'}</div>
-                <div className={classes.searchResultDetail}>
-                  {correoDe(a)} · Cuenta {a.numero_cuenta || '—'} · Folio {a.numero_folio || '—'} ·{' '}
-                  {a.ingenieria || 'Sin ingeniería'}
-                </div>
-              </div>
-            ))}
-            {!buscando && busquedaDebounced.trim() && resultados.length === 0 && (
-              <Text size="sm" c="dimmed">
-                No se encontró otro alumno.
-              </Text>
-            )}
-          </Stack>
-        </Stack>
+    <Stack gap="md">
+      {error && (
+        <Alert color="red" variant="light" icon={<IconInfoCircle size={18} />}>
+          {error}
+        </Alert>
       )}
-
-      {alumno && otro && (
-        <Stack gap="md">
-          <Text size="sm">
-            Elige cuál se conserva. Todos los resultados, correos, cuenta y folio del otro pasan al que se conserva, y el otro
-            se borra. <strong>No se puede deshacer.</strong>
-          </Text>
-          <Radio.Group value={conservar} onChange={setConservar}>
-            <SimpleGrid cols={{ base: 1, sm: 2 }}>
-              {[alumno, otro].map((a) => (
-                <Card
-                  key={a.id}
-                  withBorder
-                  padding="md"
-                  radius="md"
-                  style={{
-                    borderColor: conservar === String(a.id) ? 'var(--mantine-color-green-6)' : undefined,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => setConservar(String(a.id))}
-                >
-                  <Stack gap="xs">
-                    <Radio value={String(a.id)} label={conservar === String(a.id) ? 'Se conserva' : 'Se borra'} />
-                    <FichaAlumno alumno={a} />
-                  </Stack>
-                </Card>
-              ))}
-            </SimpleGrid>
-          </Radio.Group>
-          {error && (
-            <Alert color="red" variant="light" icon={<IconInfoCircle size={18} />}>
-              {error}
-            </Alert>
-          )}
-          <Group justify="space-between">
-            <Button variant="subtle" onClick={() => setOtro(null)} disabled={uniendo}>
-              Elegir otro
+      <Title order={5}>
+        {filtradas.length} caso(s) {loading && <Loader size="xs" ml="xs" />}
+      </Title>
+      {!loading && filtradas.length === 0 && (
+        <Text size="sm" c="dimmed" ta="center">
+          Sin posibles duplicados
+        </Text>
+      )}
+      {visibles.map((p) => (
+        <Card key={`${p.alumno.id}-${p.otro.id}`} withBorder padding="md" radius="md">
+          <Group justify="space-between" mb="xs" wrap="wrap">
+            <Badge variant="light" color="yellow">
+              {p.motivo}
+            </Badge>
+            <Button size="xs" color="grape" leftSection={<IconArrowsJoin size={14} />} onClick={() => onUnir(p)}>
+              Unir
             </Button>
-            <Group>
-              <Button variant="default" onClick={onClose} disabled={uniendo}>
-                Cancelar
-              </Button>
-              <Button color="red" onClick={confirmar} loading={uniendo}>
-                Unir alumnos
-              </Button>
-            </Group>
           </Group>
-        </Stack>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            <FichaAlumno alumno={p.alumno} />
+            <FichaAlumno alumno={p.otro} />
+          </SimpleGrid>
+        </Card>
+      ))}
+      {filtradas.length > PAGE_SIZE && (
+        <div className={classes.paginationBar}>
+          <Button size="compact-xs" variant="default" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            Anterior
+          </Button>
+          <Text className={classes.paginationInfo}>
+            Página {Math.min(page, totalPaginas)} de {totalPaginas}
+          </Text>
+          <Button size="compact-xs" variant="default" disabled={page >= totalPaginas} onClick={() => setPage(page + 1)}>
+            Siguiente
+          </Button>
+        </div>
       )}
-    </Modal>
+    </Stack>
   );
 }
 
@@ -407,7 +308,7 @@ export default function AdminListaAlumnos() {
   const { periodo } = usePeriodo();
   const [searchParams, setSearchParams] = useSearchParams();
   const filtroParam = searchParams.get('filtro');
-  const filtro: FiltroAlumnos = esFiltro(filtroParam) ? filtroParam : 'todos';
+  const filtro: FiltroPagina = esFiltro(filtroParam) ? filtroParam : 'todos';
   const [soloPeriodo, setSoloPeriodo] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const busquedaDebounced = useDebounced(busqueda);
@@ -420,6 +321,8 @@ export default function AdminListaAlumnos() {
   const [ingenierias, setIngenierias] = useState<Ingenieria[]>([]);
   const [editando, setEditando] = useState<AlumnoAdmin | null>(null);
   const [uniendo, setUniendo] = useState<AlumnoAdmin | null>(null);
+  const [parejaUnir, setParejaUnir] = useState<ParejaDuplicada | null>(null);
+  const [versionDuplicados, setVersionDuplicados] = useState(0);
   const ultimaConsulta = useRef(0);
 
   useEffect(() => {
@@ -429,6 +332,7 @@ export default function AdminListaAlumnos() {
   }, []);
 
   const cargar = useCallback(async () => {
+    if (filtro === 'duplicados') return;
     const consulta = ++ultimaConsulta.current;
     setLoading(true);
     try {
@@ -511,6 +415,11 @@ export default function AdminListaAlumnos() {
               no se pudieron registrar están en Reportes → "Alumnos por revisar".
             </Text>
           )}
+          {filtro === 'duplicados' && (
+            <Text size="xs" c="dimmed">
+              Cada caso muestra los dos registros lado a lado. Si son la misma persona, presiona "Unir".
+            </Text>
+          )}
 
           {aviso && (
             <Alert color="green" variant="light" withCloseButton onClose={() => setAviso(null)}>
@@ -523,6 +432,15 @@ export default function AdminListaAlumnos() {
             </Alert>
           )}
 
+          {filtro === 'duplicados' ? (
+            <ListaDuplicados
+              periodo={soloPeriodo ? periodo : undefined}
+              busqueda={busquedaDebounced}
+              version={versionDuplicados}
+              onUnir={setParejaUnir}
+            />
+          ) : (
+            <>
           <Title order={5}>
             {total} alumno(s) {loading && <Loader size="xs" ml="xs" />}
           </Title>
@@ -606,6 +524,8 @@ export default function AdminListaAlumnos() {
               Siguiente
             </Button>
           </div>
+            </>
+          )}
         </Stack>
       </Card>
 
@@ -620,12 +540,18 @@ export default function AdminListaAlumnos() {
         }}
       />
 
-      <UnirModal
-        alumno={uniendo}
-        onClose={() => setUniendo(null)}
+      <UnirAlumnosModal
+        alumno={uniendo ?? parejaUnir?.alumno ?? null}
+        otroInicial={parejaUnir?.otro ?? null}
+        onClose={() => {
+          setUniendo(null);
+          setParejaUnir(null);
+        }}
         onUnido={() => {
           setUniendo(null);
+          setParejaUnir(null);
           setAviso('Los alumnos se unieron.');
+          setVersionDuplicados((v) => v + 1);
           cargar();
         }}
       />

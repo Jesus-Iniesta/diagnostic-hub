@@ -42,10 +42,13 @@ def check(label: str, got, expected):
 PROV = {1, 2}
 check("nadie: crear", destino_registro({"cuenta": None, "folio": None, "correo": None}, PROV), (CREAR, None, []))
 check("un provisional: completar", destino_registro({"cuenta": None, "folio": 1, "correo": 1}, PROV), (COMPLETAR, 1, []))
-check("dos provisionales: gana la cuenta",
+check("dos provisionales: se juntan en el de la cuenta",
       destino_registro({"cuenta": 2, "folio": 1, "correo": None}, PROV), (COMPLETAR, 2, [1]))
 check("dos provisionales sin cuenta: gana el folio",
       destino_registro({"cuenta": None, "folio": 1, "correo": 2}, PROV), (COMPLETAR, 1, [2]))
+check("correo institucional de un provisional",
+      destino_registro({"cuenta": None, "folio": None, "correo": None, "correo_institucional": 2}, PROV),
+      (COMPLETAR, 2, []))
 check("alumno ya registrado", destino_registro({"cuenta": 9, "folio": None, "correo": None}, PROV), (YA_REGISTRADO, None, []))
 check("registrado + provisional: ya registrado",
       destino_registro({"cuenta": 1, "folio": None, "correo": 9}, PROV), (YA_REGISTRADO, None, []))
@@ -131,7 +134,7 @@ async def prueba_db():
             email_map, *_ = await load_all_alumnos(db)
             check("2: el correo del Excel lo sigue encontrando", email_map.get(f"{P}.dos.excel@gmail.com"), prov_id)
 
-            # 2b. Coincide con dos provisionales: se completa el de la cuenta.
+            # 2b. Coincide con dos provisionales: se juntan en el de la cuenta.
             await procesar_examen_diagnostico(db, final([
                 (FECHA, f"{P}.tres.a@gmail.com", "1", "Eva Tres Sol", c3, None, None),
                 (FECHA, f"{P}.tres.b@gmail.com", "1", "Eva Tres", None, f4, None),
@@ -139,9 +142,30 @@ async def prueba_db():
             por_cuenta, por_folio = await alumno(c3), await alumno(folio=f4)
             completado = await repo.create(registro(f"{P}.tres@gmail.com", c3, ("Eva", "Tres", "Sol"), folio=f4))
             check("2b: completa el de la cuenta", completado.id, por_cuenta.id)
-            check("2b: el otro sigue provisional", (await db.get(Alumno, por_folio.id)).es_provisional, True)
-            par = await db.scalar(select(PosibleDuplicado).where(PosibleDuplicado.alumno_id == por_cuenta.id))
-            check("2b: quedan como posible duplicado", par.otro_id if par else None, por_folio.id)
+            por_folio_id = por_folio.id
+            db.expunge_all()
+            check("2b: el otro se juntó (ya no existe)", await db.get(Alumno, por_folio_id), None)
+            juntos = await alumno(c3)
+            check("2b: tiene cuenta y folio", (juntos.numero_cuenta, juntos.numero_folio, juntos.es_provisional),
+                  (c3, f4, False))
+            diags = (await db.execute(select(ResultadoDiagnostico).where(
+                ResultadoDiagnostico.alumno_id == juntos.id, ResultadoDiagnostico.periodo == PERIODO))).scalars().all()
+            check("2b: un solo resultado de geometría", len(diags), 1)
+            email_map, *_ = await load_all_alumnos(db)
+            check("2b: los dos correos del Excel lo encuentran",
+                  (email_map.get(f"{P}.tres.a@gmail.com"), email_map.get(f"{P}.tres.b@gmail.com")),
+                  (juntos.id, juntos.id))
+
+            # 2c. Coincide por correo institucional con un provisional.
+            await procesar_examen_diagnostico(db, final([
+                (FECHA, f"{P}.inst@alumno.uaemex.mx", "1", "Iris Inst Paz", None, None, None),
+            ]), "calculo", PERIODO)
+            email_map, *_ = await load_all_alumnos(db)
+            prov_inst = email_map.get(f"{P}.inst@alumno.uaemex.mx")
+            datos = registro(f"{P}.iris@gmail.com", next(libres), ("Iris", "Inst", "Paz"))
+            datos.correo_institucional = f"{P}.inst@alumno.uaemex.mx"
+            completado = await repo.create(datos)
+            check("2c: completa el provisional del correo institucional", completado.id, prov_inst)
 
             # 3. Ya registrado (no provisional): no se crea otro.
             for datos, etiqueta in (
@@ -166,9 +190,42 @@ async def prueba_db():
 
             casos = await casos_por_revisar(db, PERIODO)
             correos = {f[1] for f in casos["Posibles duplicados"]}
-            check("Excel: duplicados de 2b y 4",
-                  {f"{P}.tres@gmail.com", f"{P}.tres.b@gmail.com", f"{P}.sara@gmail.com", f"{P}.sara.excel@gmail.com"} <= correos,
+            check("Excel: duplicados de 4",
+                  {f"{P}.sara@gmail.com", f"{P}.sara.excel@gmail.com"} <= correos,
                   True)
+
+            # 6. WebAssign sin correo conocido: por nombre idéntico se junta y
+            # guarda el institucional; por nombre incompleto queda como posible duplicado.
+            from unittest.mock import patch
+
+            from app.services import upload_webassign_service as wa
+
+            await procesar_examen_diagnostico(db, final([
+                (FECHA, f"{P}.roberto@gmail.com", "1", "Roberto Gonzalez Calderon", next(libres), None, None),
+                (FECHA, f"{P}.marta@gmail.com", "1", "Marta Lio Sanz", next(libres), None, None),
+            ]), "algebra", PERIODO)
+            email_map, *_ = await load_all_alumnos(db)
+            roberto, marta = email_map[f"{P}.roberto@gmail.com"], email_map[f"{P}.marta@gmail.com"]
+
+            def fila_wa(i, correo, nombre):
+                vacio = {"trabajo_raw": [None] * 5, "examen_raw": 10.0}
+                return {"nombre_original": nombre, "email": correo, "indice": i,
+                        "materias": {m: dict(vacio) for m in ("algebra", "trigonometria", "geometria")}}
+
+            with patch.object(wa, "parse_webassign_excel", lambda b, c: ([
+                fila_wa(9, f"{P}rgc009@alumno.uaemex.mx", "González Calderón, Roberto"),
+                fila_wa(10, f"{P}.marta.wa@gmail.com", "Lio, Marta"),
+            ], {})):
+                r = await wa.procesar_webassign(db, b"", "ICO", PERIODO)
+            check("6: uno por nombre idéntico, uno nuevo", (r["unidos_por_nombre"], r["registrados_nuevos"]), (1, 1))
+            db.expunge_all()
+            rob = await db.scalar(select(Alumno).options(selectinload(Alumno.usuario)).where(Alumno.id == roberto))
+            check("6: guarda el institucional", rob.usuario.correo_institucional, f"{P}rgc009@alumno.uaemex.mx")
+            email_map, *_ = await load_all_alumnos(db)
+            nueva_marta = email_map[f"{P}.marta.wa@gmail.com"]
+            par = await db.scalar(select(PosibleDuplicado).where(PosibleDuplicado.alumno_id == nueva_marta))
+            check("6: incompleto queda como posible duplicado", (nueva_marta != marta, par.otro_id if par else None),
+                  (True, marta))
 
             # 5. Provisional que entra con su cuenta: no ve resultados hasta completar.
             sara_prov = await db.scalar(

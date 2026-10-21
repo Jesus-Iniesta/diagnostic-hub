@@ -45,6 +45,18 @@ export function listarAlumnosAdmin(params: {
   return apiFetch<AlumnosAdminPage>(`${URL_BASE}?${qs.toString()}`);
 }
 
+/** Dos alumnos que pueden ser la misma persona. */
+export interface ParejaDuplicada {
+  motivo: string;
+  alumno: AlumnoAdmin;
+  otro: AlumnoAdmin;
+}
+
+export function listarDuplicados(periodo?: string): Promise<ParejaDuplicada[]> {
+  const qs = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
+  return apiFetch<ParejaDuplicada[]>(`${URL_BASE}/duplicados${qs}`);
+}
+
 export function editarDatosAlumno(
   id: number,
   datos: { numero_cuenta: string | null; numero_folio: string | null; ingenieria_id: number | null },

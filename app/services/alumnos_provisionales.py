@@ -125,15 +125,16 @@ def destino_registro(
 ) -> tuple[str, int | None, list[int]]:
     """Qué hacer con el formulario de registro según a quién apuntan sus datos.
 
-    `duenos_por` es {"cuenta": id, "folio": id, "correo": id} (None si el dato
-    no está o no es de nadie). Devuelve (destino, alumno a completar, otros):
+    `duenos_por` es {"cuenta": id, "folio": id, "correo": id,
+    "correo_institucional": id} (None si el dato no está o no es de nadie).
+    Devuelve (destino, alumno a completar, otros):
 
     - CREAR si ningún dato es de nadie.
     - YA_REGISTRADO si algún dato es de un alumno que ya se registró (no
-      provisional): no se crea otro.
-    - COMPLETAR con el provisional que coincide; si coinciden dos o más, se
-      completa el de la cuenta (si no, el del folio) y los demás se devuelven
-      en `otros` para marcarlos como posibles duplicados (no se adivina).
+      provisional): no se crea ni se junta nada.
+    - COMPLETAR con el provisional que coincide; si coinciden varios, todos son
+      la misma persona: se completa el de la cuenta (si no, el del folio o el
+      correo) y los demás van en `otros` para juntarlos con él.
     """
     duenos: list[int] = []
     for d in duenos_por.values():
@@ -144,6 +145,8 @@ def destino_registro(
     if any(d not in provisionales for d in duenos):
         return YA_REGISTRADO, None, []
     elegido = next(
-        duenos_por[c] for c in ("cuenta", "folio", "correo") if duenos_por.get(c) is not None
+        duenos_por[c]
+        for c in ("cuenta", "folio", "correo", "correo_institucional")
+        if duenos_por.get(c) is not None
     )
     return COMPLETAR, elegido, [d for d in duenos if d != elegido]

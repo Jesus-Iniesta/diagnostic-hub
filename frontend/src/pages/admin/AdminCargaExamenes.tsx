@@ -11,32 +11,40 @@ import {
   Stack,
   Tabs,
   Text,
+  TextInput,
   Title,
+  UnstyledButton,
 } from '@mantine/core';
 import {
   IconArrowRight,
+  IconArrowsJoin,
   IconCircleCheck,
   IconClipboardList,
   IconFileSpreadsheet,
   IconInfoCircle,
   IconPlayerPlay,
+  IconSearch,
   IconUpload,
   IconWorld,
 } from '@tabler/icons-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 
 import CorreccionModal from '../../components/CorreccionModal/CorreccionModal';
+import UnirAlumnosModal from '../../components/UnirAlumnosModal/UnirAlumnosModal';
 import { usePeriodo } from '../../contexts/PeriodoContext';
+import type { AlumnoAdmin, ParejaDuplicada } from '../../lib/alumnosAdminApi';
 import {
   corregirArchivo,
   guardarArchivo,
   juntarRepetidos,
   listarArchivos,
+  obtenerRevision,
   procesarArchivo,
   type ArchivoGuardado,
   type FilaNoRegistrada,
   type ResumenArchivo,
+  type RevisionPeriodo,
 } from '../../lib/cargaPeriodoApi';
 import { fetchPeriodoRango, type PeriodoRango } from '../../lib/configuracionApi';
 import {
@@ -45,7 +53,6 @@ import {
   getRespuestasCorrectas,
   saveRespuestasCorrectas,
 } from '../../lib/diagnosticoApi';
-import type { CandidatoCoincidencia } from '../../types/cuestionario';
 import type { RespuestaCorrecta } from '../../types/diagnostico';
 import classes from './AdminCargaAlumnos.module.css';
 
@@ -410,6 +417,144 @@ interface FilaResumen extends Partial<ResumenArchivo> {
   error?: string;
 }
 
+const POR_PAGINA = 20;
+
+/** Lista de los recuadros: buscador y páginas de 20. */
+function ListaPaginada<T>({
+  items,
+  texto,
+  encabezados,
+  fila,
+  vacio,
+}: {
+  items: T[];
+  texto: (item: T) => string;
+  encabezados: string[];
+  fila: (item: T) => ReactNode;
+  vacio: string;
+}) {
+  const [busqueda, setBusqueda] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const q = busqueda.trim().toLowerCase();
+  const filtrados = q ? items.filter((i) => texto(i).toLowerCase().includes(q)) : items;
+  const paginas = Math.max(1, Math.ceil(filtrados.length / POR_PAGINA));
+  const actual = Math.min(pagina, paginas);
+  const visibles = filtrados.slice((actual - 1) * POR_PAGINA, actual * POR_PAGINA);
+
+  return (
+    <Stack gap="sm">
+      <TextInput
+        placeholder="Buscar por nombre, correo, cuenta o folio"
+        leftSection={<IconSearch size={16} />}
+        value={busqueda}
+        onChange={(e) => {
+          setBusqueda(e.currentTarget.value);
+          setPagina(1);
+        }}
+      />
+      <div className={classes.scrollTable}>
+        <table className={classes.table}>
+          <thead>
+            <tr>
+              {encabezados.map((e) => (
+                <th key={e}>{e}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.length === 0 ? (
+              <tr>
+                <td colSpan={encabezados.length} style={{ textAlign: 'center', color: '#667085' }}>
+                  {vacio}
+                </td>
+              </tr>
+            ) : (
+              visibles.map(fila)
+            )}
+          </tbody>
+        </table>
+      </div>
+      {filtrados.length > POR_PAGINA && (
+        <div className={classes.paginationBar}>
+          <Button size="compact-xs" variant="default" disabled={actual <= 1} onClick={() => setPagina(actual - 1)}>
+            Anterior
+          </Button>
+          <Text className={classes.paginationInfo}>
+            Página {actual} de {paginas} · {filtrados.length} en total
+          </Text>
+          <Button size="compact-xs" variant="default" disabled={actual >= paginas} onClick={() => setPagina(actual + 1)}>
+            Siguiente
+          </Button>
+        </div>
+      )}
+    </Stack>
+  );
+}
+
+interface RecuadroProps {
+  color: 'green' | 'yellow' | 'red';
+  titulo: string;
+  valor: number | null;
+  detalle: string;
+  abierto?: boolean;
+  onClick?: () => void;
+}
+
+/** Recuadro grande; el amarillo y el rojo se abren con un clic si no están en 0. */
+function Recuadro({ color, titulo, valor, detalle, abierto, onClick }: RecuadroProps) {
+  const clicable = Boolean(onClick) && (valor ?? 0) > 0;
+  const contenido = (
+    <Stack gap={4}>
+      <Text fw={600} size="sm" c={`${color}.9`}>
+        {titulo}
+      </Text>
+      <Text fw={800} style={{ fontSize: 40, lineHeight: 1.1 }} c={`${color}.8`}>
+        {valor === null ? '…' : valor.toLocaleString()}
+      </Text>
+      <Text size="xs" c={`${color}.9`}>
+        {detalle}
+        {clicable && (abierto ? ' · ocultar' : ' · ver lista')}
+      </Text>
+    </Stack>
+  );
+  const estilo = {
+    display: 'block',
+    width: '100%',
+    padding: '1.25rem',
+    borderRadius: 12,
+    background: `var(--mantine-color-${color}-0)`,
+    border: `2px solid var(--mantine-color-${color}-${abierto ? 6 : 3})`,
+  };
+  return clicable ? (
+    <UnstyledButton style={estilo} onClick={onClick} aria-expanded={abierto}>
+      {contenido}
+    </UnstyledButton>
+  ) : (
+    <div style={estilo}>{contenido}</div>
+  );
+}
+
+/** Caso de "Por revisar": una pareja de posibles duplicados o un alumno sin cuenta. */
+type CasoRevisar = { tipo: 'duplicado'; pareja: ParejaDuplicada } | { tipo: 'sin_cuenta'; alumno: AlumnoAdmin };
+
+function correoDe(a: AlumnoAdmin): string {
+  return a.correo_personal || a.correo_institucional || '—';
+}
+
+function textoAlumno(a: AlumnoAdmin): string {
+  return [a.nombre, a.correo_personal, a.correo_institucional, a.numero_cuenta, a.numero_folio].join(' ');
+}
+
+/** Celda con los dos alumnos de una pareja, uno arriba del otro. */
+function Dos({ a, b }: { a: ReactNode; b: ReactNode }) {
+  return (
+    <Stack gap={4}>
+      <div>{a}</div>
+      <div style={{ borderTop: '1px dashed var(--mantine-color-gray-4)', paddingTop: 4 }}>{b}</div>
+    </Stack>
+  );
+}
+
 interface ProcesarTodoProps {
   periodo: string;
   archivos: Record<string, ArchivoGuardado>;
@@ -422,12 +567,12 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
   const [error, setError] = useState<string | null>(null);
   const [resumen, setResumen] = useState<FilaResumen[] | null>(null);
   const [juntados, setJuntados] = useState<number | null>(null);
-  // Filas sin registrar de cada examen (las de la segunda vuelta) y las asignadas a mano.
+  // Filas sin registrar de cada examen (las de la segunda vuelta).
   const [filas, setFilas] = useState<Record<string, FilaNoRegistrada[]>>({});
-  const [abierto, setAbierto] = useState<string | null>(null);
-  const [correcciones, setCorrecciones] = useState<Record<string, Map<number, number>>>({});
+  const [revision, setRevision] = useState<RevisionPeriodo | null>(null);
+  const [abierto, setAbierto] = useState<'revisar' | 'rojo' | null>(null);
   const [corrigiendo, setCorrigiendo] = useState<{ examen: string; fila: FilaNoRegistrada } | null>(null);
-  const [aplicando, setAplicando] = useState<string | null>(null);
+  const [uniendo, setUniendo] = useState<ParejaDuplicada | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
   // Al cambiar de periodo se limpia el resumen anterior.
@@ -435,13 +580,21 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
     setResumen(null);
     setJuntados(null);
     setFilas({});
-    setCorrecciones({});
+    setRevision(null);
     setAbierto(null);
     setAviso(null);
   }, [periodo]);
 
   const guardados = TODOS_LOS_EXAMENES.filter((e) => archivos[e]);
   const faltan = TODOS_LOS_EXAMENES.filter((e) => !archivos[e]);
+
+  const cargarRevision = useCallback(async () => {
+    try {
+      setRevision(await obtenerRevision(periodo));
+    } catch (err) {
+      setError(errorTexto(err, 'No se pudo cargar lo que hay por revisar'));
+    }
+  }, [periodo]);
 
   const procesarTodo = async () => {
     if (guardados.length === 0) return;
@@ -451,10 +604,10 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
     setResumen(null);
     setJuntados(null);
     setFilas({});
-    setCorrecciones({});
+    setRevision(null);
     setAbierto(null);
 
-    // Primera vuelta: registra y empareja; sus números son los del resumen.
+    // Primera vuelta: registra y empareja; sus números son los de la tabla.
     const primera: FilaResumen[] = [];
     const detalle: Record<string, FilaNoRegistrada[]> = {};
     for (const [i, examen] of guardados.entries()) {
@@ -483,6 +636,8 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
       setError(`La segunda vuelta no terminó: ${errorTexto(err, 'error desconocido')}`);
     }
 
+    setProgreso('Contando alumnos y lo que hay por revisar');
+    await cargarRevision();
     setResumen(primera);
     setJuntados(total);
     setFilas(detalle);
@@ -491,43 +646,35 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
     onProcesado();
   };
 
-  const asignar = (examen: string, indice: number, alumnoId: number) => {
-    setCorrecciones((prev) => {
-      const m = new Map(prev[examen] ?? []);
-      m.set(indice, alumnoId);
-      return { ...prev, [examen]: m };
-    });
-  };
+  const corregible = (examen: string) => resumen?.find((r) => r.examen === examen)?.corregible ?? false;
 
-  const aplicar = async (examen: string) => {
-    const pendientes = correcciones[examen];
-    if (!pendientes || pendientes.size === 0) return;
-    setAplicando(examen);
+  // Se asigna en cuanto se elige el alumno en "Corregir".
+  const asignar = async (examen: string, indice: number, alumnoId: number) => {
     setError(null);
     setAviso(null);
     try {
-      const r = await corregirArchivo(
-        periodo,
-        examen,
-        [...pendientes.entries()].map(([indice, alumno_id]) => ({ indice, alumno_id })),
-      );
-      const quitadas = new Set([...pendientes.keys()]);
-      setFilas((prev) => ({ ...prev, [examen]: (prev[examen] ?? []).filter((f) => !quitadas.has(f.indice)) }));
-      setCorrecciones((prev) => ({ ...prev, [examen]: new Map() }));
-      const omitidas = r.omitidas_ya_tenian_resultado.length;
-      setAviso(
-        `${ETIQUETA_COMPLETA[examen]}: se asignaron ${r.aplicadas} fila(s).` +
-          (omitidas > 0 ? ` ${omitidas} no se aplicaron porque ese alumno ya tenía resultado.` : ''),
-      );
+      const r = await corregirArchivo(periodo, examen, [{ indice, alumno_id: alumnoId }]);
+      if (r.omitidas_ya_tenian_resultado.length > 0) {
+        setAviso(`${ETIQUETA_COMPLETA[examen]}: no se asignó porque ese alumno ya tenía resultado.`);
+        return;
+      }
+      setFilas((prev) => ({ ...prev, [examen]: (prev[examen] ?? []).filter((f) => f.indice !== indice) }));
+      setAviso(`${ETIQUETA_COMPLETA[examen]}: se asignó la fila.`);
+      await cargarRevision();
       onProcesado();
     } catch (err) {
-      setError(errorTexto(err, 'No se pudieron aplicar las correcciones'));
-    } finally {
-      setAplicando(null);
+      setError(errorTexto(err, 'No se pudo asignar la fila'));
     }
   };
 
-  const sugeridoDe = (fila: { candidatos: CandidatoCoincidencia[] }) => fila.candidatos.find((c) => c.sugerido);
+  const casosRevisar: CasoRevisar[] = revision
+    ? [
+        ...revision.posibles_duplicados.map((pareja) => ({ tipo: 'duplicado' as const, pareja })),
+        ...revision.sin_cuenta.map((alumno) => ({ tipo: 'sin_cuenta' as const, alumno })),
+      ]
+    : [];
+  const noRegistradas = guardados.flatMap((examen) => (filas[examen] ?? []).map((fila) => ({ examen, fila })));
+  const todoListo = revision !== null && casosRevisar.length === 0 && noRegistradas.length === 0;
 
   return (
     <Stack gap="lg">
@@ -600,138 +747,209 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
 
       {resumen && (
         <Card padding="md" radius="md" className={classes.expandCard}>
-          <Group justify="space-between" mb="sm" wrap="wrap">
-            <Text fw={600} size="sm">
-              Resumen del periodo {periodo}
-            </Text>
-            {juntados !== null && (
-              <Badge color={juntados > 0 ? 'blue' : 'gray'} variant="light" size="lg">
-                {juntados} alumno(s) juntados en la segunda vuelta
-              </Badge>
+          <Stack gap="md">
+            <Group justify="space-between" wrap="wrap">
+              <Text fw={600} size="sm">
+                Resumen del periodo {periodo}
+              </Text>
+              {juntados !== null && (
+                <Badge color={juntados > 0 ? 'blue' : 'gray'} variant="light" size="lg">
+                  {juntados} alumno(s) juntados en la segunda vuelta
+                </Badge>
+              )}
+            </Group>
+
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+              <Recuadro
+                color="green"
+                titulo="Alumnos del periodo"
+                valor={revision?.alumnos_del_periodo ?? null}
+                detalle="Con algún examen"
+              />
+              <Recuadro
+                color="yellow"
+                titulo="Por revisar"
+                valor={revision ? casosRevisar.length : null}
+                detalle={
+                  revision
+                    ? `${revision.posibles_duplicados.length} posibles duplicados · ${revision.sin_cuenta.length} sin cuenta`
+                    : 'Posibles duplicados y sin cuenta'
+                }
+                abierto={abierto === 'revisar'}
+                onClick={() => setAbierto(abierto === 'revisar' ? null : 'revisar')}
+              />
+              <Recuadro
+                color="red"
+                titulo="No se pudieron registrar"
+                valor={noRegistradas.length}
+                detalle="Filas sin correo, cuenta ni folio"
+                abierto={abierto === 'rojo'}
+                onClick={() => setAbierto(abierto === 'rojo' ? null : 'rojo')}
+              />
+            </SimpleGrid>
+
+            {todoListo && (
+              <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
+                <Group justify="space-between" wrap="wrap" gap="sm">
+                  <Text size="sm" fw={600}>
+                    Todo listo: ya puedes descargar el CREANI
+                  </Text>
+                  <Button component={Link} to="/admin/reportes" size="xs" color="green" rightSection={<IconArrowRight size={14} />}>
+                    Ir a Reportes
+                  </Button>
+                </Group>
+              </Alert>
             )}
-          </Group>
-          <div className={classes.scrollTable}>
-            <table className={classes.table}>
-              <thead>
-                <tr>
-                  <th>Examen</th>
-                  <th>Encontrados</th>
-                  <th>Registrados nuevos</th>
-                  <th>No se pudieron registrar</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resumen.map((f) => {
-                  const pendientes = filas[f.examen] ?? [];
-                  return (
+
+            {abierto === 'revisar' && casosRevisar.length > 0 && (
+              <Card padding="md" radius="md" withBorder style={{ borderColor: 'var(--mantine-color-yellow-4)' }}>
+                <Text fw={600} size="sm" mb="sm">
+                  Por revisar ({casosRevisar.length})
+                </Text>
+                <ListaPaginada
+                  items={casosRevisar}
+                  texto={(c) =>
+                    c.tipo === 'duplicado' ? `${textoAlumno(c.pareja.alumno)} ${textoAlumno(c.pareja.otro)}` : textoAlumno(c.alumno)
+                  }
+                  encabezados={['Nombre', 'Correo', 'Cuenta', 'Folio', 'Examen', 'Motivo', 'Acción']}
+                  vacio="Nada coincide con la búsqueda"
+                  fila={(c) => {
+                    if (c.tipo === 'sin_cuenta') {
+                      const a = c.alumno;
+                      return (
+                        <tr key={`s-${a.id}`}>
+                          <td className={classes.wrapCell}>{a.nombre || 'Sin nombre'}</td>
+                          <td className={classes.wrapCell}>{correoDe(a)}</td>
+                          <td>—</td>
+                          <td>{a.numero_folio || '—'}</td>
+                          <td className={classes.wrapCell}>{a.examenes.join(', ') || '—'}</td>
+                          <td className={classes.wrapCell}>Sin número de cuenta</td>
+                          <td>
+                            <Button component={Link} to="/admin/alumnos?filtro=sin_cuenta" size="compact-xs" variant="subtle">
+                              Editar
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const { alumno: a, otro: b, motivo } = c.pareja;
+                    return (
+                      <tr key={`d-${a.id}-${b.id}`}>
+                        <td className={classes.wrapCell}>
+                          <Dos a={a.nombre || 'Sin nombre'} b={b.nombre || 'Sin nombre'} />
+                        </td>
+                        <td className={classes.wrapCell}>
+                          <Dos a={correoDe(a)} b={correoDe(b)} />
+                        </td>
+                        <td>
+                          <Dos a={a.numero_cuenta || '—'} b={b.numero_cuenta || '—'} />
+                        </td>
+                        <td>
+                          <Dos a={a.numero_folio || '—'} b={b.numero_folio || '—'} />
+                        </td>
+                        <td className={classes.wrapCell}>
+                          <Dos a={a.examenes.join(', ') || '—'} b={b.examenes.join(', ') || '—'} />
+                        </td>
+                        <td className={classes.wrapCell}>{motivo}</td>
+                        <td>
+                          <Button
+                            size="compact-xs"
+                            color="grape"
+                            leftSection={<IconArrowsJoin size={14} />}
+                            onClick={() => setUniendo(c.pareja)}
+                          >
+                            Unir
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  }}
+                />
+              </Card>
+            )}
+
+            {abierto === 'rojo' && noRegistradas.length > 0 && (
+              <Card padding="md" radius="md" withBorder style={{ borderColor: 'var(--mantine-color-red-4)' }}>
+                <Text fw={600} size="sm" mb="sm">
+                  No se pudieron registrar ({noRegistradas.length})
+                </Text>
+                <ListaPaginada
+                  items={noRegistradas}
+                  texto={({ fila }) => [fila.nombre_original, fila.correo, fila.cuenta, fila.folio].join(' ')}
+                  encabezados={['Nombre', 'Correo', 'Cuenta', 'Folio', 'Examen', 'Motivo', 'Acción']}
+                  vacio="Nada coincide con la búsqueda"
+                  fila={({ examen, fila }) => (
+                    <tr key={`${examen}-${fila.indice}`}>
+                      <td className={classes.wrapCell}>{fila.nombre_original || '—'}</td>
+                      <td className={classes.wrapCell}>{fila.correo || '—'}</td>
+                      <td>{fila.cuenta || '—'}</td>
+                      <td>{fila.folio || '—'}</td>
+                      <td className={classes.wrapCell}>{ETIQUETA_COMPLETA[examen]}</td>
+                      <td className={classes.wrapCell}>{fila.motivo}</td>
+                      <td>
+                        {corregible(examen) ? (
+                          <Button size="compact-xs" variant="light" onClick={() => setCorrigiendo({ examen, fila })}>
+                            Corregir
+                          </Button>
+                        ) : (
+                          <Text size="xs" c="dimmed" title="Las filas de WebAssign no se pueden asignar a mano">
+                            —
+                          </Text>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                />
+              </Card>
+            )}
+
+            <div className={classes.scrollTable}>
+              <table className={classes.table}>
+                <thead>
+                  <tr>
+                    <th>Examen</th>
+                    <th>Encontrados</th>
+                    <th>Registrados nuevos</th>
+                    <th>Omitidas</th>
+                    <th>Repetidos</th>
+                    <th>No se pudieron registrar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumen.map((f) => (
                     <tr key={f.examen}>
                       <td>{f.etiqueta}</td>
                       {f.error ? (
-                        <td colSpan={3} className={classes.wrapCell} style={{ color: 'var(--mantine-color-red-7)' }}>
+                        <td colSpan={5} className={classes.wrapCell} style={{ color: 'var(--mantine-color-red-7)' }}>
                           {f.error}
                         </td>
                       ) : (
                         <>
-                          <td>{f.encontrados}</td>
-                          <td>{f.registrados_nuevos}</td>
                           <td>
-                            {pendientes.length > 0 ? (
-                              <Button
-                                size="compact-xs"
-                                variant={abierto === f.examen ? 'filled' : 'light'}
-                                color="red"
-                                onClick={() => setAbierto(abierto === f.examen ? null : f.examen)}
-                              >
-                                {pendientes.length} · {abierto === f.examen ? 'ocultar' : 'ver'}
-                              </Button>
-                            ) : (
-                              0
+                            {f.encontrados}
+                            {(f.unidos_por_nombre ?? 0) > 0 && (
+                              <Text span size="xs" c="dimmed">
+                                {' '}
+                                ({f.unidos_por_nombre} por nombre)
+                              </Text>
                             )}
                           </td>
+                          <td>{f.registrados_nuevos}</td>
+                          <td>{f.omitidas ?? 0}</td>
+                          <td>{f.repetidos ?? 0}</td>
+                          <td>{(filas[f.examen] ?? []).length}</td>
                         </>
                       )}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {abierto && (
-            <Card padding="md" radius="md" mt="md" withBorder>
-              <Group justify="space-between" mb="sm" wrap="wrap">
-                <Text fw={600} size="sm">
-                  {ETIQUETA_COMPLETA[abierto]}: no se pudieron registrar ({(filas[abierto] ?? []).length})
-                </Text>
-                {(correcciones[abierto]?.size ?? 0) > 0 && (
-                  <Button size="xs" loading={aplicando === abierto} onClick={() => aplicar(abierto)}>
-                    Aplicar correcciones ({correcciones[abierto]?.size})
-                  </Button>
-                )}
-              </Group>
-              <div className={classes.scrollTable}>
-                <table className={classes.table}>
-                  <thead>
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Correo</th>
-                      <th>Motivo</th>
-                      <th>Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(filas[abierto] ?? []).map((fila) => {
-                      const corregible = resumen.find((r) => r.examen === abierto)?.corregible;
-                      const asignado = correcciones[abierto]?.has(fila.indice);
-                      const sugerido = sugeridoDe(fila);
-                      return (
-                        <tr key={fila.indice}>
-                          <td className={classes.wrapCell}>{fila.nombre_original || '—'}</td>
-                          <td className={classes.wrapCell}>{fila.correo || '—'}</td>
-                          <td className={classes.wrapCell}>{fila.motivo}</td>
-                          <td>
-                            {!corregible ? (
-                              <Text size="xs" c="dimmed">
-                                —
-                              </Text>
-                            ) : asignado ? (
-                              <Text size="xs" c="green" fw={600}>
-                                Asignado
-                              </Text>
-                            ) : (
-                              <Group gap={4} wrap="nowrap">
-                                {sugerido && (
-                                  <Button
-                                    size="compact-xs"
-                                    color="green"
-                                    title={`Sugerido: ${sugerido.nombre}`}
-                                    onClick={() => asignar(abierto, fila.indice, sugerido.alumno_id)}
-                                  >
-                                    Confirmar sugerido
-                                  </Button>
-                                )}
-                                <Button
-                                  size="compact-xs"
-                                  variant="subtle"
-                                  onClick={() => setCorrigiendo({ examen: abierto, fila })}
-                                >
-                                  Corregir
-                                </Button>
-                              </Group>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-          <Text size="xs" c="dimmed" mt="sm">
-            Las filas que no se pudieron registrar no traen correo, cuenta ni folio. También salen en Reportes → "Alumnos
-            por revisar".
-          </Text>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Text size="xs" c="dimmed">
+              Omitidas: filas de otro periodo. Repetidos: filas de más del mismo alumno (se queda una). Todo esto también
+              sale en Reportes → "Alumnos por revisar".
+            </Text>
+          </Stack>
         </Card>
       )}
 
@@ -750,6 +968,17 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
         periodo={periodo}
         onAsignar={(indice, alumnoId) => {
           if (corrigiendo) asignar(corrigiendo.examen, indice, alumnoId);
+        }}
+      />
+
+      <UnirAlumnosModal
+        alumno={uniendo?.alumno ?? null}
+        otroInicial={uniendo?.otro ?? null}
+        onClose={() => setUniendo(null)}
+        onUnido={() => {
+          setUniendo(null);
+          setAviso('Los alumnos se unieron.');
+          cargarRevision();
         }}
       />
     </Stack>

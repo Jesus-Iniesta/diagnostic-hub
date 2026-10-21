@@ -10,6 +10,7 @@ export interface RegistroAlumnoPayload {
   apellido_paterno: string;
   apellido_materno: string;
   correo_personal: string;
+  correo_institucional?: string | null;
   numero_cuenta: string | null;
   numero_folio: string | null;
   ingenieria_id: number;

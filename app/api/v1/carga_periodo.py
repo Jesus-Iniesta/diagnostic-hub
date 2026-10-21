@@ -13,6 +13,7 @@ from app.services.carga_periodo_service import (
     listar_archivos,
     procesar_archivo,
 )
+from app.services.alumnos_admin_service import revision_periodo
 from app.services.excel_utils import ArchivoExcelError
 
 router = APIRouter()
@@ -48,6 +49,17 @@ async def get_estado(
         return await estado_periodo(db, periodo)
     except CargaPeriodoError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/revision", summary="Recuadros al terminar Procesar todo (alumnos y por revisar)")
+async def get_revision(
+    db: DbSession,
+    periodo: str = Query(...),
+    _current_user: User = Depends(require_permission("cargar_diagnostico")),
+):
+    if not periodo.strip():
+        raise HTTPException(status_code=400, detail="Indica el periodo.")
+    return await revision_periodo(db, periodo)
 
 
 @router.post("/corregir", summary="Asignar a mano filas de un archivo guardado")

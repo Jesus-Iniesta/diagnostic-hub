@@ -270,6 +270,53 @@ async def actualizar_datos(
     return await obtener_alumno(db, alumno_id)
 
 
+async def posibles_duplicados(db: AsyncSession, periodo: str | None) -> list[dict]:
+    """Parejas de posibles duplicados, cada una con los dos alumnos completos."""
+    periodo = (periodo or "").strip() or None
+    g = await grupos_por_revisar(db, periodo)
+    alumnos = g["duplicados"]
+    examenes, marcas = await examenes_y_marcas(db, list(alumnos), periodo)
+    parejas = [
+        {
+            "motivo": motivo,
+            "alumno": _fila_alumno(alumnos[a], examenes[a], marcas[a]),
+            "otro": _fila_alumno(alumnos[b], examenes[b], marcas[b]),
+        }
+        for a, b, motivo in g["parejas"]
+        if a in alumnos and b in alumnos
+    ]
+    return sorted(parejas, key=lambda p: (normalizar_nombre(p["alumno"]["nombre"]) or "~", p["alumno"]["id"]))
+
+
+async def revision_periodo(db: AsyncSession, periodo: str) -> dict:
+    """Los recuadros que se ven al terminar "Procesar todo".
+
+    Alumnos con algún examen en el periodo y lo que hay por revisar: las
+    parejas de posibles duplicados y los alumnos sin cuenta que no están ya en
+    una pareja. Las filas que no se pudieron registrar las da cada archivo.
+    """
+    periodo = periodo.strip()
+    con_examen: set[int] = set()
+    for modelo in (ResultadoDiagnostico, ResultadoCuestionarioDiagnostico, ResultadoWebAssign):
+        con_examen |= set(
+            (await db.execute(select(modelo.alumno_id).where(modelo.periodo == periodo))).scalars()
+        )
+    duplicados = await posibles_duplicados(db, periodo)
+    en_pareja = {p[k]["id"] for p in duplicados for k in ("alumno", "otro")}
+    g = await grupos_por_revisar(db, periodo)
+    sin_cuenta = [a for a in g["sin_cuenta"] if a.id not in en_pareja]
+    examenes, marcas = await examenes_y_marcas(db, [a.id for a in sin_cuenta], periodo)
+    return {
+        "periodo": periodo,
+        "alumnos_del_periodo": len(con_examen),
+        "posibles_duplicados": duplicados,
+        "sin_cuenta": sorted(
+            (_fila_alumno(a, examenes[a.id], marcas[a.id]) for a in sin_cuenta),
+            key=lambda f: (normalizar_nombre(f["nombre"]) or "~", f["id"]),
+        ),
+    }
+
+
 # ── Excel "Alumnos por revisar" ──────────────────────────────────────
 
 ENCABEZADOS = ["Nombre", "Correo", "Cuenta", "Folio", "Ingeniería", "Exámenes que tiene"]
@@ -298,8 +345,9 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
     """Alumnos del periodo y los casos por revisar.
 
     {"alumnos": [...del periodo], "por_id": {id: Alumno} (incluye las parejas
-    de otro periodo), "duplicados": {id: Alumno}, "sin_cuenta": [...],
-    "sin_ingenieria": [...], "no_registradas": [FilaNoRegistrada]}.
+    de otro periodo), "duplicados": {id: Alumno}, "parejas": [(id, id, motivo)],
+    "sin_cuenta": [...], "sin_ingenieria": [...],
+    "no_registradas": [FilaNoRegistrada]}.
     """
     alumnos = await _alumnos_del_periodo(db, periodo)
     por_id = {a.id: a for a in alumnos}
@@ -310,23 +358,33 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
         if clave:
             por_nombre.setdefault(clave, []).append(a)
     duplicados = {a.id: a for grupo in por_nombre.values() if len(grupo) > 1 for a in grupo}
+    parejas: dict[frozenset, tuple[int, int, str]] = {}
+    for grupo in por_nombre.values():
+        for otro in grupo[1:]:
+            parejas[frozenset((grupo[0].id, otro.id))] = (grupo[0].id, otro.id, "Mismo nombre")
 
     # Parejas marcadas al registrarse (datos que coincidían con dos provisionales,
     # o mismo nombre que un provisional): salen las dos si alguna es del periodo.
-    parejas = (
-        await db.execute(select(PosibleDuplicado.alumno_id, PosibleDuplicado.otro_id))
+    marcadas = (
+        await db.execute(
+            select(PosibleDuplicado.alumno_id, PosibleDuplicado.otro_id, PosibleDuplicado.motivo)
+        )
     ).all()
-    faltan = {i for par in parejas if set(par) & por_id.keys() for i in par} - por_id.keys()
+    faltan = {
+        i for a, b, _ in marcadas if {a, b} & por_id.keys() for i in (a, b)
+    } - por_id.keys()
     extra: dict[int, Alumno] = {}
     if faltan:
         for a in (
             await db.execute(_con_relaciones(select(Alumno).where(Alumno.id.in_(faltan))))
         ).scalars():
             extra[a.id] = a
-    for par in parejas:
-        if set(par) <= (por_id.keys() | extra.keys()):
-            for i in par:
+    for a, b, motivo in marcadas:
+        if {a, b} <= (por_id.keys() | extra.keys()):
+            for i in (a, b):
                 duplicados[i] = por_id.get(i) or extra[i]
+            # La marca explica mejor el caso que "Mismo nombre".
+            parejas[frozenset((a, b))] = (a, b, motivo)
 
     conds = [] if periodo is None else [FilaNoRegistrada.periodo == periodo]
     no_registradas = (await db.execute(select(FilaNoRegistrada).where(*conds))).scalars().all()
@@ -335,6 +393,7 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
         "alumnos": alumnos,
         "por_id": por_id,
         "duplicados": duplicados,
+        "parejas": list(parejas.values()),
         "sin_cuenta": [a for a in alumnos if not a.numero_cuenta],
         "sin_ingenieria": [a for a in alumnos if a.ingenieria_id is None],
         "no_registradas": no_registradas,
@@ -342,11 +401,11 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
 
 
 async def contar_por_revisar(db: AsyncSession, periodo: str) -> dict:
-    """Cuántos hay por revisar: posibles duplicados + sin cuenta + filas que no
-    se pudieron registrar."""
+    """Cuántos hay por revisar: parejas de posibles duplicados + sin cuenta +
+    filas que no se pudieron registrar."""
     g = await grupos_por_revisar(db, periodo.strip())
     conteo = {
-        "posibles_duplicados": len(g["duplicados"]),
+        "posibles_duplicados": len(g["parejas"]),
         "sin_cuenta": len(g["sin_cuenta"]),
         "no_registradas": len(g["no_registradas"]),
     }

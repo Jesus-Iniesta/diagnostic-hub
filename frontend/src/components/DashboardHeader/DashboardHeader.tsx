@@ -1,13 +1,16 @@
 import {
   ActionIcon,
+  Button,
   Group,
   Menu,
   Stack,
   Text,
+  TextInput,
   UnstyledButton,
   Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useState } from 'react';
 import {
   IconBell,
   IconCalendar,
@@ -17,12 +20,17 @@ import {
 import { usePeriodo } from '../../contexts/PeriodoContext';
 import classes from './DashboardHeader.module.css';
 
+/** Para cargar periodos anteriores que no salen en la lista. */
+const PERIODO_RE = /^\d{4}[AB]$/;
+
 interface DashboardHeaderProps {
   onToggle: () => void;
 }
 
 export default function DashboardHeader({ onToggle }: DashboardHeaderProps) {
   const { periodo: period, setPeriodo: setPeriod, periodos } = usePeriodo();
+  const [otro, setOtro] = useState('');
+  const [errorOtro, setErrorOtro] = useState<string | null>(null);
   const [notificationsOpened, { open: openNotifications, close: closeNotifications }] =
     useDisclosure(false);
 
@@ -66,6 +74,42 @@ export default function DashboardHeader({ onToggle }: DashboardHeaderProps) {
                 {p}
               </Menu.Item>
             ))}
+            <Menu.Divider />
+            <Menu.Label>Otro periodo</Menu.Label>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const p = otro.trim().toUpperCase();
+                if (!PERIODO_RE.test(p)) {
+                  setErrorOtro('Escribe año y A o B, p. ej. 2024B');
+                  return;
+                }
+                setPeriod(p);
+                setOtro('');
+                setErrorOtro(null);
+              }}
+              style={{ padding: '0 8px 8px' }}
+            >
+              <Group gap={6} wrap="nowrap" align="flex-start">
+                <TextInput
+                  size="xs"
+                  placeholder="2024B"
+                  value={otro}
+                  onChange={(e) => {
+                    setOtro(e.currentTarget.value);
+                    setErrorOtro(null);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  error={errorOtro}
+                  maxLength={5}
+                  aria-label="Escribir un periodo"
+                  style={{ flex: 1 }}
+                />
+                <Button size="xs" type="submit" variant="light">
+                  Ir
+                </Button>
+              </Group>
+            </form>
           </Menu.Dropdown>
         </Menu>
 

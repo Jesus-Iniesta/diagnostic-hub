@@ -7,13 +7,14 @@ from app.core.base import Base
 
 
 class PosibleDuplicado(Base):
-    """Dos alumnos que pueden ser la misma persona, detectados al registrarse.
+    """Dos alumnos que pueden ser la misma persona.
 
-    Pasa cuando el formulario de registro coincide con dos alumnos provisionales
-    (se completa uno y el otro queda aquí) o cuando no coincide ningún dato pero
-    el nombre es igual al de un provisional. Salen en la hoja "Posibles
-    duplicados" del Excel "Alumnos por revisar". Si se unen o se borra uno, la
-    fila se borra sola.
+    Pasa al registrarse, cuando no coincide ningún dato pero el nombre es igual
+    al de un provisional, y al cargar WebAssign, cuando el alumno no se
+    encontró por correo pero su nombre (incompleto) o su correo institucional
+    se parecen a los de otro alumno (ver emparejar_nombre.py). Salen en
+    "Posibles duplicados" (lista de alumnos y "Por revisar") y en el Excel
+    "Alumnos por revisar". Si se unen o se borra uno, la fila se borra sola.
     """
 
     __tablename__ = "posible_duplicado"
