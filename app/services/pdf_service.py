@@ -1,4 +1,5 @@
 import io
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -82,6 +83,13 @@ LIGHT_FILL = colors.HexColor("#F5F6FA")
 LIGHT_ACCENT = colors.HexColor("#E8EAF6")
 BORDER = colors.HexColor("#D8DAE3")
 
+MATERIAS_INDICE = {
+    "algebra": "Álgebra",
+    "trigonometria": "Trigonometría",
+    "geometria": "Geometría Analítica",
+    "calculo": "Cálculo Diferencial",
+}
+
 
 def _fmt_calif(valor: float | None, sin_label: str = "Sin datos") -> str:
     if valor is None:
@@ -101,14 +109,13 @@ def generar_pdf_resultado(
     periodo: str | None,
     diagnostico: dict | None,
     webassign: dict | None,
-    promedio_final: float | None,
-    nivel_final: str,
-    leyenda_final: str,
+    indice: dict,
 ) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
         pagesize=letter,
+        title="Carta de recomendación",
         rightMargin=1.8 * cm,
         leftMargin=1.8 * cm,
         topMargin=1.6 * cm,
@@ -144,8 +151,8 @@ def generar_pdf_resultado(
 
     story = []
 
-    story.append(Paragraph("TutoNet", h1))
-    story.append(Paragraph("Reporte de resultados de nivelación", small))
+    story.append(Paragraph("Carta de recomendación", h1))
+    story.append(Paragraph("TutoNet · Resultados de nivelación", small))
     if periodo:
         story.append(Paragraph(f"Periodo {periodo}", small))
     story.append(Spacer(1, 8))
@@ -218,27 +225,102 @@ def generar_pdf_resultado(
             normal,
         ))
 
-    story.append(Paragraph("Resultado final", h2))
-    if promedio_final is not None:
-        final_rows = [[
-            "Promedio final",
-            f"{promedio_final:.2f}",
-            nivel_final,
-        ]]
-        final_table = Table(final_rows, colWidths=[6 * cm, 4 * cm, 6 * cm])
-        final_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), PRIMARY),
-            ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
-            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 11),
-            ("GRID", (0, 0), (-1, -1), 0.5, BORDER),
-            ("TOPPADDING", (0, 0), (-1, -1), 7),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-            ("ALIGN", (1, 0), (1, 0), "CENTER"),
-        ]))
-        story.append(final_table)
-    story.append(Spacer(1, 10))
-    story.append(Paragraph(leyenda_final, leyenda))
+    story.append(Paragraph("Índice FI UAEMex", h2))
+    categoria = indice["categoria"]
+    final_rows = [[
+        "Índice FI UAEMex",
+        f"{indice['indice']:.1f} / {_fmt_valor(indice['maximo'])}",
+        categoria["nombre"] if categoria else "",
+    ]]
+    final_table = Table(final_rows, colWidths=[6 * cm, 4 * cm, 6 * cm])
+    final_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), PRIMARY),
+        ("TEXTCOLOR", (0, 0), (-1, -1), colors.white),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 11),
+        ("GRID", (0, 0), (-1, -1), 0.5, BORDER),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ("ALIGN", (1, 0), (-1, 0), "CENTER"),
+    ]))
+    story.append(final_table)
+    if categoria and categoria["comentario"].strip():
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(_texto_parrafo(categoria["comentario"]), leyenda))
+
+    story.append(Spacer(1, 12))
+    story.append(_tabla_desglose_indice(indice))
 
     doc.build(story)
     return buf.getvalue()
+
+
+def _fmt_valor(valor: float) -> str:
+    """Valor configurado por el coordinador: 10 -> '10', 2.5 -> '2.5'."""
+    return f"{valor:.2f}".rstrip("0").rstrip(".")
+
+
+def _texto_parrafo(texto: str) -> str:
+    """Escapa el texto libre del coordinador para Paragraph y respeta sus saltos de línea."""
+    return escape(texto.strip()).replace("\n", "<br/>")
+
+
+def _tabla_desglose_indice(indice: dict) -> Table:
+    diag = indice["diagnostico"]
+    wa = indice["webassign"]
+    final = indice["final"]
+
+    rows = [["Componente", "Obtenido", "Valor"]]
+    subfilas: list[int] = []
+    totales: list[int] = []
+
+    def componente(nombre: str, obtenido: str, valor: float) -> None:
+        totales.append(len(rows))
+        rows.append([nombre, obtenido, _fmt_valor(valor)])
+
+    def detalle(nombre: str, obtenido: float, valor: float) -> None:
+        subfilas.append(len(rows))
+        rows.append([f"    {nombre}", f"{obtenido:.2f}", _fmt_valor(valor)])
+
+    componente("Asistencia", "Sin registrar", indice["asistencia"]["valor"])
+
+    componente("Examen diagnóstico", f"{diag['total']:.2f}", diag["valor"])
+    detalle("Cuestionario 1", diag["c1"]["total"], diag["valor"] / 2)
+    detalle("Cuestionario 2", diag["c2"]["total"], diag["valor"] / 2)
+
+    componente("WebAssign", f"{wa['total']:.2f}", wa["valor"])
+    for key, m in wa["materias"].items():
+        detalle(MATERIAS_INDICE[key], m["total"], wa["valor"] / 3)
+
+    componente("Examen final", f"{final['total']:.2f}", final["valor"])
+    for key, obtenido in final["materias"].items():
+        detalle(MATERIAS_INDICE[key], obtenido, final["valor"] / 4)
+
+    total_row = len(rows)
+    rows.append([
+        "Índice FI UAEMex",
+        f"{indice['indice']:.1f}",
+        _fmt_valor(indice["maximo"]),
+    ])
+
+    estilo = [
+        ("BACKGROUND", (0, 0), (-1, 0), PRIMARY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("GRID", (0, 0), (-1, -1), 0.5, BORDER),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("BACKGROUND", (0, total_row), (-1, total_row), LIGHT_ACCENT),
+        ("FONTNAME", (0, total_row), (-1, total_row), "Helvetica-Bold"),
+    ]
+    for r in totales:
+        estilo.append(("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"))
+        estilo.append(("BACKGROUND", (0, r), (-1, r), LIGHT_FILL))
+    for r in subfilas:
+        estilo.append(("TEXTCOLOR", (0, r), (-1, r), colors.HexColor("#555555")))
+
+    t = Table(rows, colWidths=[8 * cm, 4 * cm, 4 * cm])
+    t.setStyle(TableStyle(estilo))
+    return t

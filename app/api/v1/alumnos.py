@@ -21,10 +21,17 @@ from app.schemas.alumno import (
 )
 from app.services.feedback_service import (
     MATERIAS_NOMBRES,
-    feedback_final,
     feedback_general,
     feedback_materia,
     nivel_puntaje,
+)
+from app.services.indice_fi_service import (
+    MATERIAS_DIAGNOSTICO,
+    MATERIAS_FINAL,
+    MATERIAS_WEBASSIGN,
+    calcular_indice,
+    obtener_config,
+    periodo_actual,
 )
 from app.services.pdf_service import generar_pdf_correo, generar_pdf_resultado
 from app.services.upload_diagnostico_service import normalizar_periodo
@@ -392,15 +399,9 @@ async def mi_reporte_pdf(
             "materias": wamaterias,
         }
 
-    diag_promedio = diag.promedio_diagnostico if diag else None
-    promedios = [p for p in [diag_promedio, wa_promedio] if p is not None]
-    promedio_final = round(sum(promedios) / len(promedios), 2) if promedios else None
-
-    nivel_final, leyenda_final = feedback_final(
-        promedio_final,
-        tiene_diag=diag is not None,
-        tiene_wa=wa is not None,
-    )
+    indice = await _indice_fi_alumno(db, alumno.id)
+    if indice["tiene_resultados"]:
+        periodo = indice["periodo"]
 
     nombre_completo = (
         f"{current_user.apellido_paterno} {current_user.apellido_materno} "
@@ -413,9 +414,7 @@ async def mi_reporte_pdf(
         periodo=periodo,
         diagnostico=diagnostico,
         webassign=webassign,
-        promedio_final=promedio_final,
-        nivel_final=nivel_final,
-        leyenda_final=leyenda_final,
+        indice=indice,
     )
 
     return Response(
@@ -423,7 +422,54 @@ async def mi_reporte_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition": (
-                f'attachment; filename="resultado_{alumno.numero_cuenta or current_user.id}.pdf"'
+                "attachment; filename="
+                f'"carta_recomendacion_{alumno.numero_cuenta or current_user.id}.pdf"'
             )
         },
     )
+
+
+async def _indice_fi_alumno(db, alumno_id: int) -> dict:
+    """Índice FI UAEMex del periodo más reciente en que el alumno tiene resultados."""
+    modelos = {
+        "cuestionario": ResultadoCuestionarioDiagnostico,
+        "webassign": ResultadoWebAssign,
+        "final": ResultadoDiagnostico,
+    }
+    periodos: set[str] = set()
+    for modelo in modelos.values():
+        rows = await db.execute(
+            select(modelo.periodo).where(modelo.alumno_id == alumno_id).distinct()
+        )
+        periodos.update(rows.scalars().all())
+    periodo = max(periodos) if periodos else periodo_actual()
+
+    filas = {}
+    for nombre, modelo in modelos.items():
+        rows = await db.execute(
+            select(modelo).where(
+                (modelo.alumno_id == alumno_id) & (modelo.periodo == periodo)
+            )
+        )
+        filas[nombre] = rows.scalars().first()
+
+    # Mismas llaves que reportes_service._load_data, para calcular igual que el CREANI.
+    datos: dict = {}
+    for n in (1, 2):
+        for m in MATERIAS_DIAGNOSTICO:
+            col = f"aciertos_c{n}_{m}"
+            datos[col] = getattr(filas["cuestionario"], col) if filas["cuestionario"] else None
+    for m in MATERIAS_WEBASSIGN:
+        for tipo in ("trabajo", "examen"):
+            col = f"{m}_{tipo}"
+            datos[col] = getattr(filas["webassign"], col) if filas["webassign"] else None
+    for m in MATERIAS_FINAL:
+        col = f"puntaje_{m}"
+        datos[col] = getattr(filas["final"], col) if filas["final"] else None
+
+    config = await obtener_config(db, periodo)
+    return {
+        **calcular_indice(datos, config),
+        "periodo": periodo,
+        "tiene_resultados": bool(periodos),
+    }

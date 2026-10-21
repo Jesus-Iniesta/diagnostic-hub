@@ -15,6 +15,12 @@ from app.models.resultado_cuestionario_diagnostico import (
 from app.models.resultado_diagnostico import ResultadoDiagnostico
 from app.models.resultado_webassign import ResultadoWebAssign
 from app.models.user import User
+from app.services.indice_fi_service import (
+    calcular_indice,
+    formula_categoria,
+    formula_indice,
+    obtener_config,
+)
 
 HEADER_FILL = PatternFill(start_color="1C1954", end_color="1C1954", fill_type="solid")
 HEADER_FONT = Font(color="FFFFFF", bold=True, size=10)
@@ -93,7 +99,7 @@ CREANI_HEADERS = [
 ]
 
 
-def _construir_filas_creani(data: list[dict]) -> list[dict]:
+def _construir_filas_creani(data: list[dict], config_indice: dict | None = None) -> list[dict]:
     """Único lugar donde se decide de dónde sale cada columna del reporte CREANI."""
     filas = []
     for d in data:
@@ -126,6 +132,7 @@ def _construir_filas_creani(data: list[dict]) -> list[dict]:
             "tiene_cuestionario": d["tiene_cuestionario"],
             "tiene_wa": d["tiene_wa"],
             "tiene_final": d["tiene_final"],
+            "indice": calcular_indice(d, config_indice) if config_indice else None,
         })
     filas.sort(key=lambda f: f["nombre"])
     return filas
@@ -158,7 +165,125 @@ def _contorno(ws, r1: int, c1: int, r2: int, c2: int):
             )
 
 
-def _write_resumen_ws(ws, filas: list[dict]):
+# Bloque "ÍNDICES FI UAEMEX", a la derecha de las columnas de calificaciones.
+INDICE_COL_INICIO = 21  # U
+INDICE_HEADERS = [
+    "Asistencia",
+    "Diag. C1", "Diag. C2", "Diag. total",
+    "WA Álgebra", "WA Trigonometría", "WA Geometría", "WA total",
+    "Final Álgebra", "Final Trigonometría", "Final Geometría", "Final Cálculo",
+    "Final total",
+    "Índice FI UAEMex", "Categoría",
+]
+INDICE_RESULTADO = ("Índice FI UAEMex", "Categoría")
+INDICE_NEGRITAS = {"Diag. total", "WA total", "Final total", *INDICE_RESULTADO}
+INDICE_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+INDICE_FILL_RESULTADO = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")
+
+
+def _write_indice_ws(ws, filas: list[dict], config: dict):
+    c0 = INDICE_COL_INICIO
+    col = {nombre: c0 + i for i, nombre in enumerate(INDICE_HEADERS)}
+    letra = {nombre: get_column_letter(c) for nombre, c in col.items()}
+    ultima_col = c0 + len(INDICE_HEADERS) - 1
+    v = config["valores"]
+    maximo = v["asistencia"] + v["diagnostico"] + v["webassign"] + v["final"]
+
+    def grupo(desde: str, hasta: str, texto: str, fill) -> None:
+        if desde == hasta:
+            celda = ws[f"{letra[desde]}2"]
+            celda.value = texto
+            celda.font = CREANI_FONT
+            celda.fill = fill
+            celda.alignment = Alignment(horizontal="center", vertical="center")
+            return
+        _estilo_bloque(ws, f"{letra[desde]}2:{letra[hasta]}2", texto, fill)
+
+    _estilo_bloque(
+        ws,
+        f"{get_column_letter(c0)}1:{get_column_letter(ultima_col)}1",
+        "ÍNDICES FI UAEMEX",
+        INDICE_FILL_RESULTADO,
+    ).font = CREANI_FONT_BOLD
+    grupo("Asistencia", "Asistencia", f"Sobre {v['asistencia']:g}", INDICE_FILL)
+    grupo("Diag. C1", "Diag. total", f"Diagnóstico (sobre {v['diagnostico']:g})", INDICE_FILL)
+    grupo("WA Álgebra", "WA total", f"WebAssign (sobre {v['webassign']:g})", INDICE_FILL)
+    grupo("Final Álgebra", "Final total", f"Final (sobre {v['final']:g})", INDICE_FILL)
+    grupo("Índice FI UAEMex", "Categoría", f"Índice sobre {maximo:g}", INDICE_FILL_RESULTADO)
+
+    borde = Border(left=CREANI_THIN, right=CREANI_THIN, top=CREANI_THIN, bottom=CREANI_THIN)
+
+    def estilo(celda, nombre: str) -> None:
+        celda.font = CREANI_FONT_BOLD if nombre in INDICE_NEGRITAS else CREANI_FONT
+        celda.fill = INDICE_FILL_RESULTADO if nombre in INDICE_RESULTADO else INDICE_FILL
+        celda.border = borde
+
+    for nombre, c in col.items():
+        celda = ws.cell(3, c)
+        celda.value = nombre
+        estilo(celda, nombre)
+        celda.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for r, f in enumerate(filas, 4):
+        diag = f["indice"]["diagnostico"]
+        wa = f["indice"]["webassign"]["materias"]
+        final = f["indice"]["final"]["materias"]
+
+        def ref(nombre: str) -> str:
+            return f"{letra[nombre]}{r}"
+
+        # Los subtotales van con todos sus decimales (se muestran con 2); los
+        # totales, el índice y la categoría son fórmulas para que se recalculen
+        # cuando el coordinador escriba la asistencia.
+        valores = {
+            "Asistencia": None,
+            "Diag. C1": diag["c1"]["total"],
+            "Diag. C2": diag["c2"]["total"],
+            "Diag. total": f"={ref('Diag. C1')}+{ref('Diag. C2')}",
+            "WA Álgebra": wa["algebra"]["total"],
+            "WA Trigonometría": wa["trigonometria"]["total"],
+            "WA Geometría": wa["geometria"]["total"],
+            "WA total": f"={ref('WA Álgebra')}+{ref('WA Trigonometría')}+{ref('WA Geometría')}",
+            "Final Álgebra": final["algebra"],
+            "Final Trigonometría": final["trigonometria"],
+            "Final Geometría": final["geometria"],
+            "Final Cálculo": final["calculo"],
+            "Final total": (
+                f"={ref('Final Álgebra')}+{ref('Final Trigonometría')}"
+                f"+{ref('Final Geometría')}+{ref('Final Cálculo')}"
+            ),
+            "Índice FI UAEMex": formula_indice([
+                ref("Asistencia"), ref("Diag. total"), ref("WA total"), ref("Final total"),
+            ]),
+            "Categoría": formula_categoria(ref("Índice FI UAEMex"), config["categorias"]),
+        }
+        for nombre, valor in valores.items():
+            celda = ws.cell(r, col[nombre])
+            celda.value = valor
+            estilo(celda, nombre)
+            celda.alignment = Alignment(horizontal="center")
+            if nombre == "Índice FI UAEMex":
+                celda.number_format = "0.0"
+            elif nombre != "Categoría":
+                celda.number_format = "0.00"
+
+    ultima = 3 + len(filas)
+    _contorno(ws, 1, c0, 1, ultima_col)
+    for desde, hasta in (
+        ("Asistencia", "Asistencia"),
+        ("Diag. C1", "Diag. total"),
+        ("WA Álgebra", "WA total"),
+        ("Final Álgebra", "Final total"),
+        ("Índice FI UAEMex", "Categoría"),
+    ):
+        _contorno(ws, 2, col[desde], ultima, col[hasta])
+
+    for c in col.values():
+        ws.column_dimensions[get_column_letter(c)].width = 13.5
+    ws.column_dimensions[letra["Categoría"]].width = 16
+
+
+def _write_resumen_ws(ws, filas: list[dict], config_indice: dict | None = None):
     _estilo_bloque(ws, "J1:O1", "WebAssign")
     _estilo_bloque(ws, "E2:I2", "Diagnóstico")
     _estilo_bloque(ws, "J2:K2", "Algebra", CREANI_FILL_AZUL)
@@ -238,11 +363,16 @@ def _write_resumen_ws(ws, filas: list[dict]):
     _contorno(ws, 2, 14, 2, 15)
     _contorno(ws, 2, 16, 2, 20)
 
-    ws.auto_filter.ref = f"A3:T{ultima}"
     ws.sheet_format.defaultColWidth = 11.43
     ws.column_dimensions["A"].width = 38.43
     for col in range(2, 21):
         ws.column_dimensions[get_column_letter(col)].width = 11.43
+
+    ultima_col = "T"
+    if config_indice is not None:
+        _write_indice_ws(ws, filas, config_indice)
+        ultima_col = get_column_letter(INDICE_COL_INICIO + len(INDICE_HEADERS) - 1)
+    ws.auto_filter.ref = f"A3:{ultima_col}{ultima}"
 
 
 async def _load_data(
@@ -333,22 +463,23 @@ async def _load_data(
     return data
 
 
-def _write_resumen_final(wb: openpyxl.Workbook, data: list[dict]):
+def _write_resumen_final(wb: openpyxl.Workbook, data: list[dict], config_indice: dict):
     ws = wb.create_sheet("Resumen final")
-    _write_resumen_ws(ws, _construir_filas_creani(data))
+    _write_resumen_ws(ws, _construir_filas_creani(data, config_indice), config_indice)
 
 
 def _write_resumen_por_licenciatura(
     wb: openpyxl.Workbook,
     data: list[dict],
     licenciaturas: list[tuple[str, str]],
+    config_indice: dict,
 ):
     for clave, _ in licenciaturas:
         rows = [d for d in data if d["ingenieria"] == clave]
         if not rows:
             continue
         ws = wb.create_sheet(f"Resumen {clave}")
-        _write_resumen_ws(ws, _construir_filas_creani(rows))
+        _write_resumen_ws(ws, _construir_filas_creani(rows, config_indice), config_indice)
 
 
 def _write_diagnostico(wb: openpyxl.Workbook, data: list[dict]):
@@ -421,14 +552,15 @@ async def generar_excel_reporte(
     db: AsyncSession, periodo: str, licenciatura: str | None = None
 ) -> bytes:
     data = await _load_data(db, periodo, licenciatura)
+    config_indice = await obtener_config(db, periodo.strip().upper())
 
     licenciaturas = sorted({(d["ingenieria"], d["ingenieria"]) for d in data})
 
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    _write_resumen_final(wb, data)
-    _write_resumen_por_licenciatura(wb, data, licenciaturas)
+    _write_resumen_final(wb, data, config_indice)
+    _write_resumen_por_licenciatura(wb, data, licenciaturas, config_indice)
     _write_diagnostico(wb, data)
     _write_webassign(wb, data)
 

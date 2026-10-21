@@ -13,8 +13,16 @@ from app.schemas.configuracion import (
     ConfigContactoUpdate,
     ConfigRegistroRead,
     ConfigRegistroUpdate,
+    IndiceFiRead,
+    IndiceFiUpdate,
     PeriodoRangoRead,
     PeriodoRangoUpdate,
+)
+from app.services.indice_fi_service import (
+    guardar_config,
+    maximo_indice,
+    obtener_config,
+    validar_config,
 )
 from app.services.upload_diagnostico_service import (
     normalizar_periodo,
@@ -128,5 +136,60 @@ async def update_periodo_rango(
         periodo=normalizado,
         inicio=payload.inicio,
         fin=payload.fin,
+        es_default=False,
+    )
+
+@router.get(
+    "/indice-fi",
+    response_model=IndiceFiRead,
+    summary="Valores y categorías del Índice FI UAEMex de un periodo",
+)
+async def read_indice_fi(
+    db: DbSession,
+    periodo: str = Query(..., description="Ejemplo: 2026B"),
+) -> IndiceFiRead:
+    normalizado = normalizar_periodo(periodo)
+    if normalizado is None:
+        raise HTTPException(status_code=400, detail=PERIODO_INVALIDO_MSG)
+    config = await obtener_config(db, normalizado)
+    return IndiceFiRead(
+        periodo=normalizado,
+        valores=config["valores"],
+        maximo=maximo_indice(config["valores"]),
+        categorias=config["categorias"],
+        heredado_de=config["heredado_de"],
+        es_default=config["es_default"],
+    )
+
+
+@router.put(
+    "/indice-fi",
+    response_model=IndiceFiRead,
+    summary="Guardar valores y categorías del Índice FI UAEMex de un periodo",
+)
+async def update_indice_fi(
+    payload: IndiceFiUpdate,
+    db: DbSession,
+    _current_user: User = Depends(require_permission("gestionar_registro")),
+) -> IndiceFiRead:
+    normalizado = normalizar_periodo(payload.periodo)
+    if normalizado is None:
+        raise HTTPException(status_code=400, detail=PERIODO_INVALIDO_MSG)
+    valores = payload.valores.model_dump()
+    categorias = [c.model_dump() for c in payload.categorias]
+    generales, por_categoria = validar_config(valores, categorias)
+    if generales or por_categoria:
+        errores = list(generales)
+        for i, msgs in sorted(por_categoria.items()):
+            nombre = categorias[i]["nombre"].strip() or f"Categoría {i + 1}"
+            errores.extend(f"{nombre}: {m}" for m in msgs)
+        raise HTTPException(status_code=400, detail=" ".join(errores))
+    await guardar_config(db, normalizado, valores, categorias)
+    return IndiceFiRead(
+        periodo=normalizado,
+        valores=valores,
+        maximo=maximo_indice(valores),
+        categorias=categorias,
+        heredado_de=None,
         es_default=False,
     )

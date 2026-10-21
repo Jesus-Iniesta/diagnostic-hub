@@ -350,7 +350,7 @@ export default function AlumnoResultados() {
             onClick={handleDescargarPdf}
             loading={descargando}
           >
-            Descargar PDF
+            Descargar carta de recomendación
           </Button>
         </Group>
       </div>

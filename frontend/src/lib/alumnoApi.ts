@@ -121,13 +121,13 @@ export async function descargarCorreoPdf(): Promise<void> {
 export async function descargarResultadoPdf(): Promise<void> {
   const res = await fetch(`${ALUMNO_ME_URL}/reporte-pdf`, { credentials: 'include' });
   if (!res.ok) {
-    throw new Error('No se pudo generar el PDF de resultados');
+    throw new Error('No se pudo generar la carta de recomendación');
   }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'resultado_tutonet.pdf';
+  a.download = 'carta_recomendacion.pdf';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

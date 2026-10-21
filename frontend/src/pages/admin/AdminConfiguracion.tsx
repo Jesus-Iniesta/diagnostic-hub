@@ -23,6 +23,7 @@ import {
 import type { PeriodoRango } from '../../lib/configuracionApi';
 import { getCurrentPeriodo } from '../../lib/periodo';
 import classes from './AdminConfiguracion.module.css';
+import IndiceFiSection from './IndiceFiSection';
 
 type EstadoFormulario = 'activo' | 'inactivo';
 
@@ -144,7 +145,7 @@ export default function AdminConfiguracion() {
           Configuración
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Administra la disponibilidad de los formularios del sistema.
+          Administra la disponibilidad de los formularios del sistema y el Índice FI UAEMex.
         </Text>
       </div>
 
@@ -354,6 +355,8 @@ export default function AdminConfiguracion() {
           </Button>
         </Stack>
       </Card>
+
+      <IndiceFiSection />
     </>
   );
 }

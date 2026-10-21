@@ -16,6 +16,7 @@ export const AUTH_LOGOUT_URL = `${API_BASE_URL}/auth/logout`;
 export const CONFIG_CONTACTO_URL = `${API_BASE_URL}/configuracion/contacto`;
 export const CONFIG_REGISTRO_URL = `${API_BASE_URL}/configuracion/registro`;
 export const CONFIG_PERIODO_RANGO_URL = `${API_BASE_URL}/configuracion/periodo-rango`;
+export const CONFIG_INDICE_FI_URL = `${API_BASE_URL}/configuracion/indice-fi`;
 export const INGENIERIAS_URL = `${API_BASE_URL}/ingenierias`;
 export const REGISTRO_URL = `${API_BASE_URL}/alumnos/registro`;
 export const UPLOAD_ALUMNOS_URL = `${API_BASE_URL}/alumnos/upload`;

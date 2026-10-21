@@ -64,6 +64,31 @@
   border-radius: 12px;
 }
 
+.cardAncha {
+  max-width: 900px;
+}
+
+.indiceMaximo {
+  color: #17153b;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.categoria {
+  border: 1px solid #eef0f4;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fafbfc;
+}
+
+.categoriaError {
+  border-color: #fa5252;
+}
+
+.addButton {
+  align-self: flex-start;
+}
+
 @media (max-width: 576px) {
   .welcomeTitle {
     font-size: 24px;
