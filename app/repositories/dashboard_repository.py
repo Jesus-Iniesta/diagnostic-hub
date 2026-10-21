@@ -37,17 +37,13 @@ class DashboardRepository:
     async def get_stats(
         self, periodo: str, ingenieria_clave: str | None = None
     ) -> dict:
-        from app.services.alumnos_admin_service import grupos_por_revisar
+        from app.services.alumnos_admin_service import contar_por_revisar, grupos_por_revisar
 
         # Solo los alumnos del periodo (ingresaron en él o tienen resultados en él).
         grupos = await grupos_por_revisar(self.db, periodo.strip())
         alumnos_total = len(grupos["alumnos"])
-        por_revisar = {
-            "posibles_duplicados": len(grupos["duplicados"]),
-            "sin_cuenta": len(grupos["sin_cuenta"]),
-            "no_registradas": len(grupos["no_registradas"]),
-        }
-        por_revisar["total"] = sum(por_revisar.values())
+        # "total" son solo los posibles duplicados (ver contar_por_revisar).
+        por_revisar = await contar_por_revisar(self.db, periodo)
 
         programas_activos = (
             await self.db.execute(

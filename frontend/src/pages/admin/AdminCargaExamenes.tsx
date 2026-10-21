@@ -500,6 +500,37 @@ interface RecuadroProps {
   onClick?: () => void;
 }
 
+/** Recuadro gris, más chico: los sin cuenta no son trabajo del coordinador. */
+function RecuadroSinCuenta({ valor, abierto, onClick }: { valor: number | null; abierto: boolean; onClick: () => void }) {
+  const clicable = (valor ?? 0) > 0;
+  const contenido = (
+    <Group gap="xs" wrap="wrap">
+      <Text size="sm" fw={700} c="gray.8">
+        Sin número de cuenta: {valor === null ? '…' : valor.toLocaleString()}
+      </Text>
+      <Text size="sm" c="gray.7">
+        — se completa cuando el alumno se registra
+        {clicable && (abierto ? ' · ocultar' : ' · ver lista')}
+      </Text>
+    </Group>
+  );
+  const estilo = {
+    display: 'block',
+    width: '100%',
+    padding: '0.6rem 1rem',
+    borderRadius: 10,
+    background: 'var(--mantine-color-gray-0)',
+    border: `1px solid var(--mantine-color-gray-${abierto ? 6 : 3})`,
+  };
+  return clicable ? (
+    <UnstyledButton style={estilo} onClick={onClick} aria-expanded={abierto}>
+      {contenido}
+    </UnstyledButton>
+  ) : (
+    <div style={estilo}>{contenido}</div>
+  );
+}
+
 /** Recuadro grande; el amarillo y el rojo se abren con un clic si no están en 0. */
 function Recuadro({ color, titulo, valor, detalle, abierto, onClick }: RecuadroProps) {
   const clicable = Boolean(onClick) && (valor ?? 0) > 0;
@@ -534,9 +565,6 @@ function Recuadro({ color, titulo, valor, detalle, abierto, onClick }: RecuadroP
   );
 }
 
-/** Caso de "Por revisar": una pareja de posibles duplicados o un alumno sin cuenta. */
-type CasoRevisar = { tipo: 'duplicado'; pareja: ParejaDuplicada } | { tipo: 'sin_cuenta'; alumno: AlumnoAdmin };
-
 function correoDe(a: AlumnoAdmin): string {
   return a.correo_personal || a.correo_institucional || '—';
 }
@@ -570,7 +598,7 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
   // Filas sin registrar de cada examen (las de la segunda vuelta).
   const [filas, setFilas] = useState<Record<string, FilaNoRegistrada[]>>({});
   const [revision, setRevision] = useState<RevisionPeriodo | null>(null);
-  const [abierto, setAbierto] = useState<'revisar' | 'rojo' | null>(null);
+  const [abierto, setAbierto] = useState<'revisar' | 'rojo' | 'sin_cuenta' | null>(null);
   const [corrigiendo, setCorrigiendo] = useState<{ examen: string; fila: FilaNoRegistrada } | null>(null);
   const [uniendo, setUniendo] = useState<ParejaDuplicada | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -667,12 +695,9 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
     }
   };
 
-  const casosRevisar: CasoRevisar[] = revision
-    ? [
-        ...revision.posibles_duplicados.map((pareja) => ({ tipo: 'duplicado' as const, pareja })),
-        ...revision.sin_cuenta.map((alumno) => ({ tipo: 'sin_cuenta' as const, alumno })),
-      ]
-    : [];
+  // Por revisar: solo los posibles duplicados (lo que el coordinador sí revisa).
+  const casosRevisar: ParejaDuplicada[] = revision?.posibles_duplicados ?? [];
+  const sinCuenta: AlumnoAdmin[] = revision?.sin_cuenta ?? [];
   const noRegistradas = guardados.flatMap((examen) => (filas[examen] ?? []).map((fila) => ({ examen, fila })));
   const todoListo = revision !== null && casosRevisar.length === 0 && noRegistradas.length === 0;
 
@@ -770,11 +795,7 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
                 color="yellow"
                 titulo="Por revisar"
                 valor={revision ? casosRevisar.length : null}
-                detalle={
-                  revision
-                    ? `${revision.posibles_duplicados.length} posibles duplicados · ${revision.sin_cuenta.length} sin cuenta`
-                    : 'Posibles duplicados y sin cuenta'
-                }
+                detalle="Posibles duplicados"
                 abierto={abierto === 'revisar'}
                 onClick={() => setAbierto(abierto === 'revisar' ? null : 'revisar')}
               />
@@ -787,6 +808,12 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
                 onClick={() => setAbierto(abierto === 'rojo' ? null : 'rojo')}
               />
             </SimpleGrid>
+
+            <RecuadroSinCuenta
+              valor={revision ? sinCuenta.length : null}
+              abierto={abierto === 'sin_cuenta'}
+              onClick={() => setAbierto(abierto === 'sin_cuenta' ? null : 'sin_cuenta')}
+            />
 
             {todoListo && (
               <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
@@ -804,35 +831,15 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
             {abierto === 'revisar' && casosRevisar.length > 0 && (
               <Card padding="md" radius="md" withBorder style={{ borderColor: 'var(--mantine-color-yellow-4)' }}>
                 <Text fw={600} size="sm" mb="sm">
-                  Por revisar ({casosRevisar.length})
+                  Por revisar: posibles duplicados ({casosRevisar.length})
                 </Text>
                 <ListaPaginada
                   items={casosRevisar}
-                  texto={(c) =>
-                    c.tipo === 'duplicado' ? `${textoAlumno(c.pareja.alumno)} ${textoAlumno(c.pareja.otro)}` : textoAlumno(c.alumno)
-                  }
+                  texto={(c) => `${textoAlumno(c.alumno)} ${textoAlumno(c.otro)}`}
                   encabezados={['Nombre', 'Correo', 'Cuenta', 'Folio', 'Examen', 'Motivo', 'Acción']}
                   vacio="Nada coincide con la búsqueda"
                   fila={(c) => {
-                    if (c.tipo === 'sin_cuenta') {
-                      const a = c.alumno;
-                      return (
-                        <tr key={`s-${a.id}`}>
-                          <td className={classes.wrapCell}>{a.nombre || 'Sin nombre'}</td>
-                          <td className={classes.wrapCell}>{correoDe(a)}</td>
-                          <td>—</td>
-                          <td>{a.numero_folio || '—'}</td>
-                          <td className={classes.wrapCell}>{a.examenes.join(', ') || '—'}</td>
-                          <td className={classes.wrapCell}>Sin número de cuenta</td>
-                          <td>
-                            <Button component={Link} to="/admin/alumnos?filtro=sin_cuenta" size="compact-xs" variant="subtle">
-                              Editar
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const { alumno: a, otro: b, motivo } = c.pareja;
+                    const { alumno: a, otro: b, motivo } = c;
                     return (
                       <tr key={`d-${a.id}-${b.id}`}>
                         <td className={classes.wrapCell}>
@@ -856,7 +863,7 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
                             size="compact-xs"
                             color="grape"
                             leftSection={<IconArrowsJoin size={14} />}
-                            onClick={() => setUniendo(c.pareja)}
+                            onClick={() => setUniendo(c)}
                           >
                             Unir
                           </Button>
@@ -864,6 +871,28 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
                       </tr>
                     );
                   }}
+                />
+              </Card>
+            )}
+
+            {abierto === 'sin_cuenta' && sinCuenta.length > 0 && (
+              <Card padding="md" radius="md" withBorder>
+                <Text fw={600} size="sm" mb="sm">
+                  Sin número de cuenta ({sinCuenta.length})
+                </Text>
+                <ListaPaginada
+                  items={sinCuenta}
+                  texto={textoAlumno}
+                  encabezados={['Nombre', 'Correo', 'Folio', 'Examen']}
+                  vacio="Nada coincide con la búsqueda"
+                  fila={(a) => (
+                    <tr key={a.id}>
+                      <td className={classes.wrapCell}>{a.nombre || 'Sin nombre'}</td>
+                      <td className={classes.wrapCell}>{correoDe(a)}</td>
+                      <td>{a.numero_folio || '—'}</td>
+                      <td className={classes.wrapCell}>{a.examenes.join(', ') || '—'}</td>
+                    </tr>
+                  )}
                 />
               </Card>
             )}

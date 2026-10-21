@@ -25,7 +25,7 @@ export interface DashboardStats {
   periodos_con_datos: number;
   level_distribution: LevelDistribution[];
   quick_summary: QuickSummary;
-  /** Posibles duplicados + sin cuenta + filas que no se pudieron registrar. */
+  /** "total" (Por revisar) son solo los posibles duplicados; los demás van aparte. */
   por_revisar: {
     posibles_duplicados: number;
     sin_cuenta: number;

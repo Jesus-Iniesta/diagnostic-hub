@@ -84,8 +84,9 @@ async def prueba_db():
             check("revisión: la pareja lado a lado",
                   sorted((mias[0]["alumno"]["correo_personal"], mias[0]["otro"]["correo_personal"])) if mias else None,
                   [f"{P}.a@gmail.com", f"{P}.b@gmail.com"])
-            check("revisión: el sin cuenta ya está en la pareja",
-                  any(f["correo_personal"] == f"{P}.b@gmail.com" for f in rev["sin_cuenta"]), False)
+            check("revisión: el sin cuenta sale aparte aunque esté en la pareja",
+                  any(f["correo_personal"] == f"{P}.b@gmail.com" for f in rev["sin_cuenta"]), True)
+            check("estado: por revisar cuenta solo duplicados", estado["por_revisar"]["total"], 1)
             check("estado: CREANI aún no", estado["creani_descargado"], False)
             await carga.marcar_creani_descargado(db, PERIODO)
             check("estado: CREANI descargado", (await carga.estado_periodo(db, PERIODO))["creani_descargado"], True)

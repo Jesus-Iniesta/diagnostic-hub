@@ -2,6 +2,7 @@ import { Card, Divider, Group, Skeleton, Stack, Text } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconClock,
+  IconId,
   IconUserCheck,
 } from '@tabler/icons-react';
 import type { ReactElement } from 'react';
@@ -13,8 +14,9 @@ import classes from './QuickSummary.module.css';
 
 interface QuickSummaryProps {
   summary: QuickSummaryData | null;
-  /** Posibles duplicados + sin cuenta + no se pudieron registrar. */
+  /** Solo posibles duplicados. */
   porRevisar: number | null;
+  sinCuenta: number | null;
   loading: boolean;
 }
 
@@ -41,7 +43,7 @@ interface SummaryItem {
   to?: string;
 }
 
-function buildItems(summary: QuickSummaryData, porRevisar: number): SummaryItem[] {
+function buildItems(summary: QuickSummaryData, porRevisar: number, sinCuenta: number): SummaryItem[] {
   return [
     {
       icon: <IconClock size={20} aria-hidden="true" />,
@@ -64,18 +66,28 @@ function buildItems(summary: QuickSummaryData, porRevisar: number): SummaryItem[
     {
       icon: <IconAlertTriangle size={20} aria-hidden="true" />,
       title: `Por revisar: ${porRevisar.toLocaleString()}`,
-      text: 'Posibles duplicados, sin cuenta y no registrados',
+      text: 'Posibles duplicados',
       status: porRevisar === 0 ? 'Nada por revisar' : 'Ver en Alumnos →',
       color: dashboardColors.orange,
       lightColor: dashboardColors.orangeLight,
       statusColor: porRevisar === 0 ? dashboardColors.green : dashboardColors.orange,
       to: '/admin/alumnos?filtro=por_revisar',
     },
+    {
+      icon: <IconId size={20} aria-hidden="true" />,
+      title: `Sin número de cuenta: ${sinCuenta.toLocaleString()}`,
+      text: 'Se completa cuando el alumno se registra',
+      status: sinCuenta === 0 ? 'Todos tienen cuenta' : 'Ver lista →',
+      color: '#667085',
+      lightColor: '#F2F4F7',
+      statusColor: '#667085',
+      to: '/admin/alumnos?filtro=sin_cuenta',
+    },
   ];
 }
 
-export default function QuickSummary({ summary, porRevisar, loading }: QuickSummaryProps) {
-  const items = summary ? buildItems(summary, porRevisar ?? 0) : [];
+export default function QuickSummary({ summary, porRevisar, sinCuenta, loading }: QuickSummaryProps) {
+  const items = summary ? buildItems(summary, porRevisar ?? 0, sinCuenta ?? 0) : [];
 
   return (
     <Card className={classes.card} padding="xl" radius="lg">
@@ -83,7 +95,7 @@ export default function QuickSummary({ summary, porRevisar, loading }: QuickSumm
 
       {loading ? (
         <Stack gap="md" mt="lg">
-          {Array.from({ length: 3 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} height={60} radius="md" />
           ))}
         </Stack>

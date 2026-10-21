@@ -138,7 +138,8 @@ async def listar_alumnos(
         grupos = await grupos_por_revisar(db, periodo)
         ids = set(grupos["por_id"]) if periodo is not None else None
         if filtro == "por_revisar":
-            revisar = set(grupos["duplicados"]) | {a.id for a in grupos["sin_cuenta"]}
+            # Solo posibles duplicados; los sin cuenta tienen su propio filtro.
+            revisar = set(grupos["duplicados"])
             ids = revisar if ids is None else ids & revisar
         conds.append(Alumno.id.in_(ids or {-1}))
     if filtro == "provisionales":
@@ -291,9 +292,10 @@ async def posibles_duplicados(db: AsyncSession, periodo: str | None) -> list[dic
 async def revision_periodo(db: AsyncSession, periodo: str) -> dict:
     """Los recuadros que se ven al terminar "Procesar todo".
 
-    Alumnos con algún examen en el periodo y lo que hay por revisar: las
-    parejas de posibles duplicados y los alumnos sin cuenta que no están ya en
-    una pareja. Las filas que no se pudieron registrar las da cada archivo.
+    Alumnos con algún examen en el periodo, las parejas de posibles
+    duplicados (Por revisar) y los alumnos sin cuenta (recuadro aparte: se
+    completan cuando el alumno se registra). Las filas que no se pudieron
+    registrar las da cada archivo.
     """
     periodo = periodo.strip()
     con_examen: set[int] = set()
@@ -302,9 +304,8 @@ async def revision_periodo(db: AsyncSession, periodo: str) -> dict:
             (await db.execute(select(modelo.alumno_id).where(modelo.periodo == periodo))).scalars()
         )
     duplicados = await posibles_duplicados(db, periodo)
-    en_pareja = {p[k]["id"] for p in duplicados for k in ("alumno", "otro")}
     g = await grupos_por_revisar(db, periodo)
-    sin_cuenta = [a for a in g["sin_cuenta"] if a.id not in en_pareja]
+    sin_cuenta = g["sin_cuenta"]
     examenes, marcas = await examenes_y_marcas(db, [a.id for a in sin_cuenta], periodo)
     return {
         "periodo": periodo,
@@ -401,15 +402,16 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
 
 
 async def contar_por_revisar(db: AsyncSession, periodo: str) -> dict:
-    """Cuántos hay por revisar: parejas de posibles duplicados + sin cuenta +
-    filas que no se pudieron registrar."""
+    """Conteos del periodo. "total" (Por revisar) son solo las parejas de
+    posibles duplicados: es lo único que el coordinador tiene que revisar. Los
+    sin cuenta se completan cuando el alumno se registra."""
     g = await grupos_por_revisar(db, periodo.strip())
-    conteo = {
+    return {
         "posibles_duplicados": len(g["parejas"]),
         "sin_cuenta": len(g["sin_cuenta"]),
         "no_registradas": len(g["no_registradas"]),
+        "total": len(g["parejas"]),
     }
-    return {**conteo, "total": sum(conteo.values())}
 
 
 def _fila_excel(alumno: Alumno, examenes: list[str]) -> list:

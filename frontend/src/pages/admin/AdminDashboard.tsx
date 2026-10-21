@@ -168,6 +168,7 @@ export default function AdminDashboard() {
           <QuickSummary
             summary={stats?.quick_summary ?? null}
             porRevisar={stats?.por_revisar?.total ?? null}
+            sinCuenta={stats?.por_revisar?.sin_cuenta ?? null}
             loading={loadingStats}
           />
         </Grid.Col>

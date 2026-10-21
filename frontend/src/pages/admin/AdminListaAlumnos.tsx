@@ -411,8 +411,8 @@ export default function AdminListaAlumnos() {
           <SegmentedControl data={FILTROS} value={filtro} onChange={cambiarFiltro} style={{ alignSelf: 'flex-start' }} />
           {filtro === 'por_revisar' && (
             <Text size="xs" c="dimmed">
-              Posibles duplicados (mismo nombre o marcados al registrarse) y alumnos sin número de cuenta. Las filas que
-              no se pudieron registrar están en Reportes → "Alumnos por revisar".
+              Alumnos que pueden estar registrados dos veces (mismo nombre o marcados al cargar o registrarse). Los que
+              no tienen número de cuenta están en "Sin cuenta": se completan cuando el alumno se registra.
             </Text>
           )}
           {filtro === 'duplicados' && (
