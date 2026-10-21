@@ -1,6 +1,5 @@
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Group,
@@ -11,48 +10,59 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconAlertCircle, IconDownload, IconReport } from '@tabler/icons-react';
+import { IconAlertCircle, IconDownload } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
-import { API_BASE_URL } from '../../config';
-import { apiFetch } from '../../lib/api';
+import CategoriasBarra from '../../components/CategoriasBarra/CategoriasBarra';
+import { fmtIndice } from '../../lib/categorias';
+import {
+  descargarCreani,
+  fetchPeriodosReporte,
+  fetchResumenCreani,
+} from '../../lib/reportesApi';
+import type { ResumenCreani, ResumenGrupoCreani } from '../../lib/reportesApi';
+import classes from './AcreditadorHome.module.css';
 
-interface PeriodosResponse {
-  periodos: string[];
-}
-
-interface LicenciaturaStats {
-  clave: string;
-  nombre: string;
-  diagnosticos: number;
-  webassign: number;
-}
-
-interface StatsResponse {
-  periodo: string;
-  diagnosticos: number;
-  webassign: number;
-  webassign_por_carrera: Record<string, number>;
-  por_licenciatura: LicenciaturaStats[];
+/** Alumnos, Índice FI promedio, barra de categorías y, en chico, quién hizo cada examen. */
+function Datos({ datos, maximo }: { datos: ResumenGrupoCreani; maximo: number }) {
+  return (
+    <Stack gap="sm">
+      <Group gap="xl" wrap="nowrap">
+        <div>
+          <Text className={classes.label}>Alumnos</Text>
+          <Text className={classes.valor}>{datos.alumnos}</Text>
+        </div>
+        <div>
+          <Text className={classes.label}>Índice FI promedio</Text>
+          <Text className={classes.valor}>{fmtIndice(datos.indice_promedio, maximo)}</Text>
+        </div>
+      </Group>
+      <CategoriasBarra categorias={datos.categorias} />
+      <Text size="xs" c="dimmed">
+        Hicieron examen diagnóstico: {datos.diagnostico} · examen final: {datos.final} ·
+        WebAssign: {datos.webassign}
+      </Text>
+    </Stack>
+  );
 }
 
 export default function AcreditadorHome() {
   const [periodos, setPeriodos] = useState<string[]>([]);
   const [periodo, setPeriodo] = useState<string | null>(null);
-  const [stats, setStats] = useState<StatsResponse | null>(null);
-  const [loadingPeriodos, setLoadingPeriodos] = useState(true);
-  const [loadingStats, setLoadingStats] = useState(false);
-  const [downloadingClave, setDownloadingClave] = useState<string | null>(null);
+  const [resumen, setResumen] = useState<ResumenCreani | null>(null);
+  const [cargandoPeriodos, setCargandoPeriodos] = useState(true);
+  const [cargando, setCargando] = useState(false);
+  // 'todo' o la clave de la carrera que se está descargando.
+  const [descargando, setDescargando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    apiFetch<PeriodosResponse>(`${API_BASE_URL}/reportes/periodos`)
+    fetchPeriodosReporte()
       .then((data) => {
-        if (mounted) {
-          setPeriodos(data.periodos);
-          if (data.periodos.length > 0) setPeriodo(data.periodos[0]);
-        }
+        if (!mounted) return;
+        setPeriodos(data);
+        if (data.length > 0) setPeriodo(data[0]);
       })
       .catch((err: unknown) => {
         if (mounted) {
@@ -62,7 +72,7 @@ export default function AcreditadorHome() {
         }
       })
       .finally(() => {
-        if (mounted) setLoadingPeriodos(false);
+        if (mounted) setCargandoPeriodos(false);
       });
     return () => { mounted = false; };
   }, []);
@@ -70,152 +80,124 @@ export default function AcreditadorHome() {
   useEffect(() => {
     if (!periodo) return;
     let mounted = true;
-    setLoadingStats(true);
-    apiFetch<StatsResponse>(`${API_BASE_URL}/reportes/stats?periodo=${encodeURIComponent(periodo)}`)
+    setCargando(true);
+    fetchResumenCreani(periodo)
       .then((data) => {
-        if (mounted) setStats(data);
+        if (mounted) setResumen(data);
       })
       .catch((err: unknown) => {
         if (mounted) {
-          setStats(null);
+          setResumen(null);
           setError(
-            `No se pudieron cargar las estadísticas: ${err instanceof Error ? err.message : 'error desconocido'}`,
+            `No se pudo cargar el resumen: ${err instanceof Error ? err.message : 'error desconocido'}`,
           );
         }
       })
       .finally(() => {
-        if (mounted) setLoadingStats(false);
+        if (mounted) setCargando(false);
       });
     return () => { mounted = false; };
   }, [periodo]);
 
-  const handleDownload = async (licenciatura?: string) => {
+  const handleDescargar = async (licenciatura?: string) => {
     if (!periodo) return;
-    setDownloadingClave(licenciatura ?? 'all');
+    setDescargando(licenciatura ?? 'todo');
     setError(null);
     try {
-      const params = new URLSearchParams({ periodo });
-      if (licenciatura) params.set('licenciatura', licenciatura);
-      const res = await fetch(`${API_BASE_URL}/reportes/excel?${params.toString()}`, {
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`Error ${res.status} al descargar el reporte`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = licenciatura
-        ? `reporte_${licenciatura}_${periodo}.xlsx`
-        : `reporte_${periodo}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await descargarCreani(periodo, licenciatura);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al descargar el reporte');
     } finally {
-      setDownloadingClave(null);
+      setDescargando(null);
     }
   };
 
   return (
-    <Stack gap="xl">
-      <Title order={2}>Acreditador</Title>
-      <Text c="dimmed">
-        Resumen del semestre separado por licenciatura, y descarga del reporte en Excel.
-      </Text>
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-end" wrap="wrap">
+        <div>
+          <Title order={2}>Resumen del semestre{periodo ? ` · ${periodo}` : ''}</Title>
+          <Text c="dimmed" size="sm">
+            Resultados por carrera y descarga del reporte en Excel.
+          </Text>
+        </div>
+        <Select
+          label="Periodo"
+          placeholder="Selecciona periodo"
+          data={periodos}
+          value={periodo}
+          onChange={setPeriodo}
+          disabled={cargandoPeriodos}
+          allowDeselect={false}
+          w={160}
+          nothingFoundMessage="No hay periodos con resultados cargados"
+        />
+      </Group>
 
-        <Card withBorder p="xl">
-          <SimpleGrid cols={{ base: 1, sm: 2 }}>
-            <Select
-              label="Periodo"
-              placeholder="Selecciona periodo"
-              data={periodos.map((p) => ({ value: p, label: p }))}
-              value={periodo}
-              onChange={setPeriodo}
-              disabled={loadingPeriodos}
-              nothingFoundMessage="No hay periodos con resultados cargados"
-            />
-            <Group align="flex-end">
+      {error && (
+        <Alert color="red" icon={<IconAlertCircle size={18} />} withCloseButton onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {!cargandoPeriodos && !error && periodos.length === 0 && (
+        <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
+          Aún no hay resultados cargados, por lo que no hay periodos para reportar.
+        </Alert>
+      )}
+
+      {cargando && (
+        <Group justify="center" py="xl">
+          <Loader size="sm" />
+        </Group>
+      )}
+
+      {resumen && !cargando && (
+        <>
+          <Card withBorder p="lg" radius="lg">
+            <Group justify="space-between" align="flex-start" wrap="wrap" mb="sm">
+              <Title order={4}>Todas las carreras</Title>
               <Button
                 leftSection={<IconDownload size={18} />}
-                onClick={() => handleDownload()}
-                loading={downloadingClave === 'all'}
-                disabled={!periodo}
-                size="lg"
+                onClick={() => handleDescargar()}
+                loading={descargando === 'todo'}
               >
                 Descargar Excel completo
               </Button>
             </Group>
-          </SimpleGrid>
-        </Card>
-
-        {error && (
-          <Alert color="red" icon={<IconAlertCircle size={18} />} withCloseButton onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-
-        {!loadingPeriodos && !error && periodos.length === 0 && (
-          <Alert color="yellow" icon={<IconAlertCircle size={18} />}>
-            Aún no hay resultados de diagnóstico ni de WebAssign cargados, por lo que no hay periodos para reportar.
-          </Alert>
-        )}
-
-        {loadingStats && (
-          <Card withBorder p="xl">
-            <Group justify="center">
-              <Loader size="sm" />
-            </Group>
+            <Datos datos={resumen.total} maximo={resumen.maximo} />
           </Card>
-        )}
 
-        {stats && !loadingStats && (
-          <Card withBorder p="xl">
-            <Stack gap="md">
-              <Group gap="sm">
-                <IconReport size={20} color="var(--mantine-color-indigo-6)" />
-                <Title order={4}>Resumen por licenciatura - {stats.periodo}</Title>
-              </Group>
-
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-                {stats.por_licenciatura.map((lic) => (
-                  <Card
-                    key={lic.clave}
-                    withBorder
-                    p="md"
-                    shadow="sm"
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+            {resumen.carreras.map((c) => (
+              <Card key={c.clave || 'sin'} withBorder p="lg" radius="lg" className={classes.carrera}>
+                <div>
+                  <Text fw={700} size="lg">{c.clave || 'Sin ingeniería'}</Text>
+                  <Text size="xs" c="dimmed" lineClamp={1} title={c.nombre}>
+                    {c.clave ? c.nombre : 'Alumnos sin carrera registrada'}
+                  </Text>
+                </div>
+                <div className={classes.datosCarrera}>
+                  <Datos datos={c} maximo={resumen.maximo} />
+                </div>
+                {c.clave ? (
+                  <Button
+                    variant="light"
+                    size="xs"
+                    leftSection={<IconDownload size={15} />}
+                    onClick={() => handleDescargar(c.clave)}
+                    loading={descargando === c.clave}
                   >
-                    <Stack gap="xs">
-                      <Group justify="space-between">
-                        <Text fw={700} size="lg">{lic.clave}</Text>
-                        <Badge variant="light" color="indigo">{lic.nombre}</Badge>
-                      </Group>
-                      <SimpleGrid cols={2}>
-                        <div>
-                          <Text size="xs" c="dimmed">Exámenes finales</Text>
-                          <Text fw={700} size="xl">{lic.diagnosticos}</Text>
-                        </div>
-                        <div>
-                          <Text size="xs" c="dimmed">WebAssign</Text>
-                          <Text fw={700} size="xl">{lic.webassign}</Text>
-                        </div>
-                      </SimpleGrid>
-                      <Button
-                        variant="light"
-                        size="xs"
-                        leftSection={<IconDownload size={15} />}
-                        onClick={() => handleDownload(lic.clave)}
-                        loading={downloadingClave === lic.clave}
-                        disabled={!periodo}
-                      >
-                        Excel
-                      </Button>
-                    </Stack>
-                  </Card>
-                ))}
-              </SimpleGrid>
-            </Stack>
-          </Card>
-        )}
+                    Descargar Excel
+                  </Button>
+                ) : (
+                  <Text size="xs" c="dimmed" ta="center">Incluidos en el Excel completo</Text>
+                )}
+              </Card>
+            ))}
+          </SimpleGrid>
+        </>
+      )}
     </Stack>
   );
 }

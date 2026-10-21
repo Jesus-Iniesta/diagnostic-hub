@@ -1,0 +1,24 @@
+/* Todas las tarjetas del mismo alto, con el botón abajo. */
+.carrera {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.datosCarrera {
+  flex: 1;
+}
+
+.label {
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.valor {
+  color: #17153b;
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}

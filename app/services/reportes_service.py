@@ -656,6 +656,65 @@ async def get_stats_reporte(db: AsyncSession, periodo: str) -> dict:
     }
 
 
+def _resumen_grupo(datos: list[dict], config: dict) -> dict:
+    """Conteos de un conjunto de filas del CREANI (todas o las de una carrera)."""
+    con_examen = [d for d in datos if d["tiene_cuestionario"] or d["tiene_final"] or d["tiene_wa"]]
+    indices = [calcular_indice(d, config) for d in con_examen]
+    categorias = {c["nombre"]: 0 for c in sorted(config["categorias"], key=lambda c: c["minimo"], reverse=True)}
+    for ind in indices:
+        if ind["categoria"]:
+            nombre = ind["categoria"]["nombre"]
+            categorias[nombre] = categorias.get(nombre, 0) + 1
+    completos = sum(
+        1 for d in datos if d["tiene_cuestionario"] and d["tiene_final"] and d["tiene_wa"]
+    )
+    return {
+        "alumnos": len(datos),
+        "completos": completos,
+        "pendientes": len(datos) - completos,
+        "diagnostico": sum(1 for d in datos if d["tiene_cuestionario"]),
+        "final": sum(1 for d in datos if d["tiene_final"]),
+        "webassign": sum(1 for d in datos if d["tiene_wa"]),
+        # Solo de los alumnos con algún examen; el resto no tiene índice que promediar.
+        "indice_promedio": _promedio([ind["indice"] for ind in indices]),
+        "categorias": [{"categoria": k, "cantidad": v} for k, v in categorias.items()],
+    }
+
+
+async def resumen_creani(db: AsyncSession, periodo: str) -> dict:
+    """Lo que trae el CREANI del periodo, en total y por carrera (mismas filas
+    que generar_excel_reporte)."""
+    from app.services.alumnos_admin_service import contar_por_revisar
+
+    periodo = periodo.strip().upper()
+    data = await _load_data(db, periodo)
+    config = await obtener_config(db, periodo)
+    nombres = dict(
+        (await db.execute(select(Ingenieria.clave, Ingenieria.nombre))).all()
+    )
+
+    por_carrera: dict[str, list[dict]] = {}
+    for d in data:
+        por_carrera.setdefault(d["ingenieria"], []).append(d)
+
+    carreras = [
+        {
+            "clave": clave,
+            "nombre": nombres.get(clave, "Sin ingeniería") if clave else "Sin ingeniería",
+            **_resumen_grupo(filas, config),
+        }
+        # Las que no tienen ingeniería van al final y no se pueden descargar aparte.
+        for clave, filas in sorted(por_carrera.items(), key=lambda kv: (not kv[0], kv[0]))
+    ]
+    return {
+        "periodo": periodo,
+        "maximo": maximo_indice(config["valores"], config["usar_asistencia"]),
+        "posibles_duplicados": (await contar_por_revisar(db, periodo))["posibles_duplicados"],
+        "total": _resumen_grupo(data, config),
+        "carreras": carreras,
+    }
+
+
 def _promedio(valores: list[float]) -> float | None:
     return round(sum(valores) / len(valores), 2) if valores else None
 

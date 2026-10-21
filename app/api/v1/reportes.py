@@ -13,6 +13,7 @@ from app.services.reportes_service import (
     generar_excel_reporte,
     get_periodos_disponibles,
     get_stats_reporte,
+    resumen_creani,
 )
 
 router = APIRouter()
@@ -65,6 +66,18 @@ async def stats(
     _current_user: User = Depends(require_permission("consultar_estadisticas")),
 ):
     return await get_stats_reporte(db, periodo)
+
+
+@router.get(
+    "/resumen",
+    summary="Qué incluye el CREANI del periodo, en total y por carrera",
+)
+async def resumen(
+    db: DbSession,
+    periodo: str = Query(...),
+    _current_user: User = Depends(require_permission("consultar_estadisticas")),
+):
+    return await resumen_creani(db, periodo)
 
 
 @router.get(

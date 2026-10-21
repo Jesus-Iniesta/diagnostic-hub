@@ -30,6 +30,7 @@ import {
 } from 'recharts';
 
 import CreaniCharts from '../../components/CreaniCharts/CreaniCharts';
+import IndiceAlumno from '../../components/IndiceAlumno/IndiceAlumno';
 import { colorCategoria, fmtIndice } from '../../lib/categorias';
 import {
   fetchAlumnosGrupo,
@@ -303,8 +304,12 @@ export default function ProfesorResultados() {
                               <Table.Td>
                                 {alumno.examen_final != null ? alumno.examen_final.toFixed(2) : '—'}
                               </Table.Td>
-                              <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                                {fmtIndice(alumno.indice, alumno.maximo)}
+                              <Table.Td>
+                                <IndiceAlumno
+                                  indice={alumno.indice}
+                                  maximo={alumno.maximo}
+                                  faltantes={alumno.examenes_faltantes}
+                                />
                               </Table.Td>
                               <Table.Td>
                                 {alumno.categoria ? (

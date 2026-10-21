@@ -23,7 +23,8 @@ import {
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
-import { colorCategoria, fmtIndice } from '../../lib/categorias';
+import IndiceAlumno from '../../components/IndiceAlumno/IndiceAlumno';
+import { colorCategoria } from '../../lib/categorias';
 import {
   fetchMisGrupos,
   crearGrupo,
@@ -419,8 +420,8 @@ export default function ProfesorGrupo() {
                       <Table.Td>
                         {a.examen_final != null ? a.examen_final.toFixed(2) : '—'}
                       </Table.Td>
-                      <Table.Td style={{ whiteSpace: 'nowrap' }}>
-                        {fmtIndice(a.indice, a.maximo)}
+                      <Table.Td>
+                        <IndiceAlumno indice={a.indice} maximo={a.maximo} faltantes={a.examenes_faltantes} />
                       </Table.Td>
                       <Table.Td>
                         {a.categoria ? (

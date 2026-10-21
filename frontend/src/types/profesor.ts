@@ -26,6 +26,8 @@ export interface GrupoAlumno {
   maximo: number;
   categoria: string | null;
   examen_final: number | null;
+  /** Exámenes que aún no tiene (p. ej. "WebAssign"). */
+  examenes_faltantes: string[];
 }
 
 export interface GrupoResumen {

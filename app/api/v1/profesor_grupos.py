@@ -40,6 +40,14 @@ router = APIRouter(
 )
 
 
+# Exámenes que suman al índice, en el orden en que se presentan.
+EXAMENES = (
+    ("cuestionario", "Examen diagnóstico"),
+    ("final", "Examen final"),
+    ("webassign", "WebAssign"),
+)
+
+
 def _materia_nombre(grupo: Grupo) -> str:
     """La materia como la escribió el profesor; los grupos anteriores usan la del catálogo."""
     return grupo.materia_nombre or (grupo.materia.nombre if grupo.materia else "")
@@ -178,6 +186,11 @@ async def alumnos_grupo(
             maximo=indice["maximo"],
             categoria=indice["categoria"]["nombre"] if evaluado and indice["categoria"] else None,
             examen_final=final.promedio_diagnostico if final else None,
+            examenes_faltantes=[
+                nombre
+                for clave, nombre in EXAMENES
+                if evaluado and indice["filas"][clave] is None
+            ],
         ))
     rows.sort(key=lambda r: r.nombre)
     return rows

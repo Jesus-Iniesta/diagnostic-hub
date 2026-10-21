@@ -39,6 +39,8 @@ class GrupoAlumnoResponse(BaseModel):
     categoria: str | None = None
     # Promedio del examen final (0-10).
     examen_final: float | None = None
+    # Exámenes del periodo del índice que aún no tiene (p. ej. "WebAssign").
+    examenes_faltantes: list[str] = []
 
     model_config = {"from_attributes": True}
 
