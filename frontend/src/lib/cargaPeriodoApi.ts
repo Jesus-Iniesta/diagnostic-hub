@@ -27,7 +27,9 @@ export interface FilaNoRegistrada {
 }
 
 export interface PorRevisar {
+  /** Parejas; es lo único que cuenta como "por revisar" (igual que total). */
   posibles_duplicados: number;
+  /** Aparte: se completa cuando el alumno se registra. */
   sin_cuenta: number;
   no_registradas: number;
   total: number;

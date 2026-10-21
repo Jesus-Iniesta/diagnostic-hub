@@ -71,7 +71,7 @@ function buildItems(summary: QuickSummaryData, porRevisar: number, sinCuenta: nu
       color: dashboardColors.orange,
       lightColor: dashboardColors.orangeLight,
       statusColor: porRevisar === 0 ? dashboardColors.green : dashboardColors.orange,
-      to: '/admin/alumnos?filtro=por_revisar',
+      to: '/admin/alumnos?filtro=duplicados',
     },
     {
       icon: <IconId size={20} aria-hidden="true" />,

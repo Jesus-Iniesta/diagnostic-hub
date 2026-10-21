@@ -8,6 +8,8 @@ import { obtenerEstado, type EstadoPeriodo } from '../../lib/cargaPeriodoApi';
 interface Paso {
   titulo: string;
   detalle: string;
+  /** Línea gris aparte (no cuenta para el paso). */
+  nota?: string;
   hecho: boolean;
   to: string;
   accion: string;
@@ -35,9 +37,16 @@ function pasos(e: EstadoPeriodo): Paso[] {
     },
     {
       titulo: 'Revisa alumnos',
-      detalle: e.por_revisar.total === 0 ? 'Nada por revisar' : `${e.por_revisar.total} por revisar`,
-      hecho: e.procesado && e.por_revisar.total === 0,
-      to: '/admin/alumnos?filtro=por_revisar',
+      detalle:
+        e.por_revisar.posibles_duplicados === 0
+          ? 'Sin posibles duplicados'
+          : `${e.por_revisar.posibles_duplicados} posibles duplicados por revisar`,
+      nota:
+        e.por_revisar.sin_cuenta > 0
+          ? `${e.por_revisar.sin_cuenta} sin número de cuenta (se completa cuando el alumno se registra)`
+          : undefined,
+      hecho: e.procesado && e.por_revisar.posibles_duplicados === 0,
+      to: '/admin/alumnos?filtro=duplicados',
       accion: 'Revisar',
     },
     {
@@ -97,6 +106,11 @@ export default function PasosPeriodo({ periodo }: { periodo: string }) {
                   <Text size="xs" c="dimmed">
                     {p.detalle}
                   </Text>
+                  {p.nota && (
+                    <Text size="xs" c="gray.5">
+                      {p.nota}
+                    </Text>
+                  )}
                 </div>
               </Group>
               {!p.hecho && (

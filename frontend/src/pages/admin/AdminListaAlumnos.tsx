@@ -41,7 +41,6 @@ type FiltroPagina = FiltroAlumnos | 'duplicados';
 
 const FILTROS: { value: FiltroPagina; label: string }[] = [
   { value: 'todos', label: 'Todos' },
-  { value: 'por_revisar', label: 'Por revisar' },
   { value: 'duplicados', label: 'Posibles duplicados' },
   { value: 'provisionales', label: 'Provisionales' },
   { value: 'sin_cuenta', label: 'Sin cuenta' },
@@ -308,7 +307,9 @@ export default function AdminListaAlumnos() {
   const { periodo } = usePeriodo();
   const [searchParams, setSearchParams] = useSearchParams();
   const filtroParam = searchParams.get('filtro');
-  const filtro: FiltroPagina = esFiltro(filtroParam) ? filtroParam : 'todos';
+  // Los enlaces viejos a "Por revisar" abren los posibles duplicados.
+  const filtro: FiltroPagina =
+    filtroParam === 'por_revisar' ? 'duplicados' : esFiltro(filtroParam) ? filtroParam : 'todos';
   const [soloPeriodo, setSoloPeriodo] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const busquedaDebounced = useDebounced(busqueda);
@@ -409,15 +410,10 @@ export default function AdminListaAlumnos() {
           </Group>
 
           <SegmentedControl data={FILTROS} value={filtro} onChange={cambiarFiltro} style={{ alignSelf: 'flex-start' }} />
-          {filtro === 'por_revisar' && (
-            <Text size="xs" c="dimmed">
-              Alumnos que pueden estar registrados dos veces (mismo nombre o marcados al cargar o registrarse). Los que
-              no tienen número de cuenta están en "Sin cuenta": se completan cuando el alumno se registra.
-            </Text>
-          )}
           {filtro === 'duplicados' && (
             <Text size="xs" c="dimmed">
-              Cada caso muestra los dos registros lado a lado. Si son la misma persona, presiona "Unir".
+              Alumnos que pueden estar registrados dos veces, lado a lado. Si son la misma persona, presiona "Unir".
+              Los que no tienen número de cuenta están en "Sin cuenta": se completan cuando el alumno se registra.
             </Text>
           )}
 
