@@ -240,7 +240,11 @@ export default function AdminReportes() {
                     </Table.ScrollContainer>
                     <Text size="xs" c="dimmed">
                       Cada columna de examen dice cuántos alumnos lo hicieron. El Índice FI promedio
-                      es de los alumnos con al menos un examen.
+                      es de los alumnos con al menos un examen. Los exámenes no presentados cuentan
+                      como 0.{' '}
+                      {total.pendientes === 1
+                        ? '1 alumno tiene exámenes pendientes.'
+                        : `${total.pendientes} alumnos tienen exámenes pendientes.`}
                     </Text>
                   </>
                 )}

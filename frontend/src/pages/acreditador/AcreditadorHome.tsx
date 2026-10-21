@@ -23,6 +23,10 @@ import {
 import type { ResumenCreani, ResumenGrupoCreani } from '../../lib/reportesApi';
 import classes from './AcreditadorHome.module.css';
 
+function notaPendientes(n: number): string {
+  return n === 1 ? '1 alumno tiene exámenes pendientes.' : `${n} alumnos tienen exámenes pendientes.`;
+}
+
 /** Alumnos, Índice FI promedio, barra de categorías y, en chico, quién hizo cada examen. */
 function Datos({ datos, maximo }: { datos: ResumenGrupoCreani; maximo: number }) {
   return (
@@ -38,6 +42,9 @@ function Datos({ datos, maximo }: { datos: ResumenGrupoCreani; maximo: number })
         </div>
       </Group>
       <CategoriasBarra categorias={datos.categorias} />
+      <Text size="xs" c="dimmed">
+        Los exámenes no presentados cuentan como 0. {notaPendientes(datos.pendientes)}
+      </Text>
       <Text size="xs" c="dimmed">
         Hicieron examen diagnóstico: {datos.diagnostico} · examen final: {datos.final} ·
         WebAssign: {datos.webassign}
