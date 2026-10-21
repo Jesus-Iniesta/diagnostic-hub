@@ -13,10 +13,12 @@ import {
 import { IconClipboardList, IconDownload, IconMoodSad, IconTrophy } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
+import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import {
   descargarResultadoPdf,
   fetchMiCuestionario,
   fetchMiDiagnostico,
+  fetchMiPerfil,
   fetchMiWebAssign,
 } from '../../lib/alumnoApi';
 import { dashboardColors } from '../../theme/theme';
@@ -262,6 +264,9 @@ export default function AlumnoResultados() {
   const [webassignData, setWebassignData] = useState<WebAssignAlumnoResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [descargando, setDescargando] = useState(false);
+  // Un alumno creado desde los exámenes completa sus datos antes de ver resultados.
+  const [pendienteRegistro, setPendienteRegistro] = useState(false);
+  const [recargar, setRecargar] = useState(0);
 
   const handleDescargarPdf = async () => {
     setDescargando(true);
@@ -276,22 +281,54 @@ export default function AlumnoResultados() {
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([
-      fetchMiDiagnostico().catch(() => null),
-      fetchMiWebAssign().catch(() => null),
-      fetchMiCuestionario().catch(() => null),
-    ]).then(([diag, wa, cuest]) => {
+    setLoading(true);
+    void (async () => {
+      const perfil = await fetchMiPerfil().catch(() => null);
+      if (!mounted) return;
+      if (perfil?.es_provisional) {
+        setPendienteRegistro(true);
+        setLoading(false);
+        return;
+      }
+      setPendienteRegistro(false);
+      const [diag, wa, cuest] = await Promise.all([
+        fetchMiDiagnostico().catch(() => null),
+        fetchMiWebAssign().catch(() => null),
+        fetchMiCuestionario().catch(() => null),
+      ]);
       if (mounted) {
         setData(diag);
         setWebassignData(wa);
         setCuestionario(cuest);
         setLoading(false);
       }
-    });
+    })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [recargar]);
+
+  if (pendienteRegistro) {
+    return (
+      <>
+        <div className={classes.welcome}>
+          <Text component="h1" className={classes.welcomeTitle}>
+            Mis resultados
+          </Text>
+          <Text className={classes.welcomeSubtitle}>
+            Antes de ver tus resultados, completa tus datos.
+          </Text>
+        </div>
+        <Stack gap="lg" mt="lg">
+          <DatosContactoForm
+            onSaved={(perfil) => {
+              if (!perfil.es_provisional) setRecargar((n) => n + 1);
+            }}
+          />
+        </Stack>
+      </>
+    );
+  }
 
   const isSinDatos = data?.nivel_general === 'Sin datos';
 

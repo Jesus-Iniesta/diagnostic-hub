@@ -115,3 +115,35 @@ def nombre_desde_completo(raw: object | None) -> tuple[str, str, str] | None:
     if len(re.findall(r"[^\W\d_]{2,}", s)) < 2:
         return None
     return s.title(), "", ""
+
+
+YA_REGISTRADO = "ya_registrado"
+
+
+def destino_registro(
+    duenos_por: dict[str, int | None], provisionales: set[int]
+) -> tuple[str, int | None, list[int]]:
+    """Qué hacer con el formulario de registro según a quién apuntan sus datos.
+
+    `duenos_por` es {"cuenta": id, "folio": id, "correo": id} (None si el dato
+    no está o no es de nadie). Devuelve (destino, alumno a completar, otros):
+
+    - CREAR si ningún dato es de nadie.
+    - YA_REGISTRADO si algún dato es de un alumno que ya se registró (no
+      provisional): no se crea otro.
+    - COMPLETAR con el provisional que coincide; si coinciden dos o más, se
+      completa el de la cuenta (si no, el del folio) y los demás se devuelven
+      en `otros` para marcarlos como posibles duplicados (no se adivina).
+    """
+    duenos: list[int] = []
+    for d in duenos_por.values():
+        if d is not None and d not in duenos:
+            duenos.append(d)
+    if not duenos:
+        return CREAR, None, []
+    if any(d not in provisionales for d in duenos):
+        return YA_REGISTRADO, None, []
+    elegido = next(
+        duenos_por[c] for c in ("cuenta", "folio", "correo") if duenos_por.get(c) is not None
+    )
+    return COMPLETAR, elegido, [d for d in duenos if d != elegido]

@@ -95,7 +95,7 @@ export default function ResumenAlumno() {
     { key: 'correo_institucional', value: perfil.usuario.correo_institucional, filled: !!perfil.usuario.correo_institucional },
     { key: 'numero_cuenta', value: perfil.numero_cuenta, filled: !!perfil.numero_cuenta },
     { key: 'numero_folio', value: perfil.numero_folio, filled: !!perfil.numero_folio },
-    { key: 'ingenieria', value: formatValue('ingenieria', perfil.ingenieria), filled: true },
+    { key: 'ingenieria', value: formatValue('ingenieria', perfil.ingenieria), filled: !!perfil.ingenieria },
     { key: 'periodo_ingreso', value: perfil.periodo_ingreso, filled: !!perfil.periodo_ingreso },
     { key: 'promedio_bachillerato', value: perfil.promedio_bachillerato != null ? String(perfil.promedio_bachillerato) : null, filled: perfil.promedio_bachillerato != null },
     { key: 'indice_uaem', value: perfil.indice_uaem != null ? String(perfil.indice_uaem) : null, filled: perfil.indice_uaem != null },

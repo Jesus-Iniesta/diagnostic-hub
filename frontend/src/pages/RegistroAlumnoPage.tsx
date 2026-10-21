@@ -408,7 +408,7 @@ export default function RegistroAlumnoPage() {
                     <TextInput
                       label="Número de folio"
                       placeholder="123456789"
-                      description="9 dígitos — requerido"
+                      description="Lo encuentras en tu hoja de resultados del examen de admisión (9 dígitos). Ayuda a encontrar tus exámenes. Es obligatorio si aún no tienes número de cuenta."
                       withAsterisk
                       size="md"
                       {...form.getInputProps('numeroFolio')}
@@ -439,9 +439,9 @@ export default function RegistroAlumnoPage() {
                       {...form.getInputProps('numeroCuentaConfirmacion')}
                     />
                     <TextInput
-                      label="Número de folio"
+                      label="Número de folio (opcional)"
                       placeholder="123456789"
-                      description="9 dígitos — opcional si ya tienes cuenta"
+                      description="Lo encuentras en tu hoja de resultados del examen de admisión (9 dígitos). Ayuda a encontrar tus exámenes."
                       size="md"
                       {...form.getInputProps('numeroFolio')}
                     />

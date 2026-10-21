@@ -8,12 +8,39 @@ from app.models.ingenieria import Ingenieria
 from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.schemas.registro_alumno import RegistroAlumnoCreate, RegistroAlumnoUpdate
-from app.services.alumnos_provisionales import COMPLETAR, destino_fila_padron
+from app.models.posible_duplicado import PosibleDuplicado
+from app.services.alumnos_provisionales import (
+    COMPLETAR,
+    YA_REGISTRADO,
+    destino_registro,
+)
 from app.services.alumnos_provisionales_service import completar_provisional_con_padron
-from app.services.normalizacion import normalizar_correo
+from app.services.normalizacion import normalizar_correo, normalizar_nombre
 from app.services.upload_diagnostico_service import load_all_alumnos
 
 USER_FIELDS = {"nombre", "apellido_paterno", "apellido_materno", "correo_personal", "correo_institucional"}
+
+MENSAJE_YA_REGISTRADO = "Ya estás registrado. Entra con tu número de cuenta."
+
+# Datos que un alumno provisional (creado desde los exámenes) debe tener para
+# dejar de serlo cuando los completa desde su perfil.
+CAMPOS_REQUERIDOS_USUARIO = ("nombre", "apellido_paterno", "apellido_materno", "correo_personal")
+CAMPOS_REQUERIDOS_ALUMNO = (
+    "ingenieria_id",
+    "numero_cuenta",
+    "periodo_ingreso",
+    "tiene_internet",
+    "tiene_computadora",
+    "es_foraneo",
+    "vulnerabilidad_economica",
+)
+
+
+def datos_completos(alumno: Alumno) -> bool:
+    usuario = alumno.usuario
+    return all(
+        (getattr(usuario, c) or "").strip() for c in CAMPOS_REQUERIDOS_USUARIO
+    ) and all(getattr(alumno, c) not in (None, "") for c in CAMPOS_REQUERIDOS_ALUMNO)
 
 
 class RegistroAlumnoRepository:
@@ -94,20 +121,43 @@ class RegistroAlumnoRepository:
         await self._get_ingenieria(data.ingenieria_id)
         correo_personal = normalizar_correo(data.correo_personal) or data.correo_personal
 
-        # Si ya presentó el cuestionario sin estar registrado, existe como alumno
-        # provisional: se completa ese registro en vez de rechazarlo por duplicado.
-        completado = await self._completar_provisional(data, correo_personal)
-        if completado is not None:
-            return completado
+        email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(self.db)
+        provisionales = {aid for aid, d in alumno_details.items() if d.get("provisional")}
+        destino, alumno_id, otros = destino_registro(
+            {
+                "cuenta": cuenta_map.get(data.numero_cuenta) if data.numero_cuenta else None,
+                "folio": folio_map.get(data.numero_folio) if data.numero_folio else None,
+                "correo": email_map.get(correo_personal),
+            },
+            provisionales,
+        )
 
-        if await self._existe_numero_cuenta(data.numero_cuenta):
-            raise HTTPException(
-                status_code=409, detail="El número de cuenta ya está registrado"
+        if destino == YA_REGISTRADO:
+            raise HTTPException(status_code=409, detail=MENSAJE_YA_REGISTRADO)
+
+        if destino == COMPLETAR:
+            # Ya presentó exámenes sin estar registrado: existe como alumno
+            # provisional y se completa ese mismo registro (conserva sus
+            # calificaciones). Si sus datos apuntaban a otro provisional más, no
+            # se adivina: queda como posible duplicado para el administrador.
+            await self._completar_provisional(
+                data, correo_personal, alumno_id,
+                email_map, cuenta_map, folio_map, alumno_details,
             )
-        if data.numero_folio and await self._existe_numero_folio(data.numero_folio):
-            raise HTTPException(
-                status_code=409, detail="El número de folio ya está registrado"
-            )
+            for otro in otros:
+                self._posible_duplicado(
+                    alumno_id, otro, "Sus datos de registro coinciden con los dos"
+                )
+            await self.db.commit()
+            alumno = await self.db.get(Alumno, alumno_id)
+            return await self._fetch_or_raise(alumno.usuario_id)
+
+        # Cuenta o folio guardados fuera de los mapas, o correo de otro usuario
+        # (p. ej. un profesor).
+        if await self._existe_numero_cuenta(data.numero_cuenta) or (
+            data.numero_folio and await self._existe_numero_folio(data.numero_folio)
+        ):
+            raise HTTPException(status_code=409, detail=MENSAJE_YA_REGISTRADO)
         if await self._existe_correo(correo_personal):
             raise HTTPException(
                 status_code=409, detail="El correo personal ya está registrado"
@@ -144,28 +194,39 @@ class RegistroAlumnoRepository:
             vulnerabilidad_economica=data.vulnerabilidad_economica,
         )
         self.db.add(alumno)
+        await self.db.flush()
+
+        # Ningún dato coincidió, pero si el nombre es igual al de un provisional
+        # puede ser la misma persona: se marca para que lo revise el
+        # administrador (al alumno no se le dice nada).
+        nombre = normalizar_nombre(
+            f"{data.nombre} {data.apellido_paterno} {data.apellido_materno}"
+        )
+        if nombre:
+            for aid in provisionales:
+                if normalizar_nombre(alumno_details[aid].get("nombre")) == nombre:
+                    self._posible_duplicado(
+                        alumno.id, aid, "Mismo nombre que un alumno provisional"
+                    )
+
         await self.db.commit()
 
         return await self._fetch_or_raise(user.id)
 
-    async def _completar_provisional(
-        self, data: RegistroAlumnoCreate, correo_personal: str
-    ) -> Alumno | None:
-        email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(self.db)
-        duenos = {
-            mapa.get(valor)
-            for mapa, valor in (
-                (email_map, correo_personal),
-                (cuenta_map, data.numero_cuenta),
-                (folio_map, data.numero_folio),
-            )
-            if valor
-        } - {None}
-        provisionales = {aid for aid, d in alumno_details.items() if d.get("provisional")}
-        destino, alumno_id = destino_fila_padron(duenos, provisionales)
-        if destino != COMPLETAR:
-            return None
+    def _posible_duplicado(self, alumno_id: int, otro_id: int, motivo: str) -> None:
+        self.db.add(PosibleDuplicado(alumno_id=alumno_id, otro_id=otro_id, motivo=motivo))
 
+    async def _completar_provisional(
+        self,
+        data: RegistroAlumnoCreate,
+        correo_personal: str,
+        alumno_id: int,
+        email_map: dict[str, int],
+        cuenta_map: dict[str, int],
+        folio_map: dict[str, int],
+        alumno_details: dict[int, dict],
+    ) -> None:
+        """Llena el provisional con el formulario; lo del formulario manda."""
         await completar_provisional_con_padron(
             self.db,
             alumno_id,
@@ -194,9 +255,6 @@ class RegistroAlumnoRepository:
             folio_map=folio_map,
             alumno_details=alumno_details,
         )
-        await self.db.commit()
-        alumno = await self.db.get(Alumno, alumno_id)
-        return await self._fetch_or_raise(alumno.usuario_id)
 
     async def update(
         self, alumno: Alumno, data: RegistroAlumnoUpdate
@@ -236,6 +294,11 @@ class RegistroAlumnoRepository:
                 setattr(alumno.usuario, key, value)
             else:
                 setattr(alumno, key, value)
+
+        # Un alumno creado desde los exámenes deja de ser provisional cuando
+        # completa sus datos desde su perfil.
+        if alumno.es_provisional and datos_completos(alumno):
+            alumno.es_provisional = False
 
         await self.db.commit()
         return await self._fetch_or_raise(alumno.usuario_id)

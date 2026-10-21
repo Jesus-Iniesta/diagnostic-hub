@@ -28,6 +28,7 @@ from app.models.grupo_alumno import grupo_alumno
 from app.models.identificador_alumno import IdentificadorAlumno
 from app.models.archivo_periodo import ArchivoPeriodo
 from app.models.fila_no_registrada import FilaNoRegistrada
+from app.models.posible_duplicado import PosibleDuplicado
 
 __all__ = [
     "role_permissions",
@@ -57,4 +58,5 @@ __all__ = [
     "IdentificadorAlumno",
     "ArchivoPeriodo",
     "FilaNoRegistrada",
+    "PosibleDuplicado",
 ]

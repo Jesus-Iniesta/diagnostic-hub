@@ -49,6 +49,8 @@ class AlumnoRead(AlumnoBase):
 
     id: int
     created_at: datetime
+    # True si se creó desde los exámenes y aún no completa sus datos.
+    es_provisional: bool = False
     usuario: UserRead
     ingenieria: IngenieriaRead | None = None
 

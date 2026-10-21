@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.models.alumno import Alumno
 from app.models.fila_no_registrada import FilaNoRegistrada
 from app.models.identificador_alumno import IdentificadorAlumno
+from app.models.posible_duplicado import PosibleDuplicado
 from app.models.ingenieria import Ingenieria
 from app.models.resultado_cuestionario_diagnostico import (
     ResultadoCuestionarioDiagnostico,
@@ -273,14 +274,32 @@ async def casos_por_revisar(db: AsyncSession, periodo: str) -> dict[str, list[li
     """Filas de cada hoja del Excel, ya ordenadas por nombre."""
     periodo = periodo.strip()
     alumnos = await _alumnos_del_periodo(db, periodo)
-    examenes = await examenes_por_alumno(db, [a.id for a in alumnos], periodo)
+    por_id = {a.id: a for a in alumnos}
 
     por_nombre: dict[str, list[Alumno]] = {}
     for a in alumnos:
         clave = normalizar_nombre(_nombre(a.usuario))
         if clave:
             por_nombre.setdefault(clave, []).append(a)
-    duplicados = [a for grupo in por_nombre.values() if len(grupo) > 1 for a in grupo]
+    duplicados = {a.id: a for grupo in por_nombre.values() if len(grupo) > 1 for a in grupo}
+
+    # Parejas marcadas al registrarse (datos que coincidían con dos provisionales,
+    # o mismo nombre que un provisional): salen las dos si alguna es del periodo.
+    parejas = (
+        await db.execute(select(PosibleDuplicado.alumno_id, PosibleDuplicado.otro_id))
+    ).all()
+    faltan = {i for par in parejas if set(par) & por_id.keys() for i in par} - por_id.keys()
+    if faltan:
+        for a in (
+            await db.execute(_con_relaciones(select(Alumno).where(Alumno.id.in_(faltan))))
+        ).scalars():
+            por_id[a.id] = a
+    for par in parejas:
+        if set(par) <= por_id.keys():
+            for i in par:
+                duplicados[i] = por_id[i]
+
+    examenes = await examenes_por_alumno(db, list(por_id), periodo)
 
     no_registradas = (
         await db.execute(select(FilaNoRegistrada).where(FilaNoRegistrada.periodo == periodo))
@@ -290,7 +309,9 @@ async def casos_por_revisar(db: AsyncSession, periodo: str) -> dict[str, list[li
         return sorted(filas, key=lambda f: (normalizar_nombre(f[0]) or "~", f[0], f[1]))
 
     return {
-        "Posibles duplicados": ordenar([_fila_excel(a, examenes[a.id]) for a in duplicados]),
+        "Posibles duplicados": ordenar(
+            [_fila_excel(a, examenes[a.id]) for a in duplicados.values()]
+        ),
         "Sin cuenta": ordenar(
             [_fila_excel(a, examenes[a.id]) for a in alumnos if not a.numero_cuenta]
         ),

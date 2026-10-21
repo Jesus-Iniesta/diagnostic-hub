@@ -31,6 +31,15 @@ from app.services.upload_diagnostico_service import normalizar_periodo
 
 router = APIRouter()
 
+MENSAJE_COMPLETAR_DATOS = "Completa tus datos antes de ver tus resultados."
+
+
+def _exigir_datos_completos(alumno: Alumno) -> None:
+    """Un alumno creado desde los exámenes que entró solo con su número de
+    cuenta debe completar sus datos antes de ver sus resultados."""
+    if alumno.es_provisional:
+        raise HTTPException(status_code=403, detail=MENSAJE_COMPLETAR_DATOS)
+
 
 @router.get(
     "",
@@ -83,6 +92,7 @@ async def mi_diagnostico(
     alumno = result.scalars().first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+    _exigir_datos_completos(alumno)
 
     repo = DiagnosticoRepository(db)
 
@@ -150,6 +160,7 @@ async def mi_cuestionario(
     alumno = (await db.execute(stmt)).scalars().first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+    _exigir_datos_completos(alumno)
 
     resultados = (await db.execute(
         select(ResultadoCuestionarioDiagnostico).where(
@@ -204,6 +215,7 @@ async def mi_webassign(
     alumno = result.scalars().first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+    _exigir_datos_completos(alumno)
 
     if periodo:
         stmt_r = select(ResultadoWebAssign).where(
@@ -317,6 +329,7 @@ async def mi_reporte_pdf(
     alumno = result.scalars().first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+    _exigir_datos_completos(alumno)
 
     stmt_diag = (
         select(ResultadoDiagnostico)

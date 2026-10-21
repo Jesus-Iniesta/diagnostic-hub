@@ -14,7 +14,7 @@ export interface UserBrief {
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
-  correo_personal: string;
+  correo_personal: string | null;
   correo_institucional: string | null;
   rfc: string | null;
   auth_method: string;
@@ -37,8 +37,11 @@ export interface AlumnoPerfil {
   es_foraneo: boolean | null;
   convivencia: string | null;
   created_at: string;
+  /** Creado desde los exámenes; debe completar sus datos antes de ver resultados. */
+  es_provisional?: boolean;
+  ingenieria_id?: number | null;
   usuario: UserBrief;
-  ingenieria: IngenieriaBrief;
+  ingenieria: IngenieriaBrief | null;
 }
 
 export interface CamposFaltantes {
@@ -57,6 +60,11 @@ export interface CamposFaltantes {
 }
 
 export interface DatosContactoUpdate {
+  nombre?: string;
+  apellido_paterno?: string;
+  apellido_materno?: string;
+  correo_personal?: string;
+  ingenieria_id?: number;
   correo_institucional?: string | null;
   numero_cuenta?: string | null;
   numero_folio?: string | null;
