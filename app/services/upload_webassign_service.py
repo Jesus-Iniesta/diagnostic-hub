@@ -214,10 +214,18 @@ async def procesar_webassign(
             # único candidato, se manda como sugerencia para que lo confirme
             # el administrador.
             candidates = find_candidates_legacy(nombre_normalizado, alumno_details)
+            if not email:
+                motivo = "Le faltó escribir su número de cuenta o folio."
+            elif candidates:
+                motivo = (
+                    f"Puede ser {candidates[0]['nombre']}, pero sus datos no coinciden."
+                )
+            else:
+                motivo = "No está registrado en el sistema."
             no_encontrados.append({
                 "nombre_original": nombre_original,
                 "correo": email,
-                "motivo": "No se encontró alumno con email",
+                "motivo": motivo,
                 "candidatos": candidates,
                 "indice": row["indice"],
             })

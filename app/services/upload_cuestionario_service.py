@@ -493,7 +493,6 @@ async def procesar_cuestionario(
         nombre = normalize_name(_valor(row, cols["nombre"]))
 
         if alumno_id is None:
-            motivo = "Sin coincidencia de correo/cuenta/folio"
             candidatos: list[dict] = []
             clave, lugar = parse_usuario(usuario_raw)
             if clave and lugar is not None:
@@ -514,10 +513,14 @@ async def procesar_cuestionario(
                                 "motivo": "Coincidencia por usuario (carrera + lugar): confirmar",
                             }
                         )
-                        motivo = (
-                            "Sin coincidencia de correo/cuenta/folio; "
-                            "usuario coincide con un solo alumno (carrera + lugar)"
-                        )
+            if not cuentas and not folios:
+                motivo = "Le faltó escribir su número de cuenta o folio."
+            elif candidatos:
+                motivo = (
+                    f"Puede ser {candidatos[0]['nombre']}, pero sus datos no coinciden."
+                )
+            else:
+                motivo = "No está registrado en el sistema."
             fila_no_encontrada = (
                 {
                     "nombre_original": nombre,
@@ -684,8 +687,9 @@ async def _crear_provisionales(
                 _valor(f["row"], cols.get("ingenieria")), f["usuario"], ingenierias
             )
             if role_id is None or clave is None:
-                f["no_encontrado"]["motivo"] += (
-                    "; no se creó provisional (ingeniería no reconocida)"
+                f["no_encontrado"]["motivo"] = (
+                    f["no_encontrado"]["motivo"].removesuffix(".")
+                    + "; no se creó provisional (ingeniería no reconocida)"
                 )
                 no_encontrados.append(f["no_encontrado"])
                 continue
@@ -701,8 +705,9 @@ async def _crear_provisionales(
                 alumno_details=alumno_details,
             )
             if alumno_id is None:
-                f["no_encontrado"]["motivo"] += (
-                    "; no se creó provisional (el correo es de otro usuario)"
+                f["no_encontrado"]["motivo"] = (
+                    f["no_encontrado"]["motivo"].removesuffix(".")
+                    + "; no se creó provisional (el correo es de otro usuario)"
                 )
                 no_encontrados.append(f["no_encontrado"])
                 continue

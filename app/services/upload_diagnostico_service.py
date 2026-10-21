@@ -717,12 +717,14 @@ async def procesar_examen_diagnostico(
 
         if alumno_id is None:
             candidates = find_candidates(nombre_original, alumno_details)
-            if candidates and candidates[0]["sugerido"]:
-                motivo = "Coincidencia exacta de nombre: confirmar"
-            elif candidates and candidates[0]["similitud"] == 100:
-                motivo = "Nombre ambiguo: varios alumnos con el mismo nombre"
+            if not cuenta and not folio:
+                motivo = "Le faltó escribir su número de cuenta o folio."
+            elif candidates:
+                motivo = (
+                    f"Puede ser {candidates[0]['nombre']}, pero sus datos no coinciden."
+                )
             else:
-                motivo = "Sin coincidencia de correo/cuenta/folio; revisar candidatos"
+                motivo = "No está registrado en el sistema."
             no_encontrados.append({
                 "nombre_original": nombre_original,
                 "correo": email,

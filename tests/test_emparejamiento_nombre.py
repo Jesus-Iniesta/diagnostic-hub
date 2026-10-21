@@ -156,9 +156,9 @@ async def diagnostico_test():
     check("diag: 1 en no_encontrados", len(no_enc), 1)
     check("diag: sin asignación por nombre", no_enc[0]["candidatos"][0]["sugerido"], True)
     check(
-        "diag: motivo confirmar",
+        "diag: motivo sin cuenta ni folio",
         no_enc[0]["motivo"],
-        "Coincidencia exacta de nombre: confirmar",
+        "Le faltó escribir su número de cuenta o folio.",
     )
 
 
