@@ -547,7 +547,10 @@ async def load_all_alumnos(
         if alumno.numero_folio:
             folio_map[alumno.numero_folio] = alumno.id
         alumno_details[alumno.id] = {
-            "nombre": f"{user.nombre} {user.apellido_paterno} {user.apellido_materno}",
+            # Sin espacios de más (p. ej. sin apellido materno).
+            "nombre": " ".join(
+                f"{user.nombre} {user.apellido_paterno} {user.apellido_materno}".split()
+            ),
             "partes": (user.nombre or "", user.apellido_paterno or "", user.apellido_materno or ""),
             "cuenta": alumno.numero_cuenta,
             "folio": alumno.numero_folio,
