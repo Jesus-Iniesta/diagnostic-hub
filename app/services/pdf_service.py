@@ -17,7 +17,7 @@ from reportlab.platypus import (
 def generar_pdf_correo(
     nombre_completo: str,
     numero_cuenta: str | None,
-    correo_personal: str,
+    correo_personal: str | None,
     correo_institucional: str | None,
 ) -> bytes:
     buf = io.BytesIO()
@@ -46,7 +46,7 @@ def generar_pdf_correo(
     c.drawString(2 * cm, y, "Correo personal (WebAssign):")
     y -= 0.7 * cm
     c.setFont("Helvetica", 11)
-    c.drawString(3 * cm, y, correo_personal)
+    c.drawString(3 * cm, y, correo_personal or "—")
     y -= 1.2 * cm
 
     c.setFont("Helvetica-Bold", 12)

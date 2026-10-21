@@ -54,6 +54,8 @@ export interface ResultadoProcesamientoDiagnostico {
   advertencia?: string | null;
   resultados: DiagnosticoAlumnoResultado[];
   no_encontrados_detalle: DiagnosticoNoEncontrado[];
+  /** Alumnos que no existían y se registraron con esta carga. */
+  registrados_nuevos?: number;
 }
 
 export interface CorregirMatchingPayload {

@@ -33,8 +33,9 @@ class User(Base):
     apellido_materno: Mapped[str] = mapped_column(
         String(100), nullable=False, index=True
         )
-    correo_personal: Mapped[str] = mapped_column(
-        nullable=False, unique=True, index=True
+    # Vacío solo en alumnos registrados desde un examen que no traía correo.
+    correo_personal: Mapped[str | None] = mapped_column(
+        nullable=True, unique=True, index=True
         )
     correo_institucional: Mapped[str] = mapped_column(
         nullable=True, unique=True, index=True

@@ -11,10 +11,11 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconAlertCircle, IconDownload, IconReport } from '@tabler/icons-react';
+import { IconAlertCircle, IconDownload, IconReport, IconUserSearch } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
 import { API_BASE_URL } from '../../config';
+import { descargarAlumnosPorRevisar } from '../../lib/alumnosAdminApi';
 import { apiFetch } from '../../lib/api';
 
 interface PeriodosResponse {
@@ -36,6 +37,9 @@ export default function AdminReportes() {
   const [loadingStats, setLoadingStats] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [periodoRevisar, setPeriodoRevisar] = useState<string | null>(null);
+  const [descargandoRevisar, setDescargandoRevisar] = useState(false);
+  const [avisoRevisar, setAvisoRevisar] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -43,7 +47,10 @@ export default function AdminReportes() {
       .then((data) => {
         if (mounted) {
           setPeriodos(data.periodos);
-          if (data.periodos.length > 0) setPeriodo(data.periodos[0]);
+          if (data.periodos.length > 0) {
+            setPeriodo(data.periodos[0]);
+            setPeriodoRevisar(data.periodos[0]);
+          }
         }
       })
       .catch((err: unknown) => {
@@ -105,6 +112,30 @@ export default function AdminReportes() {
     }
   };
 
+  const handleDescargarRevisar = async () => {
+    if (!periodoRevisar) return;
+    setDescargandoRevisar(true);
+    setAvisoRevisar(null);
+    setError(null);
+    try {
+      const blob = await descargarAlumnosPorRevisar(periodoRevisar);
+      if (!blob) {
+        setAvisoRevisar(`No hay alumnos por revisar en el periodo ${periodoRevisar}.`);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `alumnos_por_revisar_${periodoRevisar}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al descargar el Excel de alumnos por revisar');
+    } finally {
+      setDescargandoRevisar(false);
+    }
+  };
+
   return (
     <Stack gap="xl">
       <Title order={2}>Reportes</Title>
@@ -137,6 +168,50 @@ export default function AdminReportes() {
               </Button>
             </Group>
           </SimpleGrid>
+        </Stack>
+      </Card>
+
+      <Card withBorder p="xl">
+        <Stack gap="md">
+          <Group gap="sm">
+            <IconUserSearch size={20} color="var(--mantine-color-indigo-6)" />
+            <Title order={4}>Alumnos por revisar</Title>
+          </Group>
+          <Text size="sm" c="dimmed">
+            Excel con una hoja por caso: posibles duplicados (mismo nombre), alumnos sin número de cuenta, sin ingeniería y
+            filas de exámenes que no se pudieron registrar.
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 3 }}>
+            <Select
+              label="Periodo"
+              placeholder="Selecciona periodo"
+              data={periodos.map((p) => ({ value: p, label: p }))}
+              value={periodoRevisar}
+              onChange={(v) => {
+                setPeriodoRevisar(v);
+                setAvisoRevisar(null);
+              }}
+              disabled={loadingPeriodos}
+              nothingFoundMessage="No hay periodos con resultados cargados"
+            />
+            <div />
+            <Group align="flex-end">
+              <Button
+                variant="light"
+                leftSection={<IconDownload size={18} />}
+                onClick={handleDescargarRevisar}
+                loading={descargandoRevisar}
+                disabled={!periodoRevisar}
+              >
+                Descargar Excel
+              </Button>
+            </Group>
+          </SimpleGrid>
+          {avisoRevisar && (
+            <Alert color="green" icon={<IconAlertCircle size={18} />} withCloseButton onClose={() => setAvisoRevisar(null)}>
+              {avisoRevisar}
+            </Alert>
+          )}
         </Stack>
       </Card>
 

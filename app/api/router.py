@@ -2,7 +2,9 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     alumnos,
+    alumnos_admin,
     auth,
+    carga_periodo,
     configuracion,
     cuestionario_diagnostico,
     dashboard,
@@ -62,6 +64,16 @@ api_router.include_router(
     reportes.router,
     prefix="/reportes",
     tags=["reportes"],
+)
+api_router.include_router(
+    carga_periodo.router,
+    prefix="/carga-periodo",
+    tags=["carga-periodo"],
+)
+api_router.include_router(
+    alumnos_admin.router,
+    prefix="/admin/alumnos",
+    tags=["admin-alumnos"],
 )
 api_router.include_router(
     profesor_grupos.router,

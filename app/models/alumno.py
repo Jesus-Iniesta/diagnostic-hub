@@ -29,9 +29,11 @@ class Alumno(Base):
         nullable=False,
         index=True
     )
-    ingenieria_id: Mapped[int] = mapped_column(
+    # Puede quedar vacía en un alumno registrado desde el examen final (el
+    # archivo no la trae); se llena con el cuestionario, WebAssign o el padrón.
+    ingenieria_id: Mapped[int | None] = mapped_column(
         ForeignKey("ingenieria.id"),
-        nullable=False,
+        nullable=True,
         index=True
     )
     numero_cuenta: Mapped[str | None] = mapped_column(
@@ -84,8 +86,8 @@ class Alumno(Base):
         nullable=True,
         index=True
     )
-    # True si se creó desde un cuestionario porque el alumno no estaba en el
-    # padrón; al subir el padrón con sus datos se completa y pasa a False.
+    # True si se registró solo desde un archivo de exámenes (no estaba en el
+    # padrón); al subir el padrón con sus datos se completa y pasa a False.
     es_provisional: Mapped[bool] = mapped_column(
         nullable=False,
         default=False,
@@ -99,7 +101,7 @@ class Alumno(Base):
     )
 
     usuario: Mapped["User"] = relationship(back_populates="alumnos")
-    ingenieria: Mapped["Ingenieria"] = relationship(back_populates="alumnos")
+    ingenieria: Mapped["Ingenieria | None"] = relationship(back_populates="alumnos")
     asignaciones_examen: Mapped[list["AsignacionExamen"]] = relationship(
         back_populates="alumno"
     )

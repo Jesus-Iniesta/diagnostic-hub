@@ -30,6 +30,8 @@ export interface WebAssignUploadResult {
     candidatos: Array<{ alumno_id: number; nombre: string }>;
     indice: number;
   }>;
+  /** Alumnos que no existían y se registraron con esta carga. */
+  registrados_nuevos?: number;
 }
 
 export interface WebAssignStatus {

@@ -51,6 +51,7 @@ import type {
   ResultadoProcesamientoCuestionario,
 } from '../../types/cuestionario';
 import classes from './AdminCargaAlumnos.module.css';
+import CargaPeriodoSection from './CargaPeriodoSection';
 import WebAssignSection from './WebAssignSection';
 
 const TABS = ['cuestionario', 'diagnostico', 'webassign'] as const;
@@ -443,7 +444,7 @@ function DiagnosticoSection() {
           >
             {res.total_filas === 0
               ? `El archivo de ${MATERIAS_LABELS[currentMateria]} no tenía filas para procesar.`
-              : `${MATERIAS_LABELS[currentMateria]} ya fue procesado — ${res.encontrados} alumnos, ${res.no_encontrados} no encontrados.`}
+              : `${MATERIAS_LABELS[currentMateria]} ya fue procesado — ${res.encontrados} encontrados, ${res.registrados_nuevos ?? 0} registrados nuevos, ${res.no_encontrados} sin registrar.`}
             {' '}Puedes subir otro archivo para reemplazar.
           </Alert>
         )}
@@ -507,9 +508,13 @@ function DiagnosticoSection() {
                 <div className={classes.statNumber}>{resultado.encontrados}</div>
                 <div className={classes.statLabel}>Encontrados</div>
               </div>
+              <div className={`${classes.statBox} ${classes.statBoxBlue}`}>
+                <div className={classes.statNumber}>{resultado.registrados_nuevos ?? 0}</div>
+                <div className={classes.statLabel}>Registrados nuevos</div>
+              </div>
               <div className={`${classes.statBox} ${classes.statBoxRed}`}>
                 <div className={classes.statNumber}>{resultado.no_encontrados}</div>
-                <div className={classes.statLabel}>No encontrados</div>
+                <div className={classes.statLabel}>No se pudieron registrar</div>
               </div>
               <div className={`${classes.statBox} ${classes.statBoxYellow}`}>
                 <div className={classes.statNumber}>{resultado.omitidas_otro_periodo ?? 0}</div>
@@ -542,7 +547,7 @@ function DiagnosticoSection() {
               <Card padding="md" radius="md" className={classes.expandCard}>
                 <Group justify="space-between" mb="sm">
                   <Text fw={600} size="sm">
-                    Alumnos no encontrados ({noEncontrados.length})
+                    No se pudieron registrar ({noEncontrados.length})
                   </Text>
                   <Group gap="sm">
                     {nSugeridos > 0 && (
@@ -611,9 +616,9 @@ function DiagnosticoSection() {
 
             {noEncontrados.length > 0 && (
               <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-                <Text size="sm" fw={600}>Hay {noEncontrados.length} alumno(s) sin encontrar</Text>
+                <Text size="sm" fw={600}>Hay {noEncontrados.length} fila(s) que no se pudieron registrar</Text>
                 <Text size="xs" c="dimmed">
-                  Puedes corregir uno por uno, o continuar a la siguiente materia. Los errores quedarán marcados para después.
+                  No traen correo, número de cuenta ni folio. Puedes asignarlas a mano con "Corregir" o continuar a la siguiente materia; quedan en el Excel "Alumnos por revisar" de Reportes.
                 </Text>
               </Alert>
             )}
@@ -637,7 +642,7 @@ function DiagnosticoSection() {
                   <Text fw={600} size="sm">{MATERIAS_LABELS[m]}</Text>
                   <Text size="xs" c="dimmed">
                     {res
-                      ? `${res.encontrados} alumnos · ${res.no_encontrados} no encontrados`
+                      ? `${res.encontrados} encontrados · ${res.registrados_nuevos ?? 0} nuevos · ${res.no_encontrados} sin registrar`
                       : config?.configurada ? 'No procesado' : 'Sin respuestas'}
                   </Text>
                 </div>
@@ -976,6 +981,11 @@ function TarjetaCuestionario({
                 <div className={classes.statLabel}>Encontrados</div>
               </div>
 
+              <div className={`${classes.statBox} ${classes.statBoxBlue}`}>
+                <div className={classes.statNumber}>{resultado.registrados_nuevos ?? 0}</div>
+                <div className={classes.statLabel}>Registrados nuevos</div>
+              </div>
+
               <div
                 className={`${classes.statBox} ${classes.statBoxRed} ${noEncontradosList.length > 0 ? classes.statBoxClickable : ''} ${listaAbierta === 'noEncontrados' ? classes.statBoxActive : ''}`}
                 onClick={() => toggle('noEncontrados', noEncontradosList.length)}
@@ -984,7 +994,7 @@ function TarjetaCuestionario({
                 onKeyDown={(e) => { if (noEncontradosList.length > 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle('noEncontrados', noEncontradosList.length); } }}
               >
                 <div className={classes.statNumber}>{resultado.no_encontrados}</div>
-                <div className={classes.statLabel}>No encontrados</div>
+                <div className={classes.statLabel}>No se pudieron registrar</div>
                 {noEncontradosList.length > 0 && (
                   <div className={classes.statExtra}>
                     {listaAbierta === 'noEncontrados' ? 'Ocultar lista' : 'Ver lista'}
@@ -1034,7 +1044,7 @@ function TarjetaCuestionario({
               <Card padding="md" radius="md" className={classes.expandCard}>
                 <div className={classes.listHeaderBar}>
                   <Text fw={600} size="sm">
-                    Alumnos no encontrados ({noEncontradosList.length})
+                    No se pudieron registrar ({noEncontradosList.length})
                   </Text>
                   <Group gap="sm">
                     {nSugeridos > 0 && (
@@ -1369,7 +1379,7 @@ function CuestionarioSection() {
       {noEncontrados.length === 0 &&
         [resultadoC1, resultadoC2].some((r) => r !== null && r.total_filas > 0) && (
         <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
-          Todos los alumnos de los cuestionarios cargados fueron encontrados y quedaron guardados para el periodo {periodo}.
+          Todas las filas de los cuestionarios cargados quedaron guardadas para el periodo {periodo} (los alumnos que no existían se registraron).
         </Alert>
       )}
 
@@ -1413,11 +1423,19 @@ export default function AdminCargaExamenes() {
           Carga de exámenes
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Sube los archivos en orden: primero el examen diagnóstico, luego el examen final y al último WebAssign.
+          Sube todos los archivos del periodo y procésalos juntos. Abajo puedes subir uno por uno para revisar casos sueltos.
         </Text>
       </div>
 
-      <Tabs value={activeTab} onChange={handleTabChange} mt="lg">
+      <div style={{ marginTop: 'var(--mantine-spacing-lg)' }}>
+        <CargaPeriodoSection />
+      </div>
+
+      <Title order={4} mt="xl">
+        Subir un examen a la vez
+      </Title>
+
+      <Tabs value={activeTab} onChange={handleTabChange} mt="sm">
         <Tabs.List>
           <Tabs.Tab value="cuestionario" leftSection={<IconClipboardList size={16} />}>
             1. Examen diagnóstico

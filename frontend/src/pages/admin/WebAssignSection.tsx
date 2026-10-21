@@ -127,7 +127,7 @@ export default function WebAssignSection() {
               </Text>
             )}
 
-            <SimpleGrid cols={{ base: 2, sm: 4 }}>
+            <SimpleGrid cols={{ base: 2, sm: 3 }}>
               <div>
                 <Text size="xs" c="dimmed">Carrera</Text>
                 <Text fw={500}>{result.carrera}</Text>
@@ -140,16 +140,49 @@ export default function WebAssignSection() {
                 <Text size="xs" c="dimmed">Total filas</Text>
                 <Text fw={500}>{result.total_filas}</Text>
               </div>
-              <div>
-                <Text size="xs" c="dimmed">Encontrados</Text>
-                <Text fw={500} c="green">{result.encontrados}</Text>
-              </div>
             </SimpleGrid>
 
-            {result.no_encontrados > 0 && (
-              <Text size="sm" c="orange">
-                {result.no_encontrados} alumnos no pudieron ser matcheados
-              </Text>
+            <div className={classes.statsRow}>
+              <div className={`${classes.statBox} ${classes.statBoxGreen}`}>
+                <div className={classes.statNumber}>{result.encontrados}</div>
+                <div className={classes.statLabel}>Encontrados</div>
+              </div>
+              <div className={`${classes.statBox} ${classes.statBoxBlue}`}>
+                <div className={classes.statNumber}>{result.registrados_nuevos ?? 0}</div>
+                <div className={classes.statLabel}>Registrados nuevos</div>
+              </div>
+              <div className={`${classes.statBox} ${classes.statBoxRed}`}>
+                <div className={classes.statNumber}>{result.no_encontrados}</div>
+                <div className={classes.statLabel}>No se pudieron registrar</div>
+              </div>
+            </div>
+
+            {result.no_encontrados_detalle.length > 0 && (
+              <Card padding="md" radius="md" className={classes.expandCard}>
+                <Text fw={600} size="sm" mb="sm">
+                  No se pudieron registrar ({result.no_encontrados_detalle.length})
+                </Text>
+                <div className={classes.scrollTable}>
+                  <table className={classes.table}>
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Correo</th>
+                        <th>Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.no_encontrados_detalle.map((n) => (
+                        <tr key={n.indice}>
+                          <td className={classes.wrapCell}>{n.nombre_original || '—'}</td>
+                          <td className={classes.wrapCell}>{n.correo || '—'}</td>
+                          <td className={classes.wrapCell}>{n.motivo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
             )}
 
             {result.resultados.length > 0 && (

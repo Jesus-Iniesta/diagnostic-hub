@@ -10,7 +10,7 @@ class UserBase(BaseModel):
     nombre: str
     apellido_paterno: str
     apellido_materno: str
-    correo_personal: str
+    correo_personal: str | None = None
     correo_institucional: str | None = None
     rfc: str | None = None
     auth_method: AuthMethod = AuthMethod.PASSWORD

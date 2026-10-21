@@ -1,4 +1,5 @@
-"""Pruebas de WebAssign: alumno con dos filas y emparejamiento solo por correo.
+"""Pruebas de WebAssign: alumno con dos filas, emparejamiento solo por correo
+y registro automático de quien no se encontró.
 
 No necesitan base de datos: python -m tests.test_webassign_duplicados
 """
@@ -67,6 +68,35 @@ def detalle(nombre):
             "ingenieria": "ICO", "periodo_ingreso": "2025-2", "provisional": False}
 
 
+class RegistradorEnMemoria:
+    """Busca solo por correo y registra con id 100, 101, ... a quien no existe."""
+
+    def __init__(self, db, registro, periodo):
+        self.registro = registro
+        self.creados: list[dict] = []
+        self.ids_creados: set[int] = set()
+
+    async def buscar_o_registrar(self, *, correos=(), nombre=None, ingenieria=None, **_):
+        correo = next((c for c in correos if c), None)
+        if correo is None:
+            return None
+        if correo in self.registro.email_map:
+            return self.registro.email_map[correo]
+        nuevo = 100 + len(self.creados)
+        self.registro.email_map[correo] = nuevo
+        self.registro.alumno_details[nuevo] = detalle(" ".join(p for p in nombre if p))
+        self.registro.alumno_details[nuevo]["ingenieria"] = ingenieria
+        self.ids_creados.add(nuevo)
+        self.creados.append({"alumno_id": nuevo, "correo": correo})
+        return nuevo
+
+    async def completar(self, *args, **kwargs):
+        return None
+
+    def resumen(self):
+        return {"registrados_nuevos": len(self.creados)}
+
+
 async def correr(filas, guardados):
     """Procesa `filas` como ICO. `guardados`: {alumno_id: resultado previo}."""
 
@@ -83,13 +113,14 @@ async def correr(filas, guardados):
     async def fake_upsert(self, alumno_id, periodo, carrera, **scores):
         guardados[alumno_id] = SimpleNamespace(carrera=carrera, **scores)
 
-    async def fake_nombre(*args, **kwargs):
-        return False
+    async def fake_guardar(*args, **kwargs):
+        return None
 
     with (
         patch.object(svc, "load_all_alumnos", fake_load),
         patch.object(svc, "parse_webassign_excel", lambda b, c: (filas, {})),
-        patch.object(svc, "completar_nombre_si_falta", fake_nombre),
+        patch.object(svc, "RegistroAutomatico", RegistradorEnMemoria),
+        patch.object(svc, "guardar_filas_no_registradas", fake_guardar),
         patch.object(WebAssignRepository, "get_resultado", fake_get),
         patch.object(WebAssignRepository, "upsert_resultado", fake_upsert),
     ):
@@ -111,13 +142,15 @@ filas = [
     fila(11, "ana2@x.com", "Ruiz Paz, Ana"),                       # vacía: se ignora
     fila(12, "beto@x.com", "Lara Sol, Beto", algebra_examen=29.0),  # 10 > 5: gana
     fila(13, "caro@x.com", "Vega Luna, Caro"),                     # vacía: no pisa
-    fila(14, "nadie@x.com", "Mora Rey, Dario", algebra_examen=29.0),  # solo nombre
+    fila(14, "nadie@x.com", "Mora Rey, Dario", algebra_examen=29.0),  # se registra
+    fila(15, None, "Mora Rey, Dario", algebra_examen=29.0),  # sin correo
 ]
 res = asyncio.run(correr(filas, guardados))
 
-check("total filas", res["total_filas"], 5)
+check("total filas", res["total_filas"], 6)
 check("encontrados (un resultado por alumno)", res["encontrados"], 2)
-check("alumnos en resultados", [r["alumno_id"] for r in res["resultados"]], [1, 2])
+check("registrados nuevos", res["registrados_nuevos"], 1)
+check("alumnos en resultados", [r["alumno_id"] for r in res["resultados"]], [1, 2, 100])
 check("Ana conserva la fila con avance", guardados[1].algebra_examen, 5.0)
 check("Beto pasa a ICO", (guardados[2].carrera, guardados[2].algebra_examen), ("ICO", 10.0))
 check("Caro conserva su calificación", guardados[3].algebra_examen, 8.0)
@@ -132,9 +165,11 @@ check("Beto: se ignora el de ICI", (d["carrera_ignorada"], d["avance_ignorada"])
 check("Beto: se conserva la de ICO", (d["carrera_conservada"], d["avance_conservada"]), ("ICO", 10.0))
 
 nf = res["no_encontrados_detalle"]
-check("único candidato por nombre no se asigna", [n["indice"] for n in nf], [14])
-check("candidato como sugerencia", [c["alumno_id"] for c in nf[0]["candidatos"]], [4])
-check("Dario sin resultado", 4 in guardados, False)
+check("no se junta por nombre: se registra nuevo", (4 in guardados, 100 in guardados), (False, True))
+check("nuevo con la carrera elegida", res["resultados"][2]["ingenieria"], "ICO")
+check("sin correo: no se pudo registrar", [n["indice"] for n in nf], [15])
+check("motivo sin correo", nf[0]["motivo"], "Le faltó escribir su número de cuenta o folio.")
+check("candidatos como sugerencia (sin asignar)", [c["alumno_id"] for c in nf[0]["candidatos"]], [4, 100])
 
 # Si la segunda fila trae más avance, sustituye a la primera en esta carga.
 guardados = {}

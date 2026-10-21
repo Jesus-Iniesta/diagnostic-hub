@@ -141,9 +141,9 @@ async def subidas():
 r = asyncio.run(subidas(), loop_factory=asyncio.SelectorEventLoop)
 
 check("padrón: 1 alumno nuevo, 1 fila con error", (r["padron"]["exitosos"], r["padron"]["errores"]), (1, 1))
-check("cuestionario: 2 filas encontradas", r["cuestionario"]["encontrados"], 2)
+check("cuestionario: 1 encontrado, 1 registrado nuevo", (r["cuestionario"]["encontrados"], r["cuestionario"]["registrados_nuevos"]), (1, 1))
 check("examen final: 1 por correo, 1 solo por nombre", (r["examen_final"]["encontrados"], r["examen_final"]["no_encontrados"]), (1, 1))
-check("webassign: 1 encontrado, 1 sin correo registrado", (r["webassign"]["encontrados"], r["webassign"]["no_encontrados"]), (1, 1))
+check("webassign: 1 encontrado, 1 correo desconocido registrado", (r["webassign"]["encontrados"], r["webassign"]["registrados_nuevos"], r["webassign"]["no_encontrados"]), (1, 1, 0))
 check("webassign: fila del profesor excluida", r["webassign"]["total_filas"], 2)
 check("lista de grupo: 2 alumnos leídos, 1 fila incompleta", (r["lista_grupo"]["total_en_archivo"], r["lista_grupo"]["errores_archivo"]), (2, 1))
 check("lista de grupo: cuenta inexistente reportada", [n["numero_cuenta"] for n in r["lista_grupo"]["no_encontrados"]], ["2499904"])

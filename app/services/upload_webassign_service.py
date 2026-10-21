@@ -5,11 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.webassign_repository import WebAssignRepository
 from app.services.alumnos_provisionales import nombre_desde_webassign
-from app.services.alumnos_provisionales_service import completar_nombre_si_falta
 from app.services.excel_utils import como_xlrd, leer_hoja
+from app.services.identificadores_service import RegistroIdentificadores
 from app.services.normalizacion import normalizar_correo, normalizar_nombre
+from app.services.registro_automatico_service import (
+    MOTIVO_SIN_IDENTIFICADORES,
+    RegistroAutomatico,
+    guardar_filas_no_registradas,
+)
 from app.services.upload_diagnostico_service import (
-    find_alumno,
     find_candidates_legacy,
     load_all_alumnos,
 )
@@ -194,6 +198,12 @@ async def procesar_webassign(
     rows_data, _ = parse_webassign_excel(file_bytes, carrera)
 
     repo = WebAssignRepository(db)
+    registro = RegistroIdentificadores(
+        db, email_map, cuenta_map, folio_map, alumno_details,
+        fuente=f"webassign:{carrera}",
+    )
+    # La carrera elegida al subir es la ingeniería de los alumnos del archivo.
+    registrador = RegistroAutomatico(db, registro, periodo)
     resultados: dict[int, dict] = {}
     no_encontrados = []
     filas_duplicadas: list[dict] = []
@@ -205,35 +215,33 @@ async def procesar_webassign(
         nombre_original = row["nombre_original"]
         nombre_normalizado = parse_webassign_name(nombre_original)
 
-        alumno_id = find_alumno(
-            email, None, None, email_map, cuenta_map, folio_map
+        # Si no existe (por correo o identificadores guardados) se registra con
+        # el correo, el nombre de Fullname y la carrera. Nunca se empareja por
+        # nombre (hay homónimos).
+        alumno_id = await registrador.buscar_o_registrar(
+            correos=[email],
+            nombre=nombre_desde_webassign(nombre_original),
+            ingenieria=carrera,
+            indice=row["indice"],
         )
 
         if alumno_id is None:
-            # Nunca se asigna solo por nombre (hay homónimos): aunque haya un
-            # único candidato, se manda como sugerencia para que lo confirme
-            # el administrador.
+            # Solo sugerencias para revisar a mano; no se asignan solas.
             candidates = find_candidates_legacy(nombre_normalizado, alumno_details)
-            if not email:
-                motivo = "Le faltó escribir su número de cuenta o folio."
-            elif candidates:
-                motivo = (
-                    f"Puede ser {candidates[0]['nombre']}, pero sus datos no coinciden."
-                )
-            else:
-                motivo = "No está registrado en el sistema."
             no_encontrados.append({
                 "nombre_original": nombre_original,
                 "correo": email,
-                "motivo": motivo,
+                "motivo": MOTIVO_SIN_IDENTIFICADORES
+                if not email
+                else "No se pudo registrar (el correo es de otro usuario).",
                 "candidatos": candidates,
                 "indice": row["indice"],
             })
             continue
 
-        # Si es un alumno provisional sin nombre, toma el de WebAssign.
-        await completar_nombre_si_falta(
-            db, alumno_id, nombre_desde_webassign(nombre_original), alumno_details
+        # Llena el nombre o la ingeniería si le faltaban.
+        await registrador.completar(
+            alumno_id, nombre=nombre_desde_webassign(nombre_original), ingenieria=carrera
         )
         detail = alumno_details[alumno_id]
         scores = {}
@@ -324,13 +332,28 @@ async def procesar_webassign(
         }
         en_esta_carga[alumno_id] = {"avance": avance, "indice": row["indice"]}
 
+    await guardar_filas_no_registradas(
+        db,
+        periodo,
+        f"webassign_{carrera}",
+        [
+            {"indice": n["indice"], "nombre": n["nombre_original"], "ingenieria": carrera}
+            for n in no_encontrados
+        ],
+    )
+
+    nuevos_con_resultado = sum(1 for aid in resultados if aid in registrador.ids_creados)
+
     return {
         "carrera": carrera,
         "periodo": periodo,
         "total_filas": len(rows_data),
-        "encontrados": len(resultados),
+        # Alumnos que ya existían; los registrados en esta carga van aparte.
+        "encontrados": len(resultados) - nuevos_con_resultado,
         "no_encontrados": len(no_encontrados),
         "resultados": list(resultados.values()),
         "no_encontrados_detalle": no_encontrados,
         "filas_duplicadas_ignoradas": filas_duplicadas,
+        **registrador.resumen(),
+        **registro.resumen(),
     }

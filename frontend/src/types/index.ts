@@ -17,7 +17,7 @@ export interface User {
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
-  correo_personal: string;
+  correo_personal: string | null;
   correo_institucional: string | null;
   rfc: string | null;
   auth_method: 'password' | 'numero_cuenta';

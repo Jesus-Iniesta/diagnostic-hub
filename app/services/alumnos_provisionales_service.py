@@ -26,34 +26,38 @@ async def crear_alumno_provisional(
     db: AsyncSession,
     *,
     role_id: int,
-    ingenieria_id: int,
-    ingenieria_clave: str,
+    ingenieria_id: int | None,
+    ingenieria_clave: str | None,
     periodo: str,
-    correo: str,
+    correo: str | None,
     lugar_admision: int | None,
     email_map: dict[str, int],
     alumno_details: dict[int, dict],
+    nombre: tuple[str, str, str] | None = None,
 ) -> int | None:
     """Crea usuario + alumno provisional y lo agrega a los mapas en memoria.
 
-    El correo debe estar normalizado y no pertenecer a ningún alumno (si
-    perteneciera, la fila se habría emparejado). Devuelve None si el correo ya
-    es de otro usuario (p. ej. un profesor). Cuenta, folio y demás correos se
-    agregan después con RegistroIdentificadores.
+    El correo (si hay) debe estar normalizado y no pertenecer a ningún alumno
+    (si perteneciera, la fila se habría emparejado). Devuelve None si el correo
+    ya es de otro usuario (p. ej. un profesor). La ingeniería puede quedar vacía
+    (el examen final no la trae). Cuenta, folio y demás correos se agregan
+    después con RegistroIdentificadores.
     """
-    ocupado = await db.scalar(
-        select(User.id).where(
-            (User.correo_personal == correo) | (User.correo_institucional == correo)
+    if correo:
+        ocupado = await db.scalar(
+            select(User.id).where(
+                (User.correo_personal == correo) | (User.correo_institucional == correo)
+            )
         )
-    )
-    if ocupado is not None:
-        return None
+        if ocupado is not None:
+            return None
 
+    nombres = nombre or ("", "", "")
     user = User(
-        nombre="",
-        apellido_paterno="",
-        apellido_materno="",
-        correo_personal=correo,
+        nombre=nombres[0],
+        apellido_paterno=nombres[1],
+        apellido_materno=nombres[2],
+        correo_personal=correo or None,
         auth_method=AuthMethod.NUMERO_CUENTA,
         activo=True,
         role_id=role_id,
@@ -71,13 +75,14 @@ async def crear_alumno_provisional(
     db.add(alumno)
     await db.flush()
 
-    email_map[correo] = alumno.id
+    if correo:
+        email_map[correo] = alumno.id
     alumno_details[alumno.id] = {
-        "nombre": "",
+        "nombre": " ".join(p for p in nombres if p),
         "cuenta": None,
         "folio": None,
         "correo": correo,
-        "ingenieria": ingenieria_clave,
+        "ingenieria": ingenieria_clave or "",
         "periodo_ingreso": periodo,
         "provisional": True,
     }
@@ -90,12 +95,11 @@ async def completar_nombre_si_falta(
     nombre: tuple[str, str, str] | None,
     alumno_details: dict[int, dict],
 ) -> bool:
-    """Pone nombre a un alumno provisional que aún no tiene. True si lo cambió."""
+    """Pone nombre a un alumno que aún no tiene. True si lo cambió."""
     detalle = alumno_details.get(alumno_id)
     if (
         nombre is None
         or detalle is None
-        or not detalle.get("provisional")
         or not nombre_vacio(detalle.get("nombre"))
     ):
         return False
@@ -105,6 +109,34 @@ async def completar_nombre_si_falta(
     user.nombre, user.apellido_paterno, user.apellido_materno = nombre
     detalle["nombre"] = " ".join(p for p in nombre if p)
     return True
+
+
+async def completar_ingenieria_si_falta(
+    db: AsyncSession,
+    alumno_id: int,
+    clave: str | None,
+    ingenieria_ids: dict[str, int],
+    alumno_details: dict[int, dict],
+) -> bool:
+    """Pone la ingeniería a un alumno que aún no tiene. True si la cambió."""
+    detalle = alumno_details.get(alumno_id)
+    if not clave or clave not in ingenieria_ids or detalle is None or detalle.get("ingenieria"):
+        return False
+    alumno = await db.get(Alumno, alumno_id)
+    alumno.ingenieria_id = ingenieria_ids[clave]
+    detalle["ingenieria"] = clave
+    return True
+
+
+async def completar_lugar_si_falta(
+    db: AsyncSession, alumno_id: int, lugar: int | None
+) -> None:
+    """Lugar de admisión (del usuario del cuestionario) si el alumno no lo tenía."""
+    if lugar is None:
+        return
+    alumno = await db.get(Alumno, alumno_id)
+    if alumno is not None and alumno.lugar_admision is None:
+        alumno.lugar_admision = lugar
 
 
 async def completar_provisional_con_padron(

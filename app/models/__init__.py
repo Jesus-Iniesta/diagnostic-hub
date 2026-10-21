@@ -26,6 +26,8 @@ from app.models.grupo import Grupo
 from app.models.grupo_profesor import grupo_profesor
 from app.models.grupo_alumno import grupo_alumno
 from app.models.identificador_alumno import IdentificadorAlumno
+from app.models.archivo_periodo import ArchivoPeriodo
+from app.models.fila_no_registrada import FilaNoRegistrada
 
 __all__ = [
     "role_permissions",
@@ -53,4 +55,6 @@ __all__ = [
     "grupo_profesor",
     "grupo_alumno",
     "IdentificadorAlumno",
+    "ArchivoPeriodo",
+    "FilaNoRegistrada",
 ]

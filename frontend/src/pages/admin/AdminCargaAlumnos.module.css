@@ -98,6 +98,11 @@
   border: 1px solid #fca5a5;
 }
 
+.statBoxBlue {
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+}
+
 .statBoxGray {
   background: #f9fafb;
   border: 1px solid #e5e7eb;

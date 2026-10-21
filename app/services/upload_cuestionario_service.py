@@ -35,13 +35,15 @@ from app.services.upload_diagnostico_service import (
 from app.services.alumnos_provisionales import (
     clave_ingenieria_fila,
     lugar_desde_usuario,
-)
-from app.services.alumnos_provisionales_service import (
-    crear_alumno_provisional,
-    datos_para_provisionales,
+    nombre_desde_completo,
 )
 from app.services.excel_utils import leer_filas
 from app.services.identificadores_service import RegistroIdentificadores
+from app.services.registro_automatico_service import (
+    RegistroAutomatico,
+    guardar_filas_no_registradas,
+    quitar_filas_no_registradas,
+)
 from app.services.upload_webassign_service import clean_email
 
 MATERIA_FOR_CODE = {
@@ -456,7 +458,8 @@ async def procesar_cuestionario(
     omitidas_detalle: list[dict] = []
     # Omitidas que sí corresponden a un alumno del periodo que se está cargando.
     omitidas_periodo_detalle: list[dict] = []
-    # Filas del periodo sin alumno ni candidato: se crean como provisionales.
+    # Filas del periodo sin alumno pero con correo, cuenta o folio: se
+    # registran como provisionales.
     sin_registro: list[dict] = []
     periodo_key = normalizar_periodo(periodo) or "".join(str(periodo).upper().split())
 
@@ -543,7 +546,7 @@ async def procesar_cuestionario(
                     ),
                 }
             )
-            if not candidatos and emails:
+            if emails or cuentas or folios:
                 sin_registro.append(
                     {
                         "idx": idx,
@@ -577,10 +580,11 @@ async def procesar_cuestionario(
         fuente=f"cuestionario:{cuestionario}",
     )
 
-    provisionales = await _crear_provisionales(
-        db, sin_registro, cols, periodo, registro,
-        email_map, cuenta_map, folio_map, alumno_details,
-        encontrados_cola, no_encontrados,
+    registrador = RegistroAutomatico(db, registro, periodo)
+    ingenierias = await registrador.ingenierias()
+
+    await _registrar_sin_registro(
+        sin_registro, cols, registrador, ingenierias, encontrados_cola, no_encontrados
     )
 
     encontrados_cola.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
@@ -598,6 +602,16 @@ async def procesar_cuestionario(
             cuentas=e["cuentas"],
             folios=e["folios"],
             indice=e["idx"],
+        )
+        await registrador.completar(
+            e["alumno_id"],
+            nombre=nombre_desde_completo(_valor(e["row"], cols["nombre"])),
+            ingenieria=clave_ingenieria_fila(
+                _valor(e["row"], cols["ingenieria"]),
+                _valor(e["row"], cols["usuario"]),
+                ingenierias,
+            ),
+            lugar_admision=lugar_desde_usuario(_valor(e["row"], cols["usuario"])),
         )
         if e["alumno_id"] in vistos:
             repetidos += 1
@@ -625,17 +639,39 @@ async def procesar_cuestionario(
             _detalle_resultado(alumno_details, e["alumno_id"], aciertos, detalle)
         )
 
-    await db.commit()
-
     no_encontrados, repetidos_no_enc = deduplicar_primer_intento(no_encontrados)
     repetidos += repetidos_no_enc
+
+    await guardar_filas_no_registradas(
+        db,
+        periodo,
+        f"cuestionario_{cuestionario}",
+        [
+            {
+                "indice": n["indice"],
+                "nombre": n["nombre_original"],
+                "ingenieria": clave_ingenieria_fila(
+                    _valor(rows[n["indice"]], cols["ingenieria"]),
+                    n["usuario"],
+                    ingenierias,
+                ),
+            }
+            for n in no_encontrados
+        ],
+    )
+    await db.commit()
+
+    nuevos_con_resultado = sum(
+        1 for r in resultados if r["alumno_id"] in registrador.ids_creados
+    )
 
     return {
         "cuestionario": cuestionario,
         "periodo": periodo,
         "rango_fechas": rango_fechas_dict(rango),
         "total_filas": len(rows),
-        "encontrados": len(resultados),
+        # Alumnos que ya existían; los registrados en esta carga van aparte.
+        "encontrados": len(resultados) - nuevos_con_resultado,
         "no_encontrados": len(no_encontrados),
         "omitidas_otro_periodo": len(omitidas_detalle),
         "omitidas_detalle": omitidas_detalle,
@@ -644,81 +680,47 @@ async def procesar_cuestionario(
         "repetidos_detalle": repetidos_detalle,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
-        "alumnos_provisionales_creados": len(provisionales),
-        "alumnos_provisionales_detalle": provisionales,
+        "alumnos_provisionales_creados": len(registrador.creados),
+        "alumnos_provisionales_detalle": registrador.creados,
+        **registrador.resumen(),
         **registro.resumen(),
     }
 
 
-async def _crear_provisionales(
-    db: AsyncSession,
+async def _registrar_sin_registro(
     sin_registro: list[dict],
     cols: dict,
-    periodo: str,
-    registro: RegistroIdentificadores,
-    email_map: dict[str, int],
-    cuenta_map: dict[str, int],
-    folio_map: dict[str, int],
-    alumno_details: dict[int, dict],
+    registrador: RegistroAutomatico,
+    ingenierias: dict[str, str],
     encontrados_cola: list[dict],
     no_encontrados: list[dict],
-) -> list[dict]:
-    """Crea un alumno provisional por cada alumno del periodo que no está en el padrón.
+) -> None:
+    """Registra como provisional a cada alumno del periodo que no se encontró.
 
     Las filas se recorren de la más antigua a la más nueva; si un alumno tiene
-    varias, la primera crea el provisional y las demás ya lo encuentran por sus
+    varias, la primera lo registra y las demás ya lo encuentran por sus
     correos/cuenta/folio. Todas pasan a encontrados_cola (ahí se aplica la regla
-    del primer intento). Si no se puede crear (sin ingeniería reconocible),
-    la fila se queda en no_encontrados como antes.
+    del primer intento). La ingeniería se toma de la fila si se reconoce; si
+    no, queda vacía hasta que la traiga otro archivo.
     """
-    if not sin_registro:
-        return []
-
-    role_id, ingenierias, ingenieria_ids = await datos_para_provisionales(db)
-    creados: list[dict] = []
     sin_registro.sort(key=lambda f: (ts_sort_key(f["ts"]), f["idx"]))
 
     for f in sin_registro:
-        alumno_id = _buscar_por_identificadores(
-            f["emails"], f["cuentas"], f["folios"], email_map, cuenta_map, folio_map
+        alumno_id = await registrador.buscar_o_registrar(
+            correos=f["emails"],
+            cuentas=f["cuentas"],
+            folios=f["folios"],
+            nombre=nombre_desde_completo(_valor(f["row"], cols["nombre"])),
+            ingenieria=clave_ingenieria_fila(
+                _valor(f["row"], cols.get("ingenieria")), f["usuario"], ingenierias
+            ),
+            lugar_admision=lugar_desde_usuario(f["usuario"]),
+            indice=f["idx"],
         )
         if alumno_id is None:
-            clave = clave_ingenieria_fila(
-                _valor(f["row"], cols.get("ingenieria")), f["usuario"], ingenierias
-            )
-            if role_id is None or clave is None:
-                f["no_encontrado"]["motivo"] = (
-                    f["no_encontrado"]["motivo"].removesuffix(".")
-                    + "; no se creó provisional (ingeniería no reconocida)"
-                )
-                no_encontrados.append(f["no_encontrado"])
-                continue
-            alumno_id = await crear_alumno_provisional(
-                db,
-                role_id=role_id,
-                ingenieria_id=ingenieria_ids[clave],
-                ingenieria_clave=clave,
-                periodo=normalizar_periodo(periodo) or periodo,
-                correo=f["emails"][0],
-                lugar_admision=lugar_desde_usuario(f["usuario"]),
-                email_map=email_map,
-                alumno_details=alumno_details,
-            )
-            if alumno_id is None:
-                f["no_encontrado"]["motivo"] = (
-                    f["no_encontrado"]["motivo"].removesuffix(".")
-                    + "; no se creó provisional (el correo es de otro usuario)"
-                )
-                no_encontrados.append(f["no_encontrado"])
-                continue
-            creados.append(
-                {
-                    "alumno_id": alumno_id,
-                    "correo": f["emails"][0],
-                    "ingenieria": clave,
-                    "indice": f["idx"],
-                }
-            )
+            f["no_encontrado"]["motivo"] = "No se pudo registrar (el correo es de otro usuario)."
+            no_encontrados.append(f["no_encontrado"])
+            continue
         encontrados_cola.append(
             {
                 "idx": f["idx"],
@@ -730,33 +732,6 @@ async def _crear_provisionales(
                 "folios": f["folios"],
             }
         )
-        # Se registran ya, para que la siguiente fila del mismo alumno lo encuentre.
-        await registro.registrar(
-            alumno_id,
-            correos=f["emails"],
-            cuentas=f["cuentas"],
-            folios=f["folios"],
-            indice=f["idx"],
-        )
-    return creados
-
-
-def _buscar_por_identificadores(
-    emails: list[str],
-    cuentas: list[str],
-    folios: list[str],
-    email_map: dict[str, int],
-    cuenta_map: dict[str, int],
-    folio_map: dict[str, int],
-) -> int | None:
-    for valor, mapa in (
-        *((e, email_map) for e in emails),
-        *((c, cuenta_map) for c in cuentas),
-        *((f, folio_map) for f in folios),
-    ):
-        if valor in mapa:
-            return mapa[valor]
-    return None
 
 
 async def _tiene_resultado_cuestionario(
@@ -848,6 +823,9 @@ async def corregir_matching_cuestionario(
         fuente=f"correccion:cuestionario:{cuestionario}",
     )
     omitidas_ya_tenian_resultado: list[int] = []
+    await quitar_filas_no_registradas(
+        db, periodo, f"cuestionario_{cuestionario}", identificadores_fila.keys()
+    )
 
     for alumno_id, items in candidatos.items():
         items.sort(key=lambda it: (ts_sort_key(it[1]), it[0]))

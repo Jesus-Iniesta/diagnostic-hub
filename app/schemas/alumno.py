@@ -8,7 +8,7 @@ from app.schemas.user import UserRead
 
 class AlumnoBase(BaseModel):
     usuario_id: int
-    ingenieria_id: int
+    ingenieria_id: int | None = None
     numero_cuenta: str | None = None
     numero_folio: str | None = None
     periodo_ingreso: str
@@ -50,7 +50,7 @@ class AlumnoRead(AlumnoBase):
     id: int
     created_at: datetime
     usuario: UserRead
-    ingenieria: IngenieriaRead
+    ingenieria: IngenieriaRead | None = None
 
 
 class AlumnoListResponse(BaseModel):

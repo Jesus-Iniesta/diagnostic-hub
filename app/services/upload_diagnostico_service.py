@@ -25,6 +25,11 @@ from app.services.identificadores_service import (
     RegistroIdentificadores,
     cargar_identificadores_extra,
 )
+from app.services.registro_automatico_service import (
+    RegistroAutomatico,
+    guardar_filas_no_registradas,
+    quitar_filas_no_registradas,
+)
 from app.services.normalizacion import (
     clasificar_identificador,
     normalizar_correo,
@@ -688,6 +693,9 @@ async def procesar_examen_diagnostico(
     no_encontrados = []
     omitidas_detalle: list[dict] = []
     encontrados = []
+    # Filas del periodo sin alumno pero con correo, cuenta o folio: se
+    # registran como provisionales.
+    sin_registro: list[dict] = []
 
     for idx, row in enumerate(rows):
         raw_timestamp = row[COL_TIMESTAMP] if len(row) > COL_TIMESTAMP else None
@@ -713,6 +721,18 @@ async def procesar_examen_diagnostico(
             omitidas_detalle.append(
                 omitida_detalle(idx, email, folio, raw_timestamp, periodo_detectado, razon)
             )
+            continue
+
+        if alumno_id is None and (email or cuenta or folio):
+            sin_registro.append({
+                "idx": idx,
+                "row": row,
+                "ts": raw_timestamp,
+                "email": email,
+                "cuenta": cuenta,
+                "folio": folio,
+                "nombre": raw_name,
+            })
             continue
 
         if alumno_id is None:
@@ -756,6 +776,36 @@ async def procesar_examen_diagnostico(
         db, email_map, cuenta_map, folio_map, alumno_details,
         fuente=f"examen_final:{materia}",
     )
+    registrador = RegistroAutomatico(db, registro, periodo)
+
+    # De la más antigua a la más nueva: si un alumno tiene varias filas, la
+    # primera lo registra y las demás ya lo encuentran.
+    sin_registro.sort(key=lambda f: (ts_sort_key(f["ts"]), f["idx"]))
+    for f in sin_registro:
+        alumno_id = await registrador.buscar_o_registrar(
+            correos=[f["email"]],
+            cuentas=[f["cuenta"]],
+            folios=[f["folio"]],
+            nombre=nombre_desde_completo(f["nombre"]),
+            indice=f["idx"],
+        )
+        if alumno_id is None:
+            no_encontrados.append({
+                "nombre_original": normalize_name(str(f["nombre"]) if f["nombre"] else ""),
+                "correo": f["email"],
+                "cuenta": f["cuenta"],
+                "folio": f["folio"],
+                "materia": materia,
+                "motivo": "No se pudo registrar (el correo es de otro usuario).",
+                "candidatos": [],
+                "indice": f["idx"],
+                "_ts": f["ts"],
+                "_clave_identidad": clave_identidad_no_encontrado(
+                    f["email"], f["folio"], f["cuenta"], None
+                ),
+            })
+            continue
+        encontrados.append({**f, "alumno_id": alumno_id})
 
     # El CREANI usa el PRIMER intento (marca temporal más antigua); los demás se ignoran.
     encontrados.sort(key=lambda e: (ts_sort_key(e["ts"]), e["idx"]))
@@ -823,17 +873,28 @@ async def procesar_examen_diagnostico(
             "puntaje": puntaje,
         })
 
-    await db.commit()
-
     no_encontrados, repetidos_no_enc = deduplicar_primer_intento(no_encontrados)
     repetidos += repetidos_no_enc
+
+    await guardar_filas_no_registradas(
+        db,
+        periodo,
+        f"final_{materia}",
+        [{"indice": n["indice"], "nombre": n["nombre_original"]} for n in no_encontrados],
+    )
+    await db.commit()
+
+    nuevos_con_resultado = sum(
+        1 for r in resultados if r["alumno_id"] in registrador.ids_creados
+    )
 
     return {
         "materia": materia,
         "periodo": periodo,
         "rango_fechas": rango_fechas_dict(rango),
         "total_filas": len(rows),
-        "encontrados": len(resultados),
+        # Alumnos que ya existían; los registrados en esta carga van aparte.
+        "encontrados": len(resultados) - nuevos_con_resultado,
         "no_encontrados": len(no_encontrados),
         "omitidas_otro_periodo": len(omitidas_detalle),
         "omitidas_detalle": omitidas_detalle,
@@ -841,6 +902,7 @@ async def procesar_examen_diagnostico(
         "advertencia": advertencia,
         "resultados": resultados,
         "no_encontrados_detalle": no_encontrados,
+        **registrador.resumen(),
         **registro.resumen(),
     }
 
@@ -940,6 +1002,9 @@ async def corregir_matching_diagnostico(
         fuente=f"correccion:examen_final:{materia}",
     )
     omitidas_ya_tenian_resultado: list[int] = []
+    await quitar_filas_no_registradas(
+        db, periodo, f"final_{materia}", identificadores_fila.keys()
+    )
 
     for alumno_id, items in candidatos.items():
         items.sort(key=lambda it: (ts_sort_key(it[1]), it[0]))

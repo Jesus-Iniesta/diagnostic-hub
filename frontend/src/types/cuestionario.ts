@@ -73,4 +73,6 @@ export interface ResultadoProcesamientoCuestionario {
   repetidos_detalle?: RepetidoDetalle[];
   resultados: CuestionarioAlumnoResultado[];
   no_encontrados_detalle: CuestionarioNoEncontrado[];
+  /** Alumnos que no existían y se registraron con esta carga. */
+  registrados_nuevos?: number;
 }
