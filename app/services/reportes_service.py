@@ -483,11 +483,15 @@ def _write_resumen_por_licenciatura(
     licenciaturas: list[tuple[str, str]],
     config_indice: dict,
 ):
-    for clave, _ in licenciaturas:
+    # Los alumnos sin ingeniería van en su propia hoja, después de las carreras.
+    claves = [clave for clave, _ in licenciaturas if clave]
+    if any(not clave for clave, _ in licenciaturas):
+        claves.append("")
+    for clave in claves:
         rows = [d for d in data if d["ingenieria"] == clave]
         if not rows:
             continue
-        ws = wb.create_sheet(f"Resumen {clave}")
+        ws = wb.create_sheet(f"Resumen {clave}" if clave else "Sin ingeniería")
         _write_resumen_ws(ws, _construir_filas_creani(rows, config_indice), config_indice)
 
 
