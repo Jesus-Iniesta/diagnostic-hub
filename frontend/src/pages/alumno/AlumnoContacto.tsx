@@ -1,4 +1,4 @@
-import { Alert, Button, Grid, Text } from '@mantine/core';
+import { Alert, Button, Stack, Text } from '@mantine/core';
 import { IconArrowRight, IconInfoCircle } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -59,14 +59,10 @@ export default function AlumnoContacto() {
           </Button>
         </Alert>
       ) : (
-        <Grid gutter="lg" mt="lg" align="stretch">
-          <Grid.Col span={{ base: 12, lg: 8 }}>
-            <DatosContactoForm />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, lg: 4 }}>
-            <ResumenAlumno />
-          </Grid.Col>
-        </Grid>
+        <Stack gap="lg" mt="lg">
+          <DatosContactoForm />
+          <ResumenAlumno />
+        </Stack>
       )}
     </>
   );

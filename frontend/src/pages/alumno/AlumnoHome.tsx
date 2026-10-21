@@ -1,4 +1,4 @@
-import { Grid, Text } from '@mantine/core';
+import { Stack, Text } from '@mantine/core';
 
 import CorreosRegistrados from '../../components/CorreosRegistrados/CorreosRegistrados';
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
@@ -24,14 +24,10 @@ export default function AlumnoHome() {
 
       <CorreosRegistrados />
 
-      <Grid gutter="lg" mt="lg" align="stretch">
-        <Grid.Col span={{ base: 12, lg: 8 }}>
-          <DatosContactoForm />
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, lg: 4 }}>
-          <ResumenAlumno />
-        </Grid.Col>
-      </Grid>
+      <Stack gap="lg" mt="lg">
+        <DatosContactoForm />
+        <ResumenAlumno />
+      </Stack>
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Alert, Button, Card, Group, Loader, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
@@ -8,6 +8,7 @@ import classes from './CorreosRegistrados.module.css';
 
 export default function CorreosRegistrados() {
   const [perfil, setPerfil] = useState<AlumnoPerfil | null>(null);
+  const [cargando, setCargando] = useState(true);
   const [descargando, setDescargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +18,10 @@ export default function CorreosRegistrados() {
       .then((data) => {
         if (mounted) setPerfil(data);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setCargando(false);
+      });
     return () => { mounted = false; };
   }, []);
 
@@ -49,7 +53,9 @@ export default function CorreosRegistrados() {
             {correos.map((c) => (
               <div key={c.label}>
                 <Text className={classes.label}>{c.label}</Text>
-                {c.valor ? (
+                {cargando ? (
+                  <Loader size="xs" mt={4} />
+                ) : c.valor ? (
                   <Text className={classes.valor}>{c.valor}</Text>
                 ) : (
                   <Text className={classes.pendiente}>Pendiente</Text>

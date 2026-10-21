@@ -1,14 +1,5 @@
-import {
-  Alert,
-  Button,
-  Card,
-  Collapse,
-  Loader,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
-import { IconChevronDown, IconChevronUp, IconInfoCircle } from '@tabler/icons-react';
+import { Alert, Card, Loader, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { IconInfoCircle } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
 import { fetchMiPerfil } from '../../lib/alumnoApi';
@@ -18,6 +9,8 @@ import classes from './ResumenAlumno.module.css';
 interface Dato {
   label: string;
   value: string | null;
+  /** Los mismos que pide el formulario para terminar el registro. */
+  obligatorio?: boolean;
 }
 
 function siNo(valor: boolean | null): string | null {
@@ -29,47 +22,62 @@ function numero(valor: number | null): string | null {
   return valor === null || valor === undefined ? null : String(valor);
 }
 
-function Valor({ value }: { value: string | null }) {
-  return value ? (
-    <Text className={classes.valor}>{value}</Text>
-  ) : (
-    <Text className={classes.pendiente}>Pendiente</Text>
+// Etiqueta arriba y valor abajo, para que los correos y la escuela no se partan.
+function Campo({ dato, grande = false }: { dato: Dato; grande?: boolean }) {
+  return (
+    <div className={classes.campo}>
+      <Text className={classes.label}>{dato.label}</Text>
+      {dato.value ? (
+        <Text className={grande ? classes.valorGrande : classes.valor}>{dato.value}</Text>
+      ) : (
+        <Text className={classes.pendiente}>Pendiente</Text>
+      )}
+    </div>
   );
 }
 
-function Bloque({ datos }: { datos: Dato[] }) {
+function Columna({ titulo, datos }: { titulo: string; datos: Dato[] }) {
   return (
-    <div className={classes.tabla}>
-      {datos.map((d) => (
-        <div key={d.label} className={classes.fila}>
-          <Text className={classes.label}>{d.label}</Text>
-          <Valor value={d.value} />
-        </div>
-      ))}
+    <div className={classes.columna}>
+      <Text className={classes.blockTitle}>{titulo}</Text>
+      <Stack gap="sm">
+        {datos.map((d) => (
+          <Campo key={d.label} dato={d} />
+        ))}
+      </Stack>
     </div>
   );
 }
 
 export default function ResumenAlumno() {
   const [perfil, setPerfil] = useState<AlumnoPerfil | null>(null);
-  const [verSocio, setVerSocio] = useState(false);
+  const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    void fetchMiPerfil().then((data) => {
-      if (mounted) setPerfil(data);
-    });
+    void fetchMiPerfil()
+      .then((data) => {
+        if (mounted) setPerfil(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setCargando(false);
+      });
     return () => {
       mounted = false;
     };
   }, []);
 
-  if (!perfil) {
+  if (cargando || !perfil) {
     return (
       <Card className={classes.card} padding="xl" radius="lg">
         <Title order={3} className={classes.title}>Tu información</Title>
         <Stack align="center" py="xl">
-          <Loader size="sm" />
+          {cargando ? (
+            <Loader size="sm" />
+          ) : (
+            <Text c="dimmed" size="sm">No se pudo cargar tu información.</Text>
+          )}
         </Stack>
       </Card>
     );
@@ -81,12 +89,13 @@ export default function ResumenAlumno() {
     .join(' ');
 
   const principales: Dato[] = [
-    { label: 'Número de cuenta', value: perfil.numero_cuenta },
-    { label: 'Ingeniería', value: perfil.ingenieria?.nombre ?? null },
+    { label: 'Nombre completo', value: nombreCompleto || null, obligatorio: true },
+    { label: 'Número de cuenta', value: perfil.numero_cuenta, obligatorio: true },
+    { label: 'Ingeniería', value: perfil.ingenieria?.nombre ?? null, obligatorio: true },
     { label: 'Periodo', value: perfil.periodo_ingreso || null },
   ];
   const contacto: Dato[] = [
-    { label: 'Correo personal', value: u.correo_personal },
+    { label: 'Correo personal', value: u.correo_personal, obligatorio: true },
     { label: 'Correo institucional', value: u.correo_institucional },
   ];
   const academicos: Dato[] = [
@@ -101,83 +110,37 @@ export default function ResumenAlumno() {
     { label: 'Computadora propia', value: siNo(perfil.tiene_computadora) },
     { label: 'Foráneo', value: siNo(perfil.es_foraneo) },
     { label: 'Convivencia', value: perfil.convivencia },
+    { label: 'Vulnerabilidad económica', value: siNo(perfil.vulnerabilidad_economica) },
   ];
 
-  const todos = [
-    { label: 'Nombre', value: nombreCompleto || null },
-    ...principales,
-    ...contacto,
-    ...academicos,
-    ...socioeconomicos,
-  ];
-  const faltan = todos.filter((d) => !d.value).length;
+  // Solo cuentan los obligatorios; el nombre está pendiente si le falta alguna parte.
+  const nombreIncompleto = !u.nombre || !u.apellido_paterno || !u.apellido_materno;
+  const faltan = [...principales, ...contacto].filter(
+    (d) => d.obligatorio && (d.label === 'Nombre completo' ? nombreIncompleto : !d.value),
+  ).length;
 
   return (
     <Card className={classes.card} padding="xl" radius="lg">
-      <Stack gap="xl">
-        <div>
-          <Title order={3} className={classes.title}>Tu información</Title>
-          {faltan > 0 && (
-            <Alert
-              color="orange"
-              variant="light"
-              radius="md"
-              mt="sm"
-              icon={<IconInfoCircle size={18} />}
-            >
-              Te faltan {faltan} dato{faltan !== 1 ? 's' : ''}.
-            </Alert>
-          )}
-        </div>
+      <Stack gap="lg">
+        <Title order={3} className={classes.title}>Tu información</Title>
 
-        <div className={classes.principal}>
-          {nombreCompleto ? (
-            <Text className={classes.nombre}>{nombreCompleto}</Text>
-          ) : (
-            <Text className={classes.pendiente}>Nombre pendiente</Text>
-          )}
-          <Stack gap={6} mt="sm">
-            {principales.map((d) => (
-              <div key={d.label} className={classes.filaPrincipal}>
-                <Text className={classes.labelPrincipal}>{d.label}</Text>
-                {d.value ? (
-                  <Text className={classes.valorPrincipal}>{d.value}</Text>
-                ) : (
-                  <Text className={classes.pendiente}>Pendiente</Text>
-                )}
-              </div>
-            ))}
-          </Stack>
-        </div>
+        {faltan > 0 && (
+          <Alert color="orange" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+            {faltan === 1 ? 'Te falta 1 dato.' : `Te faltan ${faltan} datos.`}
+          </Alert>
+        )}
 
-        <div>
-          <Text className={classes.blockTitle}>Contacto</Text>
-          <Bloque datos={contacto} />
-        </div>
+        <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="lg" className={classes.principal}>
+          {principales.map((d) => (
+            <Campo key={d.label} dato={d} grande />
+          ))}
+        </SimpleGrid>
 
-        <div>
-          <Text className={classes.blockTitle}>Datos académicos</Text>
-          <Bloque datos={academicos} />
-        </div>
-
-        <div>
-          <Text className={classes.blockTitle}>Datos socioeconómicos</Text>
-          <Collapse in={verSocio}>
-            <Bloque datos={socioeconomicos} />
-          </Collapse>
-          <Button
-            variant="subtle"
-            color="indigo"
-            size="compact-sm"
-            mt={4}
-            px={0}
-            rightSection={verSocio ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-            onClick={() => setVerSocio((v) => !v)}
-            aria-expanded={verSocio}
-          >
-            {verSocio ? 'Ver menos' : 'Ver más'}
-          </Button>
-        </div>
+        <SimpleGrid cols={{ base: 1, md: 3 }} spacing="xl">
+          <Columna titulo="Contacto" datos={contacto} />
+          <Columna titulo="Datos académicos" datos={academicos} />
+          <Columna titulo="Datos socioeconómicos" datos={socioeconomicos} />
+        </SimpleGrid>
       </Stack>
     </Card>
   );
