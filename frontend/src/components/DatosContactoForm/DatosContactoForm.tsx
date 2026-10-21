@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Divider,
   Loader,
   NumberInput,
@@ -20,6 +21,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fetchEstadoFormularioContacto } from '../../lib/configuracionApi';
 import { fetchMiPerfil, guardarDatosContacto } from '../../lib/alumnoApi';
 import {
+  esObligatorio,
   getInitialValues,
   getMissingFields,
   obligatoriosFaltantes,
@@ -235,7 +237,8 @@ function validateValues(
   fields: MissingField[],
 ): Record<string, string | null> {
   const errors: Record<string, string | null> = {};
-  for (const [key, check] of Object.entries(buildValidation(fields))) {
+  const campos = fields.map((f) => ({ ...f, required: esObligatorio(f, values) }));
+  for (const [key, check] of Object.entries(buildValidation(campos))) {
     const msg = check(values[key]);
     if (msg) errors[key] = msg;
   }
@@ -288,8 +291,8 @@ function buildPayload(
   const payload: DatosContactoUpdate = {};
   for (const field of fields) {
     const val = values[field.key];
-    if (field.type === 'switch') {
-      (payload as Record<string, unknown>)[field.key] = val;
+    if (field.type === 'switch' || field.type === 'checkbox') {
+      (payload as Record<string, unknown>)[field.key] = Boolean(val);
     } else if (field.type === 'select') {
       if (val !== '') (payload as Record<string, unknown>)[field.key] = Number(val);
     } else if (field.required) {
@@ -309,7 +312,28 @@ function renderField(
   ingenierias: { value: string; label: string }[],
 ): ReactNode {
   const props = form.getInputProps(field.key);
-  const label = field.required ? field.label : `${field.label} (opcional)`;
+  const required = esObligatorio(field, form.values);
+  const label = required || field.type === 'checkbox' ? field.label : `${field.label} (opcional)`;
+
+  if (field.type === 'checkbox') {
+    return (
+      <Checkbox
+        key={field.key}
+        label={label}
+        mt={-6}
+        checked={Boolean(form.values[field.key])}
+        onChange={(e) => {
+          const marcado = e.currentTarget.checked;
+          form.setFieldValue(field.key, marcado);
+          // Con la marca, el apellido materno se guarda vacío.
+          if (marcado && field.key === 'sin_apellido_materno') {
+            form.setFieldValue('apellido_materno', '');
+            form.clearFieldError('apellido_materno');
+          }
+        }}
+      />
+    );
+  }
 
   if (field.type === 'select') {
     return (
@@ -319,7 +343,7 @@ function renderField(
         placeholder="Selecciona una ingeniería"
         data={ingenierias}
         size="md"
-        withAsterisk={field.required}
+        withAsterisk={required}
         value={(props.value as string) || null}
         onChange={(v) => form.setFieldValue(field.key, v ?? '')}
         error={props.error}
@@ -343,7 +367,7 @@ function renderField(
       <NumberInput
         key={field.key}
         label={label}
-        withAsterisk={field.required}
+        withAsterisk={required}
         size="md"
         min={field.min}
         max={field.max}
@@ -361,7 +385,8 @@ function renderField(
       key={field.key}
       label={label}
       size="md"
-      withAsterisk={field.required}
+      withAsterisk={required}
+      disabled={field.key === 'apellido_materno' && Boolean(form.values.sin_apellido_materno)}
       placeholder={field.type === 'email' ? 'tu.correo@uaemex.mx' : undefined}
       {...props}
     />

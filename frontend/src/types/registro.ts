@@ -9,6 +9,8 @@ export interface RegistroAlumnoPayload {
   nombre: string;
   apellido_paterno: string;
   apellido_materno: string;
+  /** "Solo tengo un apellido": el apellido materno va vacío. */
+  sin_apellido_materno?: boolean;
   correo_personal: string;
   correo_institucional?: string | null;
   numero_cuenta: string | null;

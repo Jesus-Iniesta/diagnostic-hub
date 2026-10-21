@@ -41,8 +41,12 @@ CAMPOS_REQUERIDOS_ALUMNO = (
 
 def datos_completos(alumno: Alumno) -> bool:
     usuario = alumno.usuario
+    requeridos = [
+        c for c in CAMPOS_REQUERIDOS_USUARIO
+        if not (c == "apellido_materno" and alumno.sin_apellido_materno)
+    ]
     return all(
-        (getattr(usuario, c) or "").strip() for c in CAMPOS_REQUERIDOS_USUARIO
+        (getattr(usuario, c) or "").strip() for c in requeridos
     ) and all(getattr(alumno, c) not in (None, "") for c in CAMPOS_REQUERIDOS_ALUMNO)
 
 
@@ -259,6 +263,7 @@ class RegistroAlumnoRepository:
             es_foraneo=data.es_foraneo,
             convivencia=data.convivencia,
             vulnerabilidad_economica=data.vulnerabilidad_economica,
+            sin_apellido_materno=data.sin_apellido_materno,
         )
         self.db.add(alumno)
         await self.db.flush()
@@ -267,7 +272,7 @@ class RegistroAlumnoRepository:
         # puede ser la misma persona: se marca para que lo revise el
         # administrador (al alumno no se le dice nada).
         nombre = normalizar_nombre(
-            f"{data.nombre} {data.apellido_paterno} {data.apellido_materno}"
+            " ".join(p for p in (data.nombre, data.apellido_paterno, data.apellido_materno) if p)
         )
         if nombre:
             for aid in provisionales:
@@ -317,6 +322,7 @@ class RegistroAlumnoRepository:
                 "es_foraneo": data.es_foraneo,
                 "convivencia": data.convivencia,
                 "vulnerabilidad_economica": data.vulnerabilidad_economica,
+                "sin_apellido_materno": data.sin_apellido_materno,
             },
             email_map=email_map,
             cuenta_map=cuenta_map,

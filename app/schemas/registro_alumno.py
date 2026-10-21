@@ -5,11 +5,25 @@ NUMERO_FOLIO_PATTERN = r"^\d{9}$"
 PERIODO_INGRESO_PATTERN = r"^\d{4}[AB]$"
 
 
+MENSAJE_APELLIDO_MATERNO = 'Escribe tu apellido materno o marca "Solo tengo un apellido".'
+
+
+def _apellido_materno(valor: str | None, sin_apellido: bool | None) -> str | None:
+    """Con la marca se guarda vacío; sin ella, el apellido materno es obligatorio."""
+    if sin_apellido:
+        return ""
+    if valor is not None and not valor.strip():
+        raise ValueError(MENSAJE_APELLIDO_MATERNO)
+    return valor
+
+
 class RegistroAlumnoBase(BaseModel):
     # --- Datos personales (User) ---
     nombre: str = Field(min_length=1)
     apellido_paterno: str = Field(min_length=1)
-    apellido_materno: str = Field(min_length=1)
+    # Vacío solo si marca "Solo tengo un apellido".
+    apellido_materno: str = ""
+    sin_apellido_materno: bool = False
     correo_personal: EmailStr
     # Opcional: sirve para encontrar al alumno si WebAssign lo trae con él.
     correo_institucional: EmailStr | None = None
@@ -30,6 +44,11 @@ class RegistroAlumnoBase(BaseModel):
     vulnerabilidad_economica: bool
 
     @model_validator(mode="after")
+    def apellido_materno_o_marca(self):
+        self.apellido_materno = _apellido_materno(self.apellido_materno, self.sin_apellido_materno)
+        return self
+
+    @model_validator(mode="after")
     def atleast_one_identificacion(self):
         if not self.numero_cuenta and not self.numero_folio:
             raise ValueError(
@@ -46,7 +65,8 @@ class RegistroAlumnoUpdate(BaseModel):
     # --- Datos personales (User) ---
     nombre: str | None = Field(default=None, min_length=1)
     apellido_paterno: str | None = Field(default=None, min_length=1)
-    apellido_materno: str | None = Field(default=None, min_length=1)
+    apellido_materno: str | None = None
+    sin_apellido_materno: bool | None = None
     correo_personal: EmailStr | None = None
     correo_institucional: EmailStr | None = None
 
@@ -64,3 +84,8 @@ class RegistroAlumnoUpdate(BaseModel):
     es_foraneo: bool | None = None
     convivencia: str | None = None
     vulnerabilidad_economica: bool | None = None
+
+    @model_validator(mode="after")
+    def apellido_materno_o_marca(self):
+        self.apellido_materno = _apellido_materno(self.apellido_materno, self.sin_apellido_materno)
+        return self

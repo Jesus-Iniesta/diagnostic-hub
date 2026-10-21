@@ -1108,7 +1108,9 @@ async def get_resultados_consolidados(
     for alumno, user in rows:
         alumno_map[alumno.id] = {
             "alumno_id": alumno.id,
-            "nombre_completo": f"{user.nombre} {user.apellido_paterno} {user.apellido_materno}",
+            "nombre_completo": " ".join(
+                p for p in (user.nombre, user.apellido_paterno, user.apellido_materno) if p
+            ),
             "numero_cuenta": alumno.numero_cuenta,
             "numero_folio": alumno.numero_folio,
             "correo": user.correo_personal,

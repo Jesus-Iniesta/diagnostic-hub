@@ -6,7 +6,7 @@ import type { AlumnoPerfil } from '../types/alumno';
 export interface MissingField {
   key: string;
   label: string;
-  type: 'text' | 'email' | 'number' | 'switch' | 'select';
+  type: 'text' | 'email' | 'number' | 'switch' | 'select' | 'checkbox';
   category: 'personales' | 'academicos' | 'socioeconomicos';
   required?: boolean;
   min?: number;
@@ -38,6 +38,7 @@ const PROVISIONAL_FIELDS: MissingField[] = [
   { key: 'nombre', label: 'Nombre(s)', type: 'text', category: 'personales', required: true },
   { key: 'apellido_paterno', label: 'Apellido paterno', type: 'text', category: 'personales', required: true },
   { key: 'apellido_materno', label: 'Apellido materno', type: 'text', category: 'personales', required: true },
+  { key: 'sin_apellido_materno', label: 'Solo tengo un apellido', type: 'checkbox', category: 'personales' },
   { key: 'correo_personal', label: 'Correo personal', type: 'email', category: 'personales', required: true },
   { key: 'ingenieria_id', label: 'Ingeniería', type: 'select', category: 'academicos', required: true },
 ];
@@ -77,6 +78,8 @@ export function getInitialValues(
   for (const field of fields) {
     if (field.type === 'switch') {
       values[field.key] = false;
+    } else if (field.type === 'checkbox') {
+      values[field.key] = Boolean((perfil as unknown as Record<string, unknown>)[field.key]);
     } else if (field.type === 'number') {
       values[field.key] = '';
     } else {
@@ -84,6 +87,12 @@ export function getInitialValues(
     }
   }
   return values;
+}
+
+/** Con "Solo tengo un apellido" marcado, el apellido materno deja de ser obligatorio. */
+export function esObligatorio(field: MissingField, valores: Record<string, unknown>): boolean {
+  if (field.key === 'apellido_materno' && valores.sin_apellido_materno) return false;
+  return Boolean(field.required);
 }
 
 /** Obligatorios que siguen vacíos; `valores` son los del formulario (si no, los iniciales). */
@@ -94,6 +103,10 @@ export function obligatoriosFaltantes(
   const campos = getMissingFields(perfil);
   const actuales = valores ?? getInitialValues(campos, perfil);
   return campos.filter(
-    (f) => f.required && f.type !== 'switch' && !String(actuales[f.key] ?? '').trim(),
+    (f) =>
+      esObligatorio(f, actuales) &&
+      f.type !== 'switch' &&
+      f.type !== 'checkbox' &&
+      !String(actuales[f.key] ?? '').trim(),
   );
 }

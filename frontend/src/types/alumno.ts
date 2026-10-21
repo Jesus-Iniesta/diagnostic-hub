@@ -39,6 +39,8 @@ export interface AlumnoPerfil {
   created_at: string;
   /** Creado desde los exámenes; debe completar sus datos antes de ver resultados. */
   es_provisional?: boolean;
+  /** Marcó "Solo tengo un apellido": su apellido materno va vacío. */
+  sin_apellido_materno?: boolean;
   ingenieria_id?: number | null;
   usuario: UserBrief;
   ingenieria: IngenieriaBrief | null;
@@ -72,6 +74,7 @@ export interface DatosContactoUpdate {
   nombre?: string;
   apellido_paterno?: string;
   apellido_materno?: string;
+  sin_apellido_materno?: boolean;
   correo_personal?: string;
   ingenieria_id?: number;
   correo_institucional?: string | null;

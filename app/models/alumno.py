@@ -86,6 +86,12 @@ class Alumno(Base):
         nullable=True,
         index=True
     )
+    # Marcó "Solo tengo un apellido": su apellido materno se guarda vacío.
+    sin_apellido_materno: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
     # True si se registró solo desde un archivo de exámenes (no estaba en el
     # padrón); al subir el padrón con sus datos se completa y pasa a False.
     es_provisional: Mapped[bool] = mapped_column(

@@ -77,6 +77,7 @@ export default function RegistroAlumnoPage() {
       nombre: '',
       apellidoPaterno: '',
       apellidoMaterno: '',
+      sinApellidoMaterno: false,
       correoPersonal: '',
       correoPersonalConfirmacion: '',
       correoInstitucional: '',
@@ -99,7 +100,8 @@ export default function RegistroAlumnoPage() {
     validate: {
       nombre: (v) => (!v.trim() ? 'Ingresa tu nombre' : null),
       apellidoPaterno: (v) => (!v.trim() ? 'Ingresa tu apellido paterno' : null),
-      apellidoMaterno: (v) => (!v.trim() ? 'Ingresa tu apellido materno' : null),
+      apellidoMaterno: (v, values) =>
+        !values.sinApellidoMaterno && !v.trim() ? 'Ingresa tu apellido materno' : null,
       correoPersonal: (v) => {
         if (!v.trim()) return 'Ingresa tu correo personal';
         if (!EMAIL_REGEX.test(v.trim())) return 'Ingresa un correo válido';
@@ -209,7 +211,8 @@ export default function RegistroAlumnoPage() {
       await registrarAlumno({
         nombre: values.nombre.trim(),
         apellido_paterno: values.apellidoPaterno.trim(),
-        apellido_materno: values.apellidoMaterno.trim(),
+        apellido_materno: values.sinApellidoMaterno ? '' : values.apellidoMaterno.trim(),
+        sin_apellido_materno: values.sinApellidoMaterno,
         correo_personal: values.correoPersonal.trim(),
         correo_institucional: values.correoInstitucional.trim() || null,
         numero_cuenta: tieneCuenta === 'si' ? values.numeroCuenta.trim() : null,
@@ -351,9 +354,24 @@ export default function RegistroAlumnoPage() {
                 <TextInput
                   label="Apellido materno"
                   placeholder="Apellido materno"
-                  withAsterisk
+                  withAsterisk={!form.values.sinApellidoMaterno}
                   size="md"
+                  disabled={form.values.sinApellidoMaterno}
                   {...form.getInputProps('apellidoMaterno')}
+                />
+                <Checkbox
+                  label="Solo tengo un apellido"
+                  mt={-6}
+                  checked={form.values.sinApellidoMaterno}
+                  onChange={(e) => {
+                    const marcado = e.currentTarget.checked;
+                    form.setFieldValue('sinApellidoMaterno', marcado);
+                    // Con la marca, el apellido materno se guarda vacío.
+                    if (marcado) {
+                      form.setFieldValue('apellidoMaterno', '');
+                      form.clearFieldError('apellidoMaterno');
+                    }
+                  }}
                 />
               </Stack>
             )}

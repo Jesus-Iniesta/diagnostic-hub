@@ -51,6 +51,8 @@ class AlumnoRead(AlumnoBase):
     created_at: datetime
     # True si se creó desde los exámenes y aún no completa sus datos.
     es_provisional: bool = False
+    # Marcó "Solo tengo un apellido".
+    sin_apellido_materno: bool = False
     usuario: UserRead
     ingenieria: IngenieriaRead | None = None
 

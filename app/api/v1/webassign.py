@@ -71,7 +71,9 @@ async def get_resultados(
     alumno_map = {}
     for alumno, user in result.all():
         alumno_map[alumno.id] = {
-            "nombre": f"{user.nombre} {user.apellido_paterno} {user.apellido_materno}",
+            "nombre": " ".join(
+                p for p in (user.nombre, user.apellido_paterno, user.apellido_materno) if p
+            ),
             "cuenta": alumno.numero_cuenta,
             "correo": user.correo_personal,
             "ingenieria": alumno.ingenieria.clave if alumno.ingenieria else None,
