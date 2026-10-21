@@ -15,6 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.configuracion import Configuracion
+from app.models.resultado_cuestionario_diagnostico import ResultadoCuestionarioDiagnostico
+from app.models.resultado_diagnostico import ResultadoDiagnostico
+from app.models.resultado_webassign import ResultadoWebAssign
 from app.repositories.configuracion_repository import ConfiguracionRepository
 
 INDICE_FI_KEY_PREFIX = "indice_fi:"
@@ -344,6 +347,68 @@ def calcular_indice(datos: dict, config: dict) -> dict:
         "maximo": maximo_indice(valores, usar_asistencia),
         "categoria": categoria_para(indice, config["categorias"]),
     }
+
+
+# Filas de resultados que usa el índice, por examen.
+MODELOS_RESULTADO = {
+    "cuestionario": ResultadoCuestionarioDiagnostico,
+    "webassign": ResultadoWebAssign,
+    "final": ResultadoDiagnostico,
+}
+
+
+def _datos_de_filas(filas: dict) -> dict:
+    """Mismas llaves que reportes_service._load_data, para calcular igual que el CREANI."""
+    datos: dict = {}
+    for n in (1, 2):
+        for m in MATERIAS_DIAGNOSTICO:
+            col = f"aciertos_c{n}_{m}"
+            datos[col] = getattr(filas["cuestionario"], col) if filas["cuestionario"] else None
+    for m in MATERIAS_WEBASSIGN:
+        for tipo in ("trabajo", "examen"):
+            col = f"{m}_{tipo}"
+            datos[col] = getattr(filas["webassign"], col) if filas["webassign"] else None
+    for m in MATERIAS_FINAL:
+        col = f"puntaje_{m}"
+        datos[col] = getattr(filas["final"], col) if filas["final"] else None
+    return datos
+
+
+async def indices_alumnos(
+    db: AsyncSession, alumno_ids: list[int], periodo: str | None = None
+) -> dict[int, dict]:
+    """Índice FI UAEMex de cada alumno: el del periodo indicado o, sin periodo,
+    el del periodo más reciente en que tiene resultados.
+
+    Cada valor trae el desglose de calcular_indice más `periodo`,
+    `tiene_resultados` y `filas` (cuestionario, webassign y final de ese periodo).
+    """
+    ids = list(dict.fromkeys(alumno_ids))
+    por_alumno: dict[int, dict[str, dict[str, object]]] = {a: {} for a in ids}
+    if ids:
+        for nombre, modelo in MODELOS_RESULTADO.items():
+            rows = await db.execute(select(modelo).where(modelo.alumno_id.in_(ids)))
+            for fila in rows.scalars().all():
+                por_alumno[fila.alumno_id].setdefault(fila.periodo, {}).setdefault(nombre, fila)
+
+    configs: dict[str, dict] = {}
+    resultado: dict[int, dict] = {}
+    for alumno_id, por_periodo in por_alumno.items():
+        if periodo:
+            del_alumno = periodo
+        else:
+            del_alumno = max(por_periodo) if por_periodo else periodo_actual()
+        encontradas = por_periodo.get(del_alumno, {})
+        filas = {nombre: encontradas.get(nombre) for nombre in MODELOS_RESULTADO}
+        if del_alumno not in configs:
+            configs[del_alumno] = await obtener_config(db, del_alumno)
+        resultado[alumno_id] = {
+            **calcular_indice(_datos_de_filas(filas), configs[del_alumno]),
+            "periodo": del_alumno,
+            "tiene_resultados": bool(encontradas),
+            "filas": filas,
+        }
+    return resultado
 
 
 # ------------------------------------------------------------- Excel (CREANI)

@@ -49,3 +49,14 @@
     font-size: 14px;
   }
 }
+
+.leyenda {
+  color: #667085;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.asterisco {
+  color: var(--mantine-color-red-6);
+  font-weight: 700;
+}

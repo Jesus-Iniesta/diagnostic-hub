@@ -5,7 +5,6 @@ import {
   Grid,
   Group,
   Select,
-  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -18,7 +17,7 @@ import {
   IconUsersGroup,
 } from '@tabler/icons-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -31,65 +30,44 @@ import {
 } from 'recharts';
 
 import CreaniCharts from '../../components/CreaniCharts/CreaniCharts';
+import { colorCategoria, fmtIndice } from '../../lib/categorias';
 import {
   fetchAlumnosGrupo,
   fetchCreaniGrupo,
   fetchEstadisticasGrupo,
   fetchMisGrupos,
 } from '../../lib/profesorApi';
-import { dashboardColors } from '../../theme/theme';
-import type { Grupo, GrupoAlumno, GrupoCreani, GrupoEstadisticas } from '../../types/profesor';
+import type {
+  CategoriaDistribucion,
+  Grupo,
+  GrupoAlumno,
+  GrupoCreani,
+  GrupoEstadisticas,
+} from '../../types/profesor';
 import classes from './ProfesorResultados.module.css';
 
-const NIVELES = ['Todos', 'Alto', 'Bueno', 'Medio', 'Bajo', 'Muy bajo'];
+const TODAS = 'Todas';
 
-const NIVEL_COLORS: Record<string, string> = {
-  Alto: dashboardColors.green,
-  Bueno: 'teal',
-  Medio: dashboardColors.orange,
-  Bajo: '#fd7e14',
-  'Muy bajo': dashboardColors.red,
-};
-
-const ScoreRanges = ['0-2', '2-4', '4-6', '6-8', '8-10'];
-const RangeColors = ['#98A2B3', '#fd7e14', dashboardColors.orange, dashboardColors.blue, dashboardColors.green];
-
-function HistogramTooltip({
+function CategoriaTooltip({
   active,
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ payload: { rango: string; cantidad: number } }>;
+  payload?: Array<{ payload: CategoriaDistribucion }>;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const d = payload[0].payload;
   return (
     <div style={{ background: '#fff', padding: '8px 12px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
-      <Text size="sm" fw={600}>Puntaje {d.rango}</Text>
-      <Text size="xs" c="dimmed">{d.cantidad} alumnos</Text>
-    </div>
-  );
-}
-
-function IngenieriaTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload: { ingenieria: string; cantidad: number } }>;
-}) {
-  if (!active || !payload || payload.length === 0) return null;
-  const d = payload[0].payload;
-  return (
-    <div style={{ background: '#fff', padding: '8px 12px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
-      <Text size="sm" fw={600}>{d.ingenieria}</Text>
-      <Text size="xs" c="dimmed">{d.cantidad} alumnos</Text>
+      <Text size="sm" fw={600}>{d.categoria}</Text>
+      <Text size="xs" c="dimmed">{d.cantidad} alumnos · {d.porcentaje}%</Text>
     </div>
   );
 }
 
 export default function ProfesorResultados() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [grupoId, setGrupoId] = useState<string | null>(null);
   const [alumnos, setAlumnos] = useState<GrupoAlumno[]>([]);
@@ -98,7 +76,7 @@ export default function ProfesorResultados() {
   const [cargando, setCargando] = useState(true);
   const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
   const [busqueda, setBusqueda] = useState('');
-  const [nivel, setNivel] = useState<string>('Todos');
+  const [categoria, setCategoria] = useState<string>(TODAS);
   const [seleccionado, setSeleccionado] = useState<GrupoAlumno | null>(null);
 
   useEffect(() => {
@@ -107,15 +85,16 @@ export default function ProfesorResultados() {
       if (mounted) {
         setGrupos(data);
         setCargando(false);
-        if (data.length > 0) {
-          setGrupoId(String(data[0].id));
-        }
+        // Desde Inicio llega con ?grupo=<id>.
+        const pedido = searchParams.get('grupo');
+        const inicial = data.find((g) => String(g.id) === pedido) ?? data[0];
+        if (inicial) setGrupoId(String(inicial.id));
       }
     });
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!grupoId) return;
@@ -132,6 +111,7 @@ export default function ProfesorResultados() {
         setCreani(creaniData);
         setCargandoAlumnos(false);
         setSeleccionado(null);
+        setCategoria(TODAS);
       }
     });
     return () => {
@@ -139,31 +119,22 @@ export default function ProfesorResultados() {
     };
   }, [grupoId]);
 
+  const categorias = useMemo(
+    () => estadisticas?.distribucion.map((d) => d.categoria) ?? [],
+    [estadisticas],
+  );
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return alumnos.filter((alumno) => {
-      const coincideNivel = nivel === 'Todos' || alumno.nivel === nivel;
+      const coincideCategoria = categoria === TODAS || alumno.categoria === categoria;
       const coincideBusqueda =
         !q ||
         alumno.nombre.toLowerCase().includes(q) ||
         alumno.numero_cuenta.includes(q);
-      return coincideNivel && coincideBusqueda;
+      return coincideCategoria && coincideBusqueda;
     });
-  }, [alumnos, busqueda, nivel]);
-
-  // Build histogram data from alumno scores
-  const histogramData = useMemo(() => {
-    const counts = [0, 0, 0, 0, 0];
-    for (const a of alumnos) {
-      if (a.puntaje == null) continue;
-      if (a.puntaje < 2) counts[0]++;
-      else if (a.puntaje < 4) counts[1]++;
-      else if (a.puntaje < 6) counts[2]++;
-      else if (a.puntaje < 8) counts[3]++;
-      else counts[4]++;
-    }
-    return ScoreRanges.map((rango, i) => ({ rango, cantidad: counts[i] }));
-  }, [alumnos]);
+  }, [alumnos, busqueda, categoria]);
 
   const sinGrupo = !cargando && grupos.length === 0;
 
@@ -185,7 +156,7 @@ export default function ProfesorResultados() {
               <IconUsersGroup size={28} aria-hidden="true" />
             </span>
             <Title order={3} className={classes.cardTitle}>
-              Aun no tienes un grupo
+              Aún no tienes grupos
             </Title>
             <Text className={classes.cardText}>
               Crea un grupo y agrega alumnos para consultar sus resultados.
@@ -203,79 +174,66 @@ export default function ProfesorResultados() {
         </Card>
       ) : (
         <>
-          {/* Charts section */}
-          {estadisticas && estadisticas.evaluados > 0 && (
-            <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="lg" mt="lg">
-              {/* Histograma de puntajes */}
-              <Card className={classes.card} padding="xl" radius="lg">
-                <Title order={4} className={classes.cardTitle} mb="md">
-                  Distribucion de puntajes
-                </Title>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart
-                    data={histogramData}
-                    margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
-                    barCategoryGap="15%"
-                  >
-                    <CartesianGrid vertical={false} strokeDasharray="5 5" stroke="#E8EAF0" />
-                    <XAxis
-                      dataKey="rango"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: '#667085', fontSize: 12, fontWeight: 600 }}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: '#98A2B3', fontSize: 12 }}
-                      width={40}
-                    />
-                    <Tooltip content={<HistogramTooltip />} cursor={{ fill: 'rgba(16,24,40,0.04)' }} />
-                    <Bar dataKey="cantidad" radius={[8, 8, 0, 0]} barSize={48}>
-                      {histogramData.map((entry, index) => (
-                        <Cell key={entry.rango} fill={RangeColors[index]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
+          <Group mt="lg">
+            <Select
+              placeholder="Seleccionar grupo"
+              data={grupos.map((g) => ({
+                value: String(g.id),
+                label: g.materia_nombre ? `Grupo ${g.nombre} - ${g.materia_nombre}` : `Grupo ${g.nombre}`,
+              }))}
+              value={grupoId}
+              onChange={(value) => setGrupoId(value)}
+              w={340}
+              size="md"
+              variant="default"
+              radius="md"
+              aria-label="Seleccionar grupo"
+            />
+          </Group>
 
-              {/* Alumnos por ingenieria */}
-              <Card className={classes.card} padding="xl" radius="lg">
-                <Title order={4} className={classes.cardTitle} mb="md">
-                  Alumnos por ingenieria
-                </Title>
-                {estadisticas.distribucion_ingenieria.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart
-                      data={estadisticas.distribucion_ingenieria}
-                      margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
-                      barCategoryGap="20%"
-                    >
-                      <CartesianGrid vertical={false} strokeDasharray="5 5" stroke="#E8EAF0" />
-                      <XAxis
-                        dataKey="ingenieria"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: '#667085', fontSize: 12, fontWeight: 600 }}
-                      />
-                      <YAxis
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fill: '#98A2B3', fontSize: 12 }}
-                        width={40}
-                      />
-                      <Tooltip content={<IngenieriaTooltip />} cursor={{ fill: 'rgba(16,24,40,0.04)' }} />
-                      <Bar dataKey="cantidad" radius={[8, 8, 0, 0]} barSize={48} fill={dashboardColors.blue} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <Text c="dimmed" ta="center" py="xl">
-                    Sin datos de ingenieria
+          {estadisticas && estadisticas.evaluados > 0 && (
+            <Card className={classes.card} padding="xl" radius="lg" mt="lg">
+              <Group justify="space-between" align="flex-start" mb="md">
+                <div>
+                  <Title order={4} className={classes.cardTitle}>
+                    Distribución por categoría del Índice FI UAEMex
+                  </Title>
+                  <Text size="sm" c="dimmed">
+                    {estadisticas.evaluados} alumnos evaluados · promedio{' '}
+                    {fmtIndice(estadisticas.promedio_indice, estadisticas.maximo)}
                   </Text>
-                )}
-              </Card>
-            </SimpleGrid>
+                </div>
+              </Group>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart
+                  data={estadisticas.distribucion}
+                  margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+                  barCategoryGap="20%"
+                >
+                  <CartesianGrid vertical={false} strokeDasharray="5 5" stroke="#E8EAF0" />
+                  <XAxis
+                    dataKey="categoria"
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                    tick={{ fill: '#667085', fontSize: 12, fontWeight: 600 }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#98A2B3', fontSize: 12 }}
+                    width={36}
+                  />
+                  <Tooltip content={<CategoriaTooltip />} cursor={{ fill: 'rgba(16,24,40,0.04)' }} />
+                  <Bar dataKey="cantidad" radius={[8, 8, 0, 0]} maxBarSize={56}>
+                    {estadisticas.distribucion.map((entry) => (
+                      <Cell key={entry.categoria} fill={colorCategoria(entry.categoria, categorias)} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
           )}
 
           {!cargandoAlumnos && creani && alumnos.length > 0 && (
@@ -286,45 +244,28 @@ export default function ProfesorResultados() {
             />
           )}
 
-          {/* Table section */}
           <Grid gutter="lg" mt="lg" align="stretch">
             <Grid.Col span={{ base: 12, lg: seleccionado ? 8 : 12 }}>
               <Card className={classes.card} padding="xl" radius="lg">
-                <Group justify="space-between" align="center" wrap="wrap" mb="lg">
+                <Group justify="flex-end" align="center" wrap="wrap" mb="lg" gap="sm">
+                  <TextInput
+                    placeholder="Buscar por nombre o cuenta"
+                    leftSection={<IconSearch size={18} aria-hidden="true" />}
+                    className={classes.searchInput}
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.currentTarget.value)}
+                  />
                   <Select
-                    placeholder="Seleccionar grupo"
-                    data={grupos.map((g) => ({
-                      value: String(g.id),
-                      label: g.materia_nombre ? `${g.nombre} - ${g.materia_nombre}` : g.nombre,
-                    }))}
-                    value={grupoId}
-                    onChange={(value) => setGrupoId(value)}
-                    w={300}
+                    placeholder="Filtrar por categoría"
+                    data={[TODAS, ...categorias]}
+                    value={categoria}
+                    onChange={(value) => setCategoria(value ?? TODAS)}
+                    w={180}
                     size="md"
                     variant="default"
                     radius="md"
-                    aria-label="Seleccionar grupo"
+                    aria-label="Filtrar por categoría"
                   />
-                  <Group gap="sm">
-                    <TextInput
-                      placeholder="Buscar por nombre o cuenta"
-                      leftSection={<IconSearch size={18} aria-hidden="true" />}
-                      className={classes.searchInput}
-                      value={busqueda}
-                      onChange={(e) => setBusqueda(e.currentTarget.value)}
-                    />
-                    <Select
-                      placeholder="Filtrar por nivel"
-                      data={NIVELES}
-                      value={nivel}
-                      onChange={(value) => setNivel(value ?? 'Todos')}
-                      w={170}
-                      size="md"
-                      variant="default"
-                      radius="md"
-                      aria-label="Filtrar por nivel"
-                    />
-                  </Group>
                 </Group>
 
                 {cargandoAlumnos ? (
@@ -333,50 +274,57 @@ export default function ProfesorResultados() {
                   </Text>
                 ) : (
                   <>
-                    <Table highlightOnHover verticalSpacing="sm" className={classes.table}>
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th>Alumno</Table.Th>
-                          <Table.Th>Numero de cuenta</Table.Th>
-                          <Table.Th>Puntaje</Table.Th>
-                          <Table.Th>Nivel</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {filtrados.map((alumno) => (
-                          <Table.Tr
-                            key={alumno.alumno_id}
-                            className={
-                              seleccionado?.alumno_id === alumno.alumno_id
-                                ? classes.rowActive
-                                : undefined
-                            }
-                            onClick={() => setSeleccionado(alumno)}
-                          >
-                            <Table.Td className={classes.cellName}>
-                              {alumno.nombre}
-                            </Table.Td>
-                            <Table.Td>{alumno.numero_cuenta}</Table.Td>
-                            <Table.Td>
-                              {alumno.puntaje != null ? alumno.puntaje.toFixed(2) : '—'}
-                            </Table.Td>
-                            <Table.Td>
-                              {alumno.nivel ? (
-                                <Badge
-                                  variant="light"
-                                  radius="md"
-                                  color={NIVEL_COLORS[alumno.nivel] ?? 'gray'}
-                                >
-                                  {alumno.nivel}
-                                </Badge>
-                              ) : (
-                                '—'
-                              )}
-                            </Table.Td>
+                    <Table.ScrollContainer minWidth={640}>
+                      <Table highlightOnHover verticalSpacing="sm" className={classes.table}>
+                        <Table.Thead>
+                          <Table.Tr>
+                            <Table.Th>Alumno</Table.Th>
+                            <Table.Th>Número de cuenta</Table.Th>
+                            <Table.Th>Examen final</Table.Th>
+                            <Table.Th>Índice FI UAEMex</Table.Th>
+                            <Table.Th>Categoría</Table.Th>
                           </Table.Tr>
-                        ))}
-                      </Table.Tbody>
-                    </Table>
+                        </Table.Thead>
+                        <Table.Tbody>
+                          {filtrados.map((alumno) => (
+                            <Table.Tr
+                              key={alumno.alumno_id}
+                              className={
+                                seleccionado?.alumno_id === alumno.alumno_id
+                                  ? classes.rowActive
+                                  : undefined
+                              }
+                              onClick={() => setSeleccionado(alumno)}
+                            >
+                              <Table.Td className={classes.cellName}>
+                                {alumno.nombre}
+                              </Table.Td>
+                              <Table.Td>{alumno.numero_cuenta}</Table.Td>
+                              <Table.Td>
+                                {alumno.examen_final != null ? alumno.examen_final.toFixed(2) : '—'}
+                              </Table.Td>
+                              <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                                {fmtIndice(alumno.indice, alumno.maximo)}
+                              </Table.Td>
+                              <Table.Td>
+                                {alumno.categoria ? (
+                                  <Badge
+                                    variant="light"
+                                    radius="md"
+                                    tt="none"
+                                    color={colorCategoria(alumno.categoria, categorias)}
+                                  >
+                                    {alumno.categoria}
+                                  </Badge>
+                                ) : (
+                                  '—'
+                                )}
+                              </Table.Td>
+                            </Table.Tr>
+                          ))}
+                        </Table.Tbody>
+                      </Table>
+                    </Table.ScrollContainer>
 
                     {filtrados.length === 0 && (
                       <Text c="dimmed" ta="center" py="xl">
@@ -396,30 +344,38 @@ export default function ProfesorResultados() {
                       {seleccionado.nombre}
                     </Title>
                     <Group gap={6}>
-                      <Badge variant="light" radius="md" color="indigo">
-                        {seleccionado.nivel ?? 'Sin nivel'}
-                      </Badge>
-                      <Badge
-                        variant="light"
-                        radius="md"
-                        color={NIVEL_COLORS[seleccionado.nivel ?? ''] ?? 'gray'}
-                      >
-                        Puntaje:{' '}
-                        {seleccionado.puntaje != null
-                          ? seleccionado.puntaje.toFixed(2)
-                          : '—'}
+                      {seleccionado.categoria && (
+                        <Badge
+                          variant="light"
+                          radius="md"
+                          tt="none"
+                          color={colorCategoria(seleccionado.categoria, categorias)}
+                        >
+                          {seleccionado.categoria}
+                        </Badge>
+                      )}
+                      <Badge variant="light" radius="md" tt="none" color="indigo">
+                        Índice FI: {fmtIndice(seleccionado.indice, seleccionado.maximo)}
                       </Badge>
                     </Group>
 
                     <Stack gap={4} mt="sm">
-                      <Text className={classes.detailLabel}>Numero de cuenta</Text>
+                      <Text className={classes.detailLabel}>Número de cuenta</Text>
                       <Text className={classes.detailValue}>
                         {seleccionado.numero_cuenta}
+                      </Text>
+                      <Text className={classes.detailLabel} mt="xs">
+                        Examen final
+                      </Text>
+                      <Text className={classes.detailValue}>
+                        {seleccionado.examen_final != null
+                          ? `${seleccionado.examen_final.toFixed(2)} / 10`
+                          : 'Sin resultado'}
                       </Text>
                       {seleccionado.ingenieria_clave && (
                         <>
                           <Text className={classes.detailLabel} mt="xs">
-                            Ingenieria
+                            Ingeniería
                           </Text>
                           <Text className={classes.detailValue}>
                             {seleccionado.ingenieria_clave}

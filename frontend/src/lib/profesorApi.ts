@@ -10,6 +10,7 @@ import type {
   AlumnoGrupo,
   Materia,
   CargaAlumnosResponse,
+  ResumenProfesor,
 } from '../types/profesor';
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -29,6 +30,10 @@ export async function fetchMaterias(): Promise<Materia[]> {
   return fetchJson<Materia[]>(`${API_BASE_URL}/profesor/materias`);
 }
 
+export async function fetchResumenProfesor(): Promise<ResumenProfesor> {
+  return fetchJson<ResumenProfesor>(`${API_BASE_URL}/profesor/resumen`);
+}
+
 export async function fetchMisGrupos(periodo?: string): Promise<Grupo[]> {
   const params = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
   return fetchJson<Grupo[]>(`${API_BASE_URL}/profesor/grupos${params}`);
@@ -41,11 +46,16 @@ export async function crearGrupo(data: GrupoCreate): Promise<Grupo> {
   });
 }
 
+async function borrar(url: string, mensaje: string): Promise<void> {
+  const res = await fetch(url, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.detail ?? mensaje);
+  }
+}
+
 export async function eliminarGrupo(grupoId: number): Promise<void> {
-  await fetch(`${API_BASE_URL}/profesor/grupos/${grupoId}`, {
-    method: 'DELETE',
-    credentials: 'include',
-  });
+  await borrar(`${API_BASE_URL}/profesor/grupos/${grupoId}`, 'No se pudo eliminar el grupo');
 }
 
 export async function fetchAlumnosGrupo(
@@ -72,9 +82,9 @@ export async function quitarAlumno(
   grupoId: number,
   alumnoId: number,
 ): Promise<void> {
-  await fetch(
+  await borrar(
     `${API_BASE_URL}/profesor/grupos/${grupoId}/alumnos/${alumnoId}`,
-    { method: 'DELETE', credentials: 'include' },
+    'No se pudo quitar al alumno',
   );
 }
 
@@ -171,8 +181,8 @@ export async function fetchAlumnosGrupoLegacy(): Promise<AlumnoGrupo[]> {
       numero_cuenta: a.numero_cuenta,
       licenciatura: a.ingenieria_clave,
       grupo: grupos[0].nombre,
-      puntaje: a.puntaje,
-      nivel: a.nivel,
+      puntaje: a.examen_final,
+      nivel: a.categoria,
       retroalimentacion: null,
     }));
   } catch {

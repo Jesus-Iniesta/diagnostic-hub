@@ -12,6 +12,12 @@ from app.models.resultado_diagnostico import ResultadoDiagnostico
 from app.services.upload_diagnostico_service import normalizar_periodo
 
 
+def nombre_propio(*partes: str | None) -> str:
+    """'FANNY', 'HERNÁNDEZ', 'LÓPEZ' -> 'Fanny Hernández López'."""
+    palabras = " ".join(p for p in partes if p).split()
+    return " ".join(w.capitalize() for w in palabras)
+
+
 def _orden_reciente(resultado: ResultadoDiagnostico) -> tuple:
     """Orden para elegir el examen final más reciente: por periodo (2026B >
     2026A > 2025B) y, si empatan o no tienen formato, por última actualización."""
@@ -195,41 +201,6 @@ class GrupoRepository:
             "alumnos_con_resultados": con_resultados,
         }
 
-    async def get_grupo_alumno_with_diagnostico(
-        self, grupo_id: int, periodo: str | None = None
-    ) -> list[dict]:
-        alumnos = await self.get_alumnos(grupo_id)
-        diagnostico_map = await self.resultados_examen_final(
-            [a.id for a in alumnos], periodo
-        )
-
-        rows = []
-        for alumno in alumnos:
-            diag = diagnostico_map.get(alumno.id)
-            rows.append({
-                "alumno_id": alumno.id,
-                "nombre": f"{alumno.usuario.nombre} {alumno.usuario.apellido_paterno} {alumno.usuario.apellido_materno}",
-                "numero_cuenta": alumno.numero_cuenta or "",
-                "ingenieria_clave": alumno.ingenieria.clave if alumno.ingenieria else "",
-                "puntaje": diag.promedio_diagnostico if diag else None,
-                "nivel": self._nivel(diag.promedio_diagnostico) if diag else None,
-            })
-        return rows
-
-    @staticmethod
-    def _nivel(score: float | None) -> str:
-        if score is None:
-            return "Sin resultado"
-        if score >= 9:
-            return "Alto"
-        if score >= 7:
-            return "Bueno"
-        if score >= 4.5:
-            return "Medio"
-        if score >= 2.5:
-            return "Bajo"
-        return "Muy bajo"
-
     async def count_alumnos(self, grupo_id: int) -> int:
         result = await self.db.execute(
             select(func.count()).select_from(grupo_alumno).where(
@@ -248,105 +219,3 @@ class GrupoRepository:
             )
         )
         return result.scalars().first()
-
-    async def get_estadisticas_grupo(
-        self, grupo_id: int, periodo: str | None = None
-    ) -> dict:
-        alumnos = await self.get_alumnos(grupo_id)
-        alumno_ids = [a.id for a in alumnos]
-        total = len(alumnos)
-
-        if total == 0:
-            return {
-                "grupo_id": grupo_id,
-                "nombre": "",
-                "total_alumnos": 0,
-                "evaluados": 0,
-                "promedio": None,
-                "distribucion_nivel": [],
-                "distribucion_ingenieria": [],
-                "promedio_materias": {
-                    "algebra": None,
-                    "trigonometria": None,
-                    "geometria": None,
-                    "calculo": None,
-                },
-            }
-
-        diagnostico_map = await self.resultados_examen_final(alumno_ids, periodo)
-
-        # Compute level distribution
-        nivel_counts: dict[str, int] = {}
-        evaluados = 0
-        suma = 0.0
-        sum_algebra = 0.0
-        sum_trig = 0.0
-        sum_geo = 0.0
-        sum_calc = 0.0
-        count_algebra = 0
-        count_trig = 0
-        count_geo = 0
-        count_calc = 0
-
-        for alumno in alumnos:
-            diag = diagnostico_map.get(alumno.id)
-            if diag and diag.promedio_diagnostico is not None:
-                evaluados += 1
-                suma += diag.promedio_diagnostico
-                nivel = self._nivel(diag.promedio_diagnostico)
-                nivel_counts[nivel] = nivel_counts.get(nivel, 0) + 1
-
-                if diag.puntaje_algebra is not None:
-                    sum_algebra += diag.puntaje_algebra
-                    count_algebra += 1
-                if diag.puntaje_trigonometria is not None:
-                    sum_trig += diag.puntaje_trigonometria
-                    count_trig += 1
-                if diag.puntaje_geometria is not None:
-                    sum_geo += diag.puntaje_geometria
-                    count_geo += 1
-                if diag.puntaje_calculo is not None:
-                    sum_calc += diag.puntaje_calculo
-                    count_calc += 1
-
-        promedio = round(suma / evaluados, 2) if evaluados > 0 else None
-
-        nivel_orden = ["Alto", "Bueno", "Medio", "Bajo", "Muy bajo"]
-        distribucion_nivel = []
-        for nivel in nivel_orden:
-            count = nivel_counts.get(nivel, 0)
-            if count > 0:
-                distribucion_nivel.append({
-                    "nivel": nivel,
-                    "cantidad": count,
-                    "porcentaje": round(count / evaluados * 100, 1) if evaluados > 0 else 0,
-                })
-
-        # Engineering distribution
-        ingenieria_counts: dict[str, int] = {}
-        for alumno in alumnos:
-            clave = alumno.ingenieria.clave if alumno.ingenieria else "Sin definir"
-            ingenieria_counts[clave] = ingenieria_counts.get(clave, 0) + 1
-
-        distribucion_ingenieria = [
-            {"ingenieria": k, "cantidad": v}
-            for k, v in sorted(ingenieria_counts.items(), key=lambda x: -x[1])
-        ]
-
-        promedio_materias = {
-            "algebra": round(sum_algebra / count_algebra, 2) if count_algebra > 0 else None,
-            "trigonometria": round(sum_trig / count_trig, 2) if count_trig > 0 else None,
-            "geometria": round(sum_geo / count_geo, 2) if count_geo > 0 else None,
-            "calculo": round(sum_calc / count_calc, 2) if count_calc > 0 else None,
-        }
-
-        return {
-            "grupo_id": grupo_id,
-            "nombre": "",
-            "total_alumnos": total,
-            "evaluados": evaluados,
-            "promedio": promedio,
-            "distribucion_nivel": distribucion_nivel,
-            "distribucion_ingenieria": distribucion_ingenieria,
-            "promedio_materias": promedio_materias,
-        }

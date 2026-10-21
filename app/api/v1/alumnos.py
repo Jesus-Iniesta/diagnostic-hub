@@ -18,6 +18,7 @@ from app.schemas.alumno import (
     CuestionarioAlumnoResponse,
     CuestionarioMateriaResultado,
     DiagnosticoAlumnoResponse,
+    IndiceFiAlumnoResponse,
     MateriaResultado,
 )
 from app.services.feedback_service import (
@@ -30,11 +31,9 @@ from app.services.indice_fi_service import (
     MATERIAS_DIAGNOSTICO,
     MATERIAS_FINAL,
     MATERIAS_WEBASSIGN,
-    calcular_indice,
-    obtener_config,
-    periodo_actual,
+    indices_alumnos,
 )
-from app.services.pdf_service import generar_pdf_correo, generar_pdf_resultado
+from app.services.pdf_service import generar_pdf_resultado
 from app.services.upload_diagnostico_service import normalizar_periodo
 
 router = APIRouter()
@@ -290,37 +289,29 @@ async def mi_webassign(
 
 
 @router.get(
-    "/me/correo-pdf",
-    summary="Descargar PDF con datos de correo del alumno",
+    "/me/indice-fi",
+    response_model=IndiceFiAlumnoResponse,
+    summary="Mi Índice FI UAEMex (el mismo de la carta de recomendación)",
 )
-async def mi_correo_pdf(
+async def mi_indice_fi(
     db: DbSession,
     current_user: User = Depends(get_current_user),
 ):
     stmt = select(Alumno).where(Alumno.usuario_id == current_user.id)
-    result = await db.execute(stmt)
-    alumno = result.scalars().first()
+    alumno = (await db.execute(stmt)).scalars().first()
     if not alumno:
         raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+    _exigir_datos_completos(alumno)
 
-    nombre_completo = (
-        f"{current_user.apellido_paterno} {current_user.apellido_materno} "
-        f"{current_user.nombre}"
-    ).strip()
-
-    pdf_bytes = generar_pdf_correo(
-        nombre_completo=nombre_completo,
-        numero_cuenta=alumno.numero_cuenta,
-        correo_personal=current_user.correo_personal,
-        correo_institucional=current_user.correo_institucional,
-    )
-
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="correo_{alumno.numero_cuenta or current_user.id}.pdf"'
-        },
+    indice = await _indice_fi_alumno(db, alumno.id)
+    categoria = indice["categoria"]
+    return IndiceFiAlumnoResponse(
+        periodo=indice["periodo"],
+        tiene_resultados=indice["tiene_resultados"],
+        indice=indice["indice"],
+        maximo=indice["maximo"],
+        categoria=categoria["nombre"] if categoria else None,
+        comentario=categoria["comentario"] if categoria else None,
     )
 
 
@@ -410,46 +401,4 @@ async def mi_reporte_pdf(
 
 async def _indice_fi_alumno(db, alumno_id: int) -> dict:
     """Índice FI UAEMex del periodo más reciente en que el alumno tiene resultados."""
-    modelos = {
-        "cuestionario": ResultadoCuestionarioDiagnostico,
-        "webassign": ResultadoWebAssign,
-        "final": ResultadoDiagnostico,
-    }
-    periodos: set[str] = set()
-    for modelo in modelos.values():
-        rows = await db.execute(
-            select(modelo.periodo).where(modelo.alumno_id == alumno_id).distinct()
-        )
-        periodos.update(rows.scalars().all())
-    periodo = max(periodos) if periodos else periodo_actual()
-
-    filas = {}
-    for nombre, modelo in modelos.items():
-        rows = await db.execute(
-            select(modelo).where(
-                (modelo.alumno_id == alumno_id) & (modelo.periodo == periodo)
-            )
-        )
-        filas[nombre] = rows.scalars().first()
-
-    # Mismas llaves que reportes_service._load_data, para calcular igual que el CREANI.
-    datos: dict = {}
-    for n in (1, 2):
-        for m in MATERIAS_DIAGNOSTICO:
-            col = f"aciertos_c{n}_{m}"
-            datos[col] = getattr(filas["cuestionario"], col) if filas["cuestionario"] else None
-    for m in MATERIAS_WEBASSIGN:
-        for tipo in ("trabajo", "examen"):
-            col = f"{m}_{tipo}"
-            datos[col] = getattr(filas["webassign"], col) if filas["webassign"] else None
-    for m in MATERIAS_FINAL:
-        col = f"puntaje_{m}"
-        datos[col] = getattr(filas["final"], col) if filas["final"] else None
-
-    config = await obtener_config(db, periodo)
-    return {
-        **calcular_indice(datos, config),
-        "periodo": periodo,
-        "tiene_resultados": bool(periodos),
-        "filas": filas,
-    }
+    return (await indices_alumnos(db, [alumno_id]))[alumno_id]

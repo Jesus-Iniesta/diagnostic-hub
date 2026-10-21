@@ -5,6 +5,7 @@ import type {
   CuestionarioAlumnoResponse,
   DatosContactoUpdate,
   DiagnosticoAlumnoResponse,
+  IndiceFiAlumno,
 } from '../types/alumno';
 
 const API_BASE = ALUMNO_ME_URL.replace('/me', '');
@@ -102,20 +103,11 @@ export async function fetchMiWebAssign(): Promise<WebAssignAlumnoResponse> {
   return res;
 }
 
-export async function descargarCorreoPdf(): Promise<void> {
-  const res = await fetch(`${ALUMNO_ME_URL}/correo-pdf`, { credentials: 'include' });
-  if (!res.ok) {
-    throw new Error('No se pudo generar el PDF');
-  }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'correo_tutonet.pdf';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+/** Índice FI UAEMex (el mismo de la carta); null si no se pudo consultar. */
+export async function fetchMiIndiceFi(): Promise<IndiceFiAlumno | null> {
+  const res = await fetch(`${ALUMNO_ME_URL}/indice-fi`, { credentials: 'include' });
+  if (!res.ok) return null;
+  return res.json() as Promise<IndiceFiAlumno>;
 }
 
 export async function descargarResultadoPdf(): Promise<void> {

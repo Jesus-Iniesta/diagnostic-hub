@@ -110,3 +110,12 @@ class CuestionarioAlumnoResponse(BaseModel):
     promedio: float | None
     nivel_general: str
     materias: list[CuestionarioMateriaResultado]
+
+
+class IndiceFiAlumnoResponse(BaseModel):
+    periodo: str
+    tiene_resultados: bool
+    indice: float
+    maximo: float
+    categoria: str | None = None
+    comentario: str | None = None

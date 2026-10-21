@@ -11,7 +11,6 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
@@ -24,11 +23,13 @@ import {
 } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
+import { colorCategoria, fmtIndice } from '../../lib/categorias';
 import {
   fetchMisGrupos,
   crearGrupo,
   eliminarGrupo,
   fetchAlumnosGrupo,
+  fetchEstadisticasGrupo,
   agregarAlumno,
   quitarAlumno,
   cargarAlumnosExcel,
@@ -37,10 +38,19 @@ import { getCurrentPeriodo } from '../../lib/periodo';
 import type { Grupo, GrupoAlumno, CargaAlumnosResponse } from '../../types/profesor';
 import classes from './ProfesorGrupo.module.css';
 
+interface Confirmacion {
+  titulo: string;
+  mensaje: string;
+  boton: string;
+  accion: () => Promise<void>;
+}
+
 export default function ProfesorGrupo() {
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<Grupo | null>(null);
   const [alumnos, setAlumnos] = useState<GrupoAlumno[]>([]);
+  // Categorías del coordinador, de la más alta a la más baja (para el color).
+  const [categorias, setCategorias] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingAlumnos, setLoadingAlumnos] = useState(false);
 
@@ -58,6 +68,9 @@ export default function ProfesorGrupo() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [cargando, setCargando] = useState(false);
   const [resultadoCarga, setResultadoCarga] = useState<CargaAlumnosResponse | null>(null);
+
+  const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -86,8 +99,12 @@ export default function ProfesorGrupo() {
     setGrupoSeleccionado(grupo);
     setLoadingAlumnos(true);
     try {
-      const data = await fetchAlumnosGrupo(grupo.id);
+      const [data, stats] = await Promise.all([
+        fetchAlumnosGrupo(grupo.id),
+        fetchEstadisticasGrupo(grupo.id).catch(() => null),
+      ]);
       setAlumnos(data);
+      setCategorias(stats?.distribucion.map((d) => d.categoria) ?? []);
     } catch {
       setAlumnos([]);
     } finally {
@@ -108,28 +125,60 @@ export default function ProfesorGrupo() {
       setShowCrearModal(false);
       setNuevoNombre('');
       setNuevaMateria('');
-      setSuccess('Unidad de aprendizaje creada correctamente');
+      setSuccess('Grupo creado correctamente');
       await cargarDatos();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al crear unidad');
+      setError(err instanceof Error ? err.message : 'Error al crear el grupo');
     } finally {
       setCreando(false);
     }
   }
 
-  async function handleEliminarGrupo(grupo: Grupo) {
-    if (!confirm(`¿Eliminar la unidad "${grupo.nombre}"?`)) return;
+  function pedirEliminarGrupo(grupo: Grupo) {
+    setConfirmacion({
+      titulo: 'Eliminar grupo',
+      mensaje: `¿Eliminar el grupo ${grupo.nombre}${grupo.materia_nombre ? ` de ${grupo.materia_nombre}` : ''}? Sus alumnos ya no aparecerán en Mis grupos.`,
+      boton: 'Eliminar grupo',
+      accion: async () => {
+        await eliminarGrupo(grupo.id);
+        setSuccess('Grupo eliminado');
+        if (grupoSeleccionado?.id === grupo.id) {
+          setGrupoSeleccionado(null);
+          setAlumnos([]);
+        }
+        await cargarDatos();
+      },
+    });
+  }
+
+  function pedirQuitarAlumno(alumno: GrupoAlumno) {
+    if (!grupoSeleccionado) return;
+    const grupo = grupoSeleccionado;
+    setConfirmacion({
+      titulo: 'Quitar alumno',
+      mensaje: `¿Quitar a ${alumno.nombre} del grupo ${grupo.nombre}? Sus resultados no se borran.`,
+      boton: 'Quitar alumno',
+      accion: async () => {
+        await quitarAlumno(grupo.id, alumno.alumno_id);
+        setSuccess('Alumno quitado del grupo');
+        await seleccionarGrupo(grupo);
+        await cargarDatos();
+      },
+    });
+  }
+
+  async function handleConfirmar() {
+    if (!confirmacion) return;
+    setConfirmando(true);
     setError(null);
     try {
-      await eliminarGrupo(grupo.id);
-      setSuccess('Unidad eliminada');
-      if (grupoSeleccionado?.id === grupo.id) {
-        setGrupoSeleccionado(null);
-        setAlumnos([]);
-      }
-      await cargarDatos();
+      await confirmacion.accion();
+      setConfirmacion(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al eliminar unidad');
+      setError(err instanceof Error ? err.message : 'No se pudo completar la acción');
+      setConfirmacion(null);
+    } finally {
+      setConfirmando(false);
     }
   }
 
@@ -151,20 +200,6 @@ export default function ProfesorGrupo() {
     }
   }
 
-  async function handleQuitarAlumno(alumnoId: number) {
-    if (!grupoSeleccionado) return;
-    if (!confirm('¿Quitar alumno del grupo?')) return;
-    setError(null);
-    try {
-      await quitarAlumno(grupoSeleccionado.id, alumnoId);
-      setSuccess('Alumno removido del grupo');
-      await seleccionarGrupo(grupoSeleccionado);
-      await cargarDatos();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al quitar alumno');
-    }
-  }
-
   async function handleCargarExcel() {
     if (!grupoSeleccionado || !uploadFile) return;
     setCargando(true);
@@ -174,25 +209,31 @@ export default function ProfesorGrupo() {
       const resultado = await cargarAlumnosExcel(grupoSeleccionado.id, uploadFile);
       setResultadoCarga(resultado);
       if (resultado.agregados > 0) {
-        setSuccess(`${resultado.agregados} alumnos agregados correctamente`);
         await seleccionarGrupo(grupoSeleccionado);
         await cargarDatos();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar archivo');
+      cerrarUploadModal();
     } finally {
       setCargando(false);
     }
+  }
+
+  function cerrarUploadModal() {
+    setShowUploadModal(false);
+    setUploadFile(null);
+    setResultadoCarga(null);
   }
 
   return (
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          Mis unidades de aprendizaje
+          Mis grupos
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Administra tus unidades y alumnos asignados.
+          Administra tus grupos y sus alumnos.
         </Text>
       </div>
 
@@ -234,7 +275,7 @@ export default function ProfesorGrupo() {
           className={classes.actionButton}
           onClick={() => setShowCrearModal(true)}
         >
-          Crear unidad de aprendizaje
+          Crear grupo
         </Button>
       </Group>
 
@@ -243,7 +284,7 @@ export default function ProfesorGrupo() {
           <Stack align="center" gap="md">
             <IconUsersGroup size={48} color="#98a2b3" />
             <Text className={classes.subtitle}>
-              Aún no tienes unidades creadas. Crea una para comenzar.
+              Aún no tienes grupos. Crea uno para comenzar.
             </Text>
           </Stack>
         </Card>
@@ -251,10 +292,6 @@ export default function ProfesorGrupo() {
 
       {grupos.length > 0 && (
         <Card className={classes.card} padding="lg" radius="lg" mt="lg">
-          <Title order={3} className={classes.title} mb="md">
-            Unidades asignadas
-          </Title>
-
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -281,7 +318,7 @@ export default function ProfesorGrupo() {
                     <Text fw={600}>{g.nombre}</Text>
                   </Table.Td>
                   <Table.Td>
-                    <Badge variant="light" color="indigo">
+                    <Badge variant="light" color="indigo" tt="none">
                       {g.materia_nombre || g.materia_clave}
                     </Badge>
                   </Table.Td>
@@ -289,7 +326,7 @@ export default function ProfesorGrupo() {
                   <Table.Td>{g.total_alumnos}</Table.Td>
                   <Table.Td>
                     {g.nombre_archivo ? (
-                      <Badge variant="light" color="green" leftSection={<IconFileSpreadsheet size={12} />}>
+                      <Badge variant="light" color="green" tt="none" leftSection={<IconFileSpreadsheet size={12} />}>
                         {g.nombre_archivo}
                       </Badge>
                     ) : (
@@ -297,30 +334,18 @@ export default function ProfesorGrupo() {
                     )}
                   </Table.Td>
                   <Table.Td>
-                    <Group gap="xs">
-                      <ActionIcon
-                        color="indigo"
-                        variant="subtle"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setGrupoSeleccionado(g);
-                          setShowUploadModal(true);
-                        }}
-                        title="Cargar alumnos desde Excel"
-                      >
-                        <IconUpload size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        color="red"
-                        variant="subtle"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEliminarGrupo(g);
-                        }}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Group>
+                    <ActionIcon
+                      color="red"
+                      variant="subtle"
+                      aria-label={`Eliminar el grupo ${g.nombre}`}
+                      title="Eliminar grupo"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pedirEliminarGrupo(g);
+                      }}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -330,11 +355,11 @@ export default function ProfesorGrupo() {
       )}
 
       {grupoSeleccionado && (
-        <Card className={classes.card} padding="lg" radius="lg" mt="lg">
+        <Card className={`${classes.card} ${classes.cardAncha}`} padding="lg" radius="lg" mt="lg">
           <Group justify="space-between" mb="md">
-            <Title order={3} className={classes.title}>
-              Alumnos de {grupoSeleccionado.nombre}
-            </Title>
+            <Text className={classes.title}>
+              Alumnos del grupo {grupoSeleccionado.nombre}
+            </Text>
             <Group>
               <Button
                 leftSection={<IconUpload size={16} />}
@@ -343,7 +368,7 @@ export default function ProfesorGrupo() {
                 size="sm"
                 onClick={() => setShowUploadModal(true)}
               >
-                Cargar Excel
+                Cargar lista de alumnos
               </Button>
               <Button
                 leftSection={<IconPlus size={16} />}
@@ -361,68 +386,71 @@ export default function ProfesorGrupo() {
             <Text className={classes.subtitle}>Cargando alumnos...</Text>
           ) : alumnos.length === 0 ? (
             <Text className={classes.subtitle}>
-              Esta unidad no tiene alumnos asignados aún. Sube un archivo Excel o agrega alumnos manualmente.
+              Este grupo aún no tiene alumnos. Carga la lista de alumnos o agrégalos uno por uno.
             </Text>
           ) : (
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Nombre</Table.Th>
-                  <Table.Th>No. Cuenta</Table.Th>
-                  <Table.Th>Ingeniería</Table.Th>
-                  <Table.Th>Puntaje</Table.Th>
-                  <Table.Th>Nivel</Table.Th>
-                  <Table.Th />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {alumnos.map((a) => (
-                  <Table.Tr key={a.alumno_id}>
-                    <Table.Td>{a.nombre}</Table.Td>
-                    <Table.Td>{a.numero_cuenta}</Table.Td>
-                    <Table.Td>
-                      <Badge variant="light" color="indigo">
-                        {a.ingenieria_clave}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      {a.puntaje != null ? a.puntaje.toFixed(2) : '—'}
-                    </Table.Td>
-                    <Table.Td>
-                      {a.nivel ? (
-                        <Badge
-                          variant="light"
-                          color={
-                            a.nivel === 'Alto'
-                              ? 'green'
-                              : a.nivel === 'Bueno'
-                                ? 'teal'
-                                : a.nivel === 'Medio'
-                                  ? 'yellow'
-                                  : a.nivel === 'Bajo'
-                                    ? 'orange'
-                                    : 'red'
-                          }
-                        >
-                          {a.nivel}
-                        </Badge>
-                      ) : (
-                        '—'
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      <ActionIcon
-                        color="red"
-                        variant="subtle"
-                        onClick={() => handleQuitarAlumno(a.alumno_id)}
-                      >
-                        <IconTrash size={14} />
-                      </ActionIcon>
-                    </Table.Td>
+            <Table.ScrollContainer minWidth={760}>
+              <Table striped highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Nombre</Table.Th>
+                    <Table.Th>No. de cuenta</Table.Th>
+                    <Table.Th>Ingeniería</Table.Th>
+                    <Table.Th>Examen final</Table.Th>
+                    <Table.Th>Índice FI UAEMex</Table.Th>
+                    <Table.Th>Categoría</Table.Th>
+                    <Table.Th />
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+                </Table.Thead>
+                <Table.Tbody>
+                  {alumnos.map((a) => (
+                    <Table.Tr key={a.alumno_id}>
+                      <Table.Td>{a.nombre}</Table.Td>
+                      <Table.Td>{a.numero_cuenta}</Table.Td>
+                      <Table.Td>
+                        {a.ingenieria_clave ? (
+                          <Badge variant="light" color="indigo">
+                            {a.ingenieria_clave}
+                          </Badge>
+                        ) : (
+                          '—'
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        {a.examen_final != null ? a.examen_final.toFixed(2) : '—'}
+                      </Table.Td>
+                      <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                        {fmtIndice(a.indice, a.maximo)}
+                      </Table.Td>
+                      <Table.Td>
+                        {a.categoria ? (
+                          <Badge
+                            variant="light"
+                            tt="none"
+                            color={colorCategoria(a.categoria, categorias)}
+                          >
+                            {a.categoria}
+                          </Badge>
+                        ) : (
+                          '—'
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <ActionIcon
+                          color="red"
+                          variant="subtle"
+                          aria-label={`Quitar a ${a.nombre} del grupo`}
+                          title="Quitar del grupo"
+                          onClick={() => pedirQuitarAlumno(a)}
+                        >
+                          <IconTrash size={14} />
+                        </ActionIcon>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
           )}
         </Card>
       )}
@@ -430,7 +458,7 @@ export default function ProfesorGrupo() {
       <Modal
         opened={showCrearModal}
         onClose={() => setShowCrearModal(false)}
-        title="Crear nueva unidad de aprendizaje"
+        title="Crear grupo"
         centered
       >
         <Stack gap="md">
@@ -466,7 +494,7 @@ export default function ProfesorGrupo() {
               loading={creando}
               disabled={!nuevoNombre.trim() || !nuevaMateria.trim()}
             >
-              Crear
+              Crear grupo
             </Button>
           </Group>
         </Stack>
@@ -507,31 +535,12 @@ export default function ProfesorGrupo() {
 
       <Modal
         opened={showUploadModal}
-        onClose={() => {
-          setShowUploadModal(false);
-          setUploadFile(null);
-          setResultadoCarga(null);
-        }}
-        title="Cargar alumnos desde Excel"
+        onClose={cerrarUploadModal}
+        title="Cargar lista de alumnos"
         centered
       >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            El archivo debe comenzar con "LN" y tener formato:
-            LINC05-CALCULO III-02 1
-          </Text>
-          <Text size="sm" c="dimmed">
-            Columnas esperadas: CUENTA, APELLIDO PATERNO, APELLIDO MATERNO, NOMBRE, PLAN DE ESTUDIOS, ORGANISMO, CORREO INSTITUCIONAL, ESTADO DEL ALUMNO
-          </Text>
-          <FileInput
-            label="Archivo Excel"
-            placeholder="Selecciona un archivo .xls o .xlsx"
-            accept=".xls,.xlsx"
-            value={uploadFile}
-            onChange={setUploadFile}
-            leftSection={<IconFileSpreadsheet size={16} />}
-          />
-          {resultadoCarga && (
+        {resultadoCarga ? (
+          <Stack gap="md">
             <Alert
               color={
                 !resultadoCarga.ok ||
@@ -543,12 +552,12 @@ export default function ProfesorGrupo() {
               }
               variant="light"
             >
-              <Text size="sm">
-                Total en archivo: {resultadoCarga.total_en_archivo} |
-                Agregados: {resultadoCarga.agregados} |
-                Duplicados: {resultadoCarga.duplicados_en_grupo} |
-                No encontrados: {resultadoCarga.no_encontrados.length}
-              </Text>
+              <Stack gap={2}>
+                <Text size="sm">Alumnos en el archivo: {resultadoCarga.total_en_archivo}</Text>
+                <Text size="sm">Agregados al grupo: {resultadoCarga.agregados}</Text>
+                <Text size="sm">Ya estaban en el grupo: {resultadoCarga.duplicados_en_grupo}</Text>
+                <Text size="sm">No encontrados: {resultadoCarga.no_encontrados.length}</Text>
+              </Stack>
               {resultadoCarga.no_encontrados.length > 0 && (
                 <Stack gap={4} mt="sm">
                   <Text size="sm" fw={600}>
@@ -570,27 +579,66 @@ export default function ProfesorGrupo() {
                 </Text>
               )}
             </Alert>
-          )}
+            <Group justify="flex-end">
+              <Button color="indigo" onClick={cerrarUploadModal}>
+                Cerrar
+              </Button>
+            </Group>
+          </Stack>
+        ) : (
+          <Stack gap="md">
+            <Text size="sm" c="dimmed">
+              El archivo debe comenzar con "LN" y tener formato:
+              LINC05-CALCULO III-02 1
+            </Text>
+            <Text size="sm" c="dimmed">
+              Columnas esperadas: CUENTA, APELLIDO PATERNO, APELLIDO MATERNO, NOMBRE, PLAN DE ESTUDIOS, ORGANISMO, CORREO INSTITUCIONAL, ESTADO DEL ALUMNO
+            </Text>
+            <FileInput
+              label="Archivo Excel"
+              placeholder="Selecciona un archivo .xls o .xlsx"
+              accept=".xls,.xlsx"
+              value={uploadFile}
+              onChange={setUploadFile}
+              leftSection={<IconFileSpreadsheet size={16} />}
+            />
+            <Group justify="flex-end">
+              <Button variant="subtle" color="gray" onClick={cerrarUploadModal}>
+                Cancelar
+              </Button>
+              <Button
+                color="teal"
+                leftSection={<IconUpload size={16} />}
+                onClick={handleCargarExcel}
+                loading={cargando}
+                disabled={!uploadFile}
+              >
+                Cargar lista de alumnos
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
+      <Modal
+        opened={confirmacion !== null}
+        onClose={() => !confirmando && setConfirmacion(null)}
+        title={confirmacion?.titulo}
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">{confirmacion?.mensaje}</Text>
           <Group justify="flex-end">
             <Button
               variant="subtle"
               color="gray"
-              onClick={() => {
-                setShowUploadModal(false);
-                setUploadFile(null);
-                setResultadoCarga(null);
-              }}
+              onClick={() => setConfirmacion(null)}
+              disabled={confirmando}
             >
               Cancelar
             </Button>
-            <Button
-              color="teal"
-              leftSection={<IconUpload size={16} />}
-              onClick={handleCargarExcel}
-              loading={cargando}
-              disabled={!uploadFile}
-            >
-              Cargar alumnos
+            <Button color="red" onClick={handleConfirmar} loading={confirmando}>
+              {confirmacion?.boton}
             </Button>
           </Group>
         </Stack>

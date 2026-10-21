@@ -23,7 +23,7 @@ import classes from './ProfesorSidebar.module.css';
 
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/profesor' },
-  { id: 'grupo', label: 'Mi grupo', icon: IconUsersGroup, to: '/profesor/grupo' },
+  { id: 'grupo', label: 'Mis grupos', icon: IconUsersGroup, to: '/profesor/grupo' },
   { id: 'resultados', label: 'Resultados', icon: IconReport, to: '/profesor/resultados' },
 ] as const;
 

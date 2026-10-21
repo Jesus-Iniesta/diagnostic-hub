@@ -147,3 +147,12 @@ export interface WebAssignAlumnoResponse {
   nivel_general: string;
   materias: WebAssignMateriaResultado[];
 }
+
+export interface IndiceFiAlumno {
+  periodo: string;
+  tiene_resultados: boolean;
+  indice: number;
+  maximo: number;
+  categoria: string | null;
+  comentario: string | null;
+}

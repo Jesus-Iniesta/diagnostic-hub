@@ -21,8 +21,11 @@ export interface GrupoAlumno {
   nombre: string;
   numero_cuenta: string;
   ingenieria_clave: string;
-  puntaje: number | null;
-  nivel: string | null;
+  /** Índice FI UAEMex; null si aún no tiene resultados. */
+  indice: number | null;
+  maximo: number;
+  categoria: string | null;
+  examen_final: number | null;
 }
 
 export interface GrupoResumen {
@@ -81,22 +84,10 @@ export interface AlumnoNoEncontrado {
   correo: string | null;
 }
 
-export interface NivelDistribucion {
-  nivel: string;
+export interface CategoriaDistribucion {
+  categoria: string;
   cantidad: number;
   porcentaje: number;
-}
-
-export interface IngenieriaDistribucion {
-  ingenieria: string;
-  cantidad: number;
-}
-
-export interface PromedioMaterias {
-  algebra: number | null;
-  trigonometria: number | null;
-  geometria: number | null;
-  calculo: number | null;
 }
 
 export interface GrupoEstadisticas {
@@ -104,10 +95,28 @@ export interface GrupoEstadisticas {
   nombre: string;
   total_alumnos: number;
   evaluados: number;
-  promedio: number | null;
-  distribucion_nivel: NivelDistribucion[];
-  distribucion_ingenieria: IngenieriaDistribucion[];
-  promedio_materias: PromedioMaterias;
+  promedio_indice: number | null;
+  maximo: number;
+  /** Categorías del coordinador, de la más alta a la más baja. */
+  distribucion: CategoriaDistribucion[];
+}
+
+export interface GrupoResumenProfesor {
+  id: number;
+  nombre: string;
+  materia_nombre: string;
+  periodo: string;
+  total_alumnos: number;
+  evaluados: number;
+  promedio_indice: number | null;
+}
+
+export interface ResumenProfesor {
+  total_alumnos: number;
+  evaluados: number;
+  promedio_indice: number | null;
+  maximo: number;
+  grupos: GrupoResumenProfesor[];
 }
 
 export interface CreaniMaterias {

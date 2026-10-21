@@ -3,11 +3,11 @@ from sqlalchemy import select
 from app.models.materia import Materia
 
 MATERIAS_DATA = [
-    ("ALG", "Algebra"),
-    ("TRI", "Trigonometria"),
-    ("GEO", "Geometria Analitica"),
-    ("CAL1", "Calculo Diferencial"),
-    ("CAL3", "Calculo III"),
+    ("ALG", "Álgebra"),
+    ("TRI", "Trigonometría"),
+    ("GEO", "Geometría Analítica"),
+    ("CAL1", "Cálculo Diferencial"),
+    ("CAL3", "Cálculo III"),
 ]
 
 

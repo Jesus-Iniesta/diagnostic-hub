@@ -74,7 +74,7 @@ function EtiquetaTick({
 function GraficaBarras({ data, height }: { data: Barra[]; height: number }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }} barCategoryGap="15%">
+      <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barCategoryGap="15%">
         <CartesianGrid vertical={false} strokeDasharray="5 5" stroke="#E8EAF0" />
         <XAxis
           dataKey="etiqueta"

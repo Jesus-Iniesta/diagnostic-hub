@@ -7,7 +7,7 @@ from app.core.security import get_current_user, require_permission
 from app.models.grupo import Grupo
 from app.models.materia import Materia
 from app.models.user import User
-from app.repositories.grupo_repository import GrupoRepository
+from app.repositories.grupo_repository import GrupoRepository, nombre_propio
 from app.repositories.materia_repository import MateriaRepository, limpiar_nombre_materia
 from app.schemas.grupo import (
     GrupoAlumnoAdd,
@@ -18,6 +18,13 @@ from app.schemas.grupo import (
     GrupoResumen,
     GrupoResponse,
     MateriaResponse,
+    ResumenProfesor,
+)
+from app.services.indice_fi_service import (
+    indices_alumnos,
+    maximo_indice,
+    obtener_config,
+    periodo_actual,
 )
 from app.services.normalizacion import normalizar_correo, normalizar_cuenta
 from app.services.reportes_service import resumen_creani_alumnos
@@ -31,6 +38,16 @@ router = APIRouter(
     tags=["profesor-grupos"],
     dependencies=[Depends(require_permission("consultar_resultados_grupo"))],
 )
+
+
+def _materia_nombre(grupo: Grupo) -> str:
+    """La materia como la escribió el profesor; los grupos anteriores usan la del catálogo."""
+    return grupo.materia_nombre or (grupo.materia.nombre if grupo.materia else "")
+
+
+def _promedio_indice(indices: list[dict]) -> float | None:
+    evaluados = [i["indice"] for i in indices if i["tiene_resultados"]]
+    return round(sum(evaluados) / len(evaluados), 2) if evaluados else None
 
 
 async def _periodo_grupo(db: AsyncSession, grupo_id: int) -> str:
@@ -65,7 +82,7 @@ async def mis_grupos(
             id=g.id,
             nombre=g.nombre,
             materia_clave=g.materia.clave if g.materia else "",
-            materia_nombre=g.materia.nombre if g.materia else "",
+            materia_nombre=_materia_nombre(g),
             periodo=g.periodo,
             activo=g.activo,
             nombre_archivo=g.nombre_archivo,
@@ -103,12 +120,13 @@ async def crear_grupo(
         periodo=data.periodo,
         profesor_user_id=current_user.id,
     )
+    grupo.materia_nombre = materia_nombre or materia.nombre
     await db.commit()
     return GrupoResponse(
         id=grupo.id,
         nombre=grupo.nombre,
         materia_clave=materia.clave,
-        materia_nombre=materia.nombre,
+        materia_nombre=grupo.materia_nombre,
         periodo=grupo.periodo,
         activo=grupo.activo,
     )
@@ -138,10 +156,31 @@ async def alumnos_grupo(
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
         raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
 
-    # Puntaje y nivel del examen final: el del periodo pedido o, si no se
-    # indica, el más reciente de cada alumno.
-    rows = await repo.get_grupo_alumno_with_diagnostico(grupo_id, periodo)
-    return [GrupoAlumnoResponse(**r) for r in rows]
+    # Índice del periodo pedido o, si no se indica, el más reciente de cada
+    # alumno (el mismo que ve el alumno en su carta).
+    alumnos = await repo.get_alumnos(grupo_id)
+    indices = await indices_alumnos(db, [a.id for a in alumnos], periodo)
+    rows = []
+    for alumno in alumnos:
+        indice = indices[alumno.id]
+        final = indice["filas"]["final"]
+        evaluado = indice["tiene_resultados"]
+        rows.append(GrupoAlumnoResponse(
+            alumno_id=alumno.id,
+            nombre=nombre_propio(
+                alumno.usuario.nombre,
+                alumno.usuario.apellido_paterno,
+                alumno.usuario.apellido_materno,
+            ),
+            numero_cuenta=alumno.numero_cuenta or "",
+            ingenieria_clave=alumno.ingenieria.clave if alumno.ingenieria else "",
+            indice=indice["indice"] if evaluado else None,
+            maximo=indice["maximo"],
+            categoria=indice["categoria"]["nombre"] if evaluado and indice["categoria"] else None,
+            examen_final=final.promedio_diagnostico if final else None,
+        ))
+    rows.sort(key=lambda r: r.nombre)
+    return rows
 
 
 @router.post("/grupos/{grupo_id}/alumnos", status_code=201)
@@ -212,8 +251,81 @@ async def estadisticas_grupo(
     if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
         raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
 
-    stats = await repo.get_estadisticas_grupo(grupo_id, periodo)
-    return GrupoEstadisticas(**stats)
+    grupo = await db.get(Grupo, grupo_id)
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+    alumnos = await repo.get_alumnos(grupo_id)
+    indices = list((await indices_alumnos(db, [a.id for a in alumnos], periodo)).values())
+    evaluados = [i for i in indices if i["tiene_resultados"]]
+
+    # Las categorías son las que configuró el coordinador para el periodo del grupo.
+    config = await obtener_config(db, periodo or grupo.periodo)
+    orden = sorted(config["categorias"], key=lambda c: c["minimo"], reverse=True)
+    conteo: dict[str, int] = {c["nombre"]: 0 for c in orden}
+    for i in evaluados:
+        if i["categoria"]:
+            nombre = i["categoria"]["nombre"]
+            conteo[nombre] = conteo.get(nombre, 0) + 1
+
+    return GrupoEstadisticas(
+        grupo_id=grupo_id,
+        nombre=grupo.nombre,
+        total_alumnos=len(alumnos),
+        evaluados=len(evaluados),
+        promedio_indice=_promedio_indice(evaluados),
+        maximo=maximo_indice(config["valores"], config["usar_asistencia"]),
+        distribucion=[
+            {
+                "categoria": nombre,
+                "cantidad": cantidad,
+                "porcentaje": round(cantidad / len(evaluados) * 100, 1) if evaluados else 0,
+            }
+            for nombre, cantidad in conteo.items()
+        ],
+    )
+
+
+@router.get("/resumen", response_model=ResumenProfesor)
+async def resumen_profesor(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResumenProfesor:
+    """Resumen de Inicio: alumnos de todos sus grupos (sin repetir) y cada grupo."""
+    repo = GrupoRepository(db)
+    grupos = await repo.list_by_profesor(current_user.id)
+    alumnos_por_grupo = {g.id: [a.id for a in await repo.get_alumnos(g.id)] for g in grupos}
+    todos = list(dict.fromkeys(a for ids in alumnos_por_grupo.values() for a in ids))
+    indices = await indices_alumnos(db, todos)
+    evaluados = [i for i in indices.values() if i["tiene_resultados"]]
+
+    if evaluados:
+        maximo = max(i["maximo"] for i in evaluados)
+    else:
+        config = await obtener_config(db, periodo_actual())
+        maximo = maximo_indice(config["valores"], config["usar_asistencia"])
+
+    return ResumenProfesor(
+        total_alumnos=len(todos),
+        evaluados=len(evaluados),
+        promedio_indice=_promedio_indice(evaluados),
+        maximo=maximo,
+        grupos=[
+            {
+                "id": g.id,
+                "nombre": g.nombre,
+                "materia_nombre": _materia_nombre(g),
+                "periodo": g.periodo,
+                "total_alumnos": len(alumnos_por_grupo[g.id]),
+                "evaluados": sum(
+                    1 for a in alumnos_por_grupo[g.id] if indices[a]["tiene_resultados"]
+                ),
+                "promedio_indice": _promedio_indice(
+                    [indices[a] for a in alumnos_por_grupo[g.id]]
+                ),
+            }
+            for g in sorted(grupos, key=lambda g: (g.periodo, g.nombre), reverse=True)
+        ],
+    )
 
 
 @router.get("/grupos/{grupo_id}/creani", response_model=GrupoCreani)
@@ -272,12 +384,10 @@ async def cargar_alumnos_excel(
         if alumno_id is None:
             no_encontrados.append({
                 "numero_cuenta": alumno_data["numero_cuenta"],
-                "nombre": " ".join(
-                    p for p in (
-                        alumno_data["nombre"],
-                        alumno_data["apellido_paterno"],
-                        alumno_data["apellido_materno"],
-                    ) if p
+                "nombre": nombre_propio(
+                    alumno_data["nombre"],
+                    alumno_data["apellido_paterno"],
+                    alumno_data["apellido_materno"],
                 ),
                 "correo": alumno_data.get("correo_institucional"),
             })

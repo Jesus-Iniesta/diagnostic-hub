@@ -1,4 +1,5 @@
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -10,14 +11,22 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconClipboardList, IconDownload, IconMoodSad, IconTrophy } from '@tabler/icons-react';
+import {
+  IconArrowRight,
+  IconAward,
+  IconClipboardList,
+  IconDownload,
+  IconInfoCircle,
+  IconTrophy,
+} from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import {
   descargarResultadoPdf,
   fetchMiCuestionario,
   fetchMiDiagnostico,
+  fetchMiIndiceFi,
   fetchMiPerfil,
   fetchMiWebAssign,
 } from '../../lib/alumnoApi';
@@ -26,20 +35,17 @@ import type {
   CuestionarioAlumnoResponse,
   CuestionarioMateriaResultado,
   DiagnosticoAlumnoResponse,
+  IndiceFiAlumno,
   MateriaResultado,
   WebAssignAlumnoResponse,
   WebAssignMateriaResultado,
 } from '../../types/alumno';
 import classes from './AlumnoResultados.module.css';
 
-const LEVEL_COLORS: Record<string, string> = {
-  Alto: dashboardColors.green,
-  Bueno: dashboardColors.blue,
-  Medio: dashboardColors.orange,
-  Bajo: dashboardColors.red,
-  "Muy bajo": dashboardColors.red,
-  "Sin datos": 'gray',
-};
+// Sin datos el ícono de la materia se ve gris.
+function colorMateria(tieneDatos: boolean): string {
+  return tieneDatos ? dashboardColors.blue : '#9ca3af';
+}
 
 const MATERIA_ICONS: Record<string, string> = {
   algebra: 'A',
@@ -73,8 +79,8 @@ function ScoreBar({ puntaje, maximo }: { puntaje: number | null; maximo: number 
 }
 
 function WebAssignMateriaCard({ materia }: { materia: WebAssignMateriaResultado }) {
-  const color = LEVEL_COLORS[materia.nivel] ?? 'gray';
   const isSinDatos = materia.nivel === 'Sin datos';
+  const color = colorMateria(!isSinDatos);
 
   return (
     <Card className={classes.materiaCard} padding="lg" radius="lg">
@@ -92,9 +98,6 @@ function WebAssignMateriaCard({ materia }: { materia: WebAssignMateriaResultado 
           <Text fw={600} size="sm" c="dark">
             {materia.nombre}
           </Text>
-          <Badge size="sm" radius="md" variant="light" color={color} mt={4}>
-            {materia.nivel}
-          </Badge>
         </div>
       </Group>
 
@@ -144,8 +147,8 @@ function WebAssignMateriaCard({ materia }: { materia: WebAssignMateriaResultado 
 }
 
 function CuestionarioMateriaCard({ materia }: { materia: CuestionarioMateriaResultado }) {
-  const color = LEVEL_COLORS[materia.nivel] ?? 'gray';
   const isSinDatos = materia.nivel === 'Sin datos';
+  const color = colorMateria(!isSinDatos);
   const aciertos = (valor: number | null) =>
     valor !== null ? `${valor} / ${materia.preguntas_por_cuestionario}` : '—';
 
@@ -165,9 +168,6 @@ function CuestionarioMateriaCard({ materia }: { materia: CuestionarioMateriaResu
           <Text fw={600} size="sm" c="dark">
             {materia.nombre}
           </Text>
-          <Badge size="sm" radius="md" variant="light" color={color} mt={4}>
-            {materia.nivel}
-          </Badge>
         </div>
       </Group>
 
@@ -200,8 +200,8 @@ function CuestionarioMateriaCard({ materia }: { materia: CuestionarioMateriaResu
 }
 
 function MateriaCard({ materia }: { materia: MateriaResultado }) {
-  const color = LEVEL_COLORS[materia.nivel] ?? 'gray';
   const isSinDatos = materia.nivel === 'Sin datos';
+  const color = colorMateria(!isSinDatos);
 
   return (
     <Card className={classes.materiaCard} padding="lg" radius="lg">
@@ -219,15 +219,6 @@ function MateriaCard({ materia }: { materia: MateriaResultado }) {
           <Text fw={600} size="sm" c="dark">
             {materia.nombre}
           </Text>
-          <Badge
-            size="sm"
-            radius="md"
-            variant="light"
-            color={color}
-            mt={4}
-          >
-            {materia.nivel}
-          </Badge>
         </div>
       </Group>
 
@@ -262,11 +253,12 @@ export default function AlumnoResultados() {
   const [data, setData] = useState<DiagnosticoAlumnoResponse | null>(null);
   const [cuestionario, setCuestionario] = useState<CuestionarioAlumnoResponse | null>(null);
   const [webassignData, setWebassignData] = useState<WebAssignAlumnoResponse | null>(null);
+  const [indiceFi, setIndiceFi] = useState<IndiceFiAlumno | null>(null);
   const [loading, setLoading] = useState(true);
   const [descargando, setDescargando] = useState(false);
   // Un alumno creado desde los exámenes completa sus datos antes de ver resultados.
   const [pendienteRegistro, setPendienteRegistro] = useState(false);
-  const [recargar, setRecargar] = useState(0);
+  const navigate = useNavigate();
 
   const handleDescargarPdf = async () => {
     setDescargando(true);
@@ -291,12 +283,14 @@ export default function AlumnoResultados() {
         return;
       }
       setPendienteRegistro(false);
-      const [diag, wa, cuest] = await Promise.all([
+      const [diag, wa, cuest, indice] = await Promise.all([
         fetchMiDiagnostico().catch(() => null),
         fetchMiWebAssign().catch(() => null),
         fetchMiCuestionario().catch(() => null),
+        fetchMiIndiceFi().catch(() => null),
       ]);
       if (mounted) {
+        setIndiceFi(indice);
         setData(diag);
         setWebassignData(wa);
         setCuestionario(cuest);
@@ -306,7 +300,7 @@ export default function AlumnoResultados() {
     return () => {
       mounted = false;
     };
-  }, [recargar]);
+  }, []);
 
   if (pendienteRegistro) {
     return (
@@ -319,18 +313,30 @@ export default function AlumnoResultados() {
             Antes de ver tus resultados, completa tus datos.
           </Text>
         </div>
-        <Stack gap="lg" mt="lg">
-          <DatosContactoForm
-            onSaved={(perfil) => {
-              if (!perfil.es_provisional) setRecargar((n) => n + 1);
-            }}
-          />
-        </Stack>
+        <Alert
+          color="orange"
+          variant="light"
+          radius="md"
+          mt="lg"
+          maw={720}
+          icon={<IconInfoCircle size={18} />}
+          title="Te falta completar tus datos"
+        >
+          <Text size="sm">
+            Tus resultados estarán disponibles en cuanto completes tus datos obligatorios en Inicio.
+          </Text>
+          <Button
+            mt="md"
+            color="orange"
+            rightSection={<IconArrowRight size={16} aria-hidden="true" />}
+            onClick={() => navigate('/alumno')}
+          >
+            Completar mis datos
+          </Button>
+        </Alert>
       </>
     );
   }
-
-  const isSinDatos = data?.nivel_general === 'Sin datos';
 
   return (
     <>
@@ -341,7 +347,7 @@ export default function AlumnoResultados() {
               Mis resultados
             </Text>
             <Text className={classes.welcomeSubtitle}>
-              Consulta tu puntaje, nivel de matemáticas y retroalimentación.
+              Consulta tu Índice FI UAEMex y tus resultados de cada examen.
             </Text>
           </div>
           <Button
@@ -362,6 +368,65 @@ export default function AlumnoResultados() {
           </Stack>
         </Card>
       ) : null}
+
+      {!loading && indiceFi && (
+        <Card className={`${classes.card} ${classes.indiceCard}`} padding="xl" radius="lg" mt="lg">
+          <Group gap="sm" wrap="nowrap" align="flex-start">
+            <span className={classes.iconBox} style={{ backgroundColor: '#EEF2FF' }}>
+              <IconAward size={22} color="#4F46E5" stroke={2} />
+            </span>
+            <div>
+              <Title order={3} className={classes.title}>
+                Índice FI UAEMex
+              </Title>
+              <Text className={classes.subtitle}>
+                {indiceFi.tiene_resultados
+                  ? `Periodo ${indiceFi.periodo}`
+                  : 'Aún no tienes resultados registrados'}
+              </Text>
+            </div>
+          </Group>
+
+          {indiceFi.tiene_resultados && (
+            <>
+              <div className={classes.scoreRow} style={{ marginTop: 'var(--mantine-spacing-lg)' }}>
+                <Stack gap={2}>
+                  <Text className={classes.scoreLabel}>Tu índice</Text>
+                  <Text className={classes.scoreValue}>
+                    {indiceFi.indice.toFixed(1)}
+                    <Text component="span" className={classes.scoreMax}>
+                      {' '}/ {Number(indiceFi.maximo.toFixed(2))}
+                    </Text>
+                  </Text>
+                </Stack>
+                {indiceFi.categoria && (
+                  <Stack gap={2} align="flex-end">
+                    <Text className={classes.scoreLabel}>Categoría</Text>
+                    <Badge
+                      size="lg"
+                      radius="md"
+                      variant="light"
+                      color="indigo"
+                      tt="none"
+                      className={classes.levelBadge}
+                    >
+                      {indiceFi.categoria}
+                    </Badge>
+                  </Stack>
+                )}
+              </div>
+              {indiceFi.comentario?.trim() && (
+                <>
+                  <Divider my="lg" color="#F0F1F5" />
+                  <Text className={classes.feedbackText} style={{ whiteSpace: 'pre-line' }}>
+                    {indiceFi.comentario.trim()}
+                  </Text>
+                </>
+              )}
+            </>
+          )}
+        </Card>
+      )}
 
       {!loading && cuestionario && (
         <Stack gap="lg" mt="lg">
@@ -390,18 +455,6 @@ export default function AlumnoResultados() {
                     {cuestionario.promedio !== null ? cuestionario.promedio.toFixed(1) : '—'}
                   </Text>
                 </Stack>
-                <Stack gap={2} align="flex-end">
-                  <Text className={classes.scoreLabel}>Nivel</Text>
-                  <Badge
-                    size="lg"
-                    radius="md"
-                    variant="light"
-                    color={LEVEL_COLORS[cuestionario.nivel_general] ?? 'gray'}
-                    className={classes.levelBadge}
-                  >
-                    {cuestionario.nivel_general}
-                  </Badge>
-                </Stack>
               </div>
             </Stack>
           </Card>
@@ -424,11 +477,7 @@ export default function AlumnoResultados() {
           <Card className={classes.card} padding="xl" radius="lg">
             <Group gap="sm" wrap="nowrap" align="flex-start">
               <span className={classes.iconBox}>
-                {isSinDatos ? (
-                  <IconMoodSad size={22} color={dashboardColors.orange} stroke={2} />
-                ) : (
-                  <IconTrophy size={22} color={dashboardColors.green} stroke={2} />
-                )}
+                <IconTrophy size={22} color={dashboardColors.green} stroke={2} />
               </span>
               <div>
                 <Title order={3} className={classes.title}>
@@ -447,18 +496,6 @@ export default function AlumnoResultados() {
                   <Text className={classes.scoreValue}>
                     {data.promedio !== null ? data.promedio.toFixed(1) : '—'}
                   </Text>
-                </Stack>
-                <Stack gap={2} align="flex-end">
-                  <Text className={classes.scoreLabel}>Nivel</Text>
-                  <Badge
-                    size="lg"
-                    radius="md"
-                    variant="light"
-                    color={LEVEL_COLORS[data.nivel_general] ?? 'gray'}
-                    className={classes.levelBadge}
-                  >
-                    {data.nivel_general}
-                  </Badge>
                 </Stack>
               </div>
             </Stack>
@@ -509,18 +546,6 @@ export default function AlumnoResultados() {
                   <Text className={classes.scoreValue}>
                     {webassignData.promedio !== null ? webassignData.promedio.toFixed(1) : '—'}
                   </Text>
-                </Stack>
-                <Stack gap={2} align="flex-end">
-                  <Text className={classes.scoreLabel}>Nivel</Text>
-                  <Badge
-                    size="lg"
-                    radius="md"
-                    variant="light"
-                    color={LEVEL_COLORS[webassignData.nivel_general] ?? 'gray'}
-                    className={classes.levelBadge}
-                  >
-                    {webassignData.nivel_general}
-                  </Badge>
                 </Stack>
               </div>
             </Stack>

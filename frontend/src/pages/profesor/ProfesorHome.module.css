@@ -36,21 +36,14 @@
   line-height: 1.5;
 }
 
-.statsRow {
-  gap: 40px;
+.grupoRow {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f1f5;
 }
 
-.statValue {
-  color: #17153b;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-  line-height: 1;
-}
-
-.statLabel {
-  color: #667085;
-  font-size: 14px;
+.grupoRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .actionButton {

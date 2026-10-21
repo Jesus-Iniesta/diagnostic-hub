@@ -139,6 +139,10 @@ export default function DatosContactoForm({ onSaved }: DatosContactoFormProps) {
   }
 
   const groupedFields = groupByCategory(missingFields);
+  const obligatorios = missingFields.filter((f) => f.required && f.type !== 'switch');
+  const faltanObligatorios = obligatorios.filter(
+    (f) => !String(form.values[f.key] ?? '').trim(),
+  ).length;
 
   return (
     <Card className={classes.card} padding="xl" radius="lg">
@@ -146,8 +150,18 @@ export default function DatosContactoForm({ onSaved }: DatosContactoFormProps) {
         <div>
           <Title order={3} className={classes.title}>Datos de contacto</Title>
           <Text className={classes.subtitle}>
-            Tienes {missingFields.length} campo{missingFields.length !== 1 ? 's' : ''} pendiente{missingFields.length !== 1 ? 's' : ''} por completar.
+            {faltanObligatorios > 0
+              ? `Te faltan ${faltanObligatorios} dato${faltanObligatorios !== 1 ? 's' : ''} obligatorio${faltanObligatorios !== 1 ? 's' : ''}.`
+              : obligatorios.length > 0
+                ? 'Revisa tus datos y guarda para terminar tu registro.'
+                : 'Tus datos obligatorios están completos. Puedes agregar estos datos opcionales.'}
           </Text>
+          {obligatorios.length > 0 && (
+            <Text className={classes.leyenda}>
+              Los datos marcados con <span className={classes.asterisco}>*</span> son obligatorios;
+              los que dicen "opcional" puedes dejarlos vacíos.
+            </Text>
+          )}
         </div>
 
         {perfil?.es_provisional && (
@@ -374,12 +388,13 @@ function renderField(
   ingenierias: { value: string; label: string }[],
 ): ReactNode {
   const props = form.getInputProps(field.key);
+  const label = field.required ? field.label : `${field.label} (opcional)`;
 
   if (field.type === 'select') {
     return (
       <Select
         key={field.key}
-        label={field.label}
+        label={label}
         placeholder="Selecciona una ingeniería"
         data={ingenierias}
         size="md"
@@ -406,7 +421,8 @@ function renderField(
     return (
       <NumberInput
         key={field.key}
-        label={field.label}
+        label={label}
+        withAsterisk={field.required}
         size="md"
         min={field.min}
         max={field.max}
@@ -422,7 +438,7 @@ function renderField(
   return (
     <TextInput
       key={field.key}
-      label={field.label}
+      label={label}
       size="md"
       withAsterisk={field.required}
       placeholder={field.type === 'email' ? 'tu.correo@uaemex.mx' : undefined}

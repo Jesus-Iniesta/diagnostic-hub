@@ -33,8 +33,12 @@ class GrupoAlumnoResponse(BaseModel):
     nombre: str
     numero_cuenta: str
     ingenieria_clave: str
-    puntaje: float | None = None
-    nivel: str | None = None
+    # Índice FI UAEMex y categoría del coordinador; None si no tiene resultados.
+    indice: float | None = None
+    maximo: float
+    categoria: str | None = None
+    # Promedio del examen final (0-10).
+    examen_final: float | None = None
 
     model_config = {"from_attributes": True}
 
@@ -56,22 +60,10 @@ class MateriaResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class NivelDistribucion(BaseModel):
-    nivel: str
+class CategoriaDistribucion(BaseModel):
+    categoria: str
     cantidad: int
     porcentaje: float
-
-
-class IngenieriaDistribucion(BaseModel):
-    ingenieria: str
-    cantidad: int
-
-
-class PromedioMaterias(BaseModel):
-    algebra: float | None = None
-    trigonometria: float | None = None
-    geometria: float | None = None
-    calculo: float | None = None
 
 
 class GrupoEstadisticas(BaseModel):
@@ -79,10 +71,28 @@ class GrupoEstadisticas(BaseModel):
     nombre: str
     total_alumnos: int
     evaluados: int
-    promedio: float | None = None
-    distribucion_nivel: list[NivelDistribucion]
-    distribucion_ingenieria: list[IngenieriaDistribucion]
-    promedio_materias: PromedioMaterias
+    promedio_indice: float | None = None
+    maximo: float
+    # Todas las categorías del coordinador, de la más alta a la más baja.
+    distribucion: list[CategoriaDistribucion]
+
+
+class GrupoResumenProfesor(BaseModel):
+    id: int
+    nombre: str
+    materia_nombre: str
+    periodo: str
+    total_alumnos: int
+    evaluados: int
+    promedio_indice: float | None = None
+
+
+class ResumenProfesor(BaseModel):
+    total_alumnos: int
+    evaluados: int
+    promedio_indice: float | None = None
+    maximo: float
+    grupos: list[GrupoResumenProfesor]
 
 
 class CreaniMaterias(BaseModel):

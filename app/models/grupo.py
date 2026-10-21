@@ -20,6 +20,9 @@ class Grupo(Base):
     materia_id: Mapped[int] = mapped_column(
         ForeignKey("materias.id"), nullable=False, index=True
     )
+    # Nombre de la materia tal como lo escribió el profesor (con acentos); la
+    # materia compartida se busca sin acentos y puede estar escrita distinto.
+    materia_nombre: Mapped[str | None] = mapped_column(String(100), nullable=True)
     periodo: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     nombre_archivo: Mapped[str | None] = mapped_column(String(200), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
