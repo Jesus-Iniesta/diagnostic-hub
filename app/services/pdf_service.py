@@ -73,6 +73,51 @@ def _tabla(rows: list[list[str]], anchos_cm: list[float], extra: list | None = N
     return t
 
 
+def generar_pdf_correos(
+    nombre_completo: str,
+    numero_cuenta: str | None,
+    correo_personal: str | None,
+    correo_institucional: str | None,
+) -> bytes:
+    """Correos registrados del alumno, para que use siempre los mismos en los exámenes."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter, title="Mis correos registrados",
+        rightMargin=2 * cm, leftMargin=2 * cm, topMargin=2 * cm, bottomMargin=2 * cm,
+    )
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle(
+        "Titulo", parent=styles["Title"], fontSize=18, textColor=PRIMARY, leading=22,
+    )
+    normal = ParagraphStyle(
+        "Normal", parent=styles["Normal"], fontSize=10.5, leading=14,
+        textColor=colors.HexColor("#333333"),
+    )
+    encabezado = ParagraphStyle("Encabezado", parent=normal, alignment=1)
+
+    linea = f"<b>{escape(nombre_completo)}</b>"
+    if numero_cuenta:
+        linea += f" · No. de cuenta {escape(numero_cuenta)}"
+    rows = [
+        ["Correo", "Dirección"],
+        ["Correo personal", correo_personal or "Pendiente"],
+        ["Correo institucional", correo_institucional or "Pendiente"],
+    ]
+    story = [
+        Paragraph("Mis correos registrados", h1),
+        Paragraph(linea, encabezado),
+        Spacer(1, 14),
+        Paragraph(
+            "Guarda tus correos registrados y úsalos siempre que contestes un examen.",
+            normal,
+        ),
+        Spacer(1, 10),
+        _tabla(rows, [5, 10], [("ALIGN", (1, 0), (-1, -1), "LEFT"), ("FONTSIZE", (0, 0), (-1, -1), 10.5)]),
+    ]
+    doc.build(story)
+    return buf.getvalue()
+
+
 def generar_pdf_resultado(
     nombre_completo: str,
     numero_cuenta: str | None,

@@ -1,5 +1,6 @@
 import { Grid, Text } from '@mantine/core';
 
+import CorreosRegistrados from '../../components/CorreosRegistrados/CorreosRegistrados';
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import ResumenAlumno from '../../components/ResumenAlumno/ResumenAlumno';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,6 +21,8 @@ export default function AlumnoHome() {
           Antes de consultar tus resultados, completa tus datos de contacto.
         </Text>
       </div>
+
+      <CorreosRegistrados />
 
       <Grid gutter="lg" mt="lg" align="stretch">
         <Grid.Col span={{ base: 12, lg: 8 }}>

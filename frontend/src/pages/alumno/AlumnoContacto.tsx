@@ -3,6 +3,7 @@ import { IconArrowRight, IconInfoCircle } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import CorreosRegistrados from '../../components/CorreosRegistrados/CorreosRegistrados';
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import ResumenAlumno from '../../components/ResumenAlumno/ResumenAlumno';
 import { fetchMiPerfil } from '../../lib/alumnoApi';
@@ -34,6 +35,8 @@ export default function AlumnoContacto() {
           evaluaciones.
         </Text>
       </div>
+
+      <CorreosRegistrados />
 
       {pendienteRegistro ? (
         <Alert

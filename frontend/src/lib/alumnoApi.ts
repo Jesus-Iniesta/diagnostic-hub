@@ -110,6 +110,22 @@ export async function fetchMiIndiceFi(): Promise<IndiceFiAlumno | null> {
   return res.json() as Promise<IndiceFiAlumno>;
 }
 
+export async function descargarCorreosPdf(): Promise<void> {
+  const res = await fetch(`${ALUMNO_ME_URL}/correos-pdf`, { credentials: 'include' });
+  if (!res.ok) {
+    throw new Error('No se pudieron descargar tus correos');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mis_correos_registrados.pdf';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export async function descargarResultadoPdf(): Promise<void> {
   const res = await fetch(`${ALUMNO_ME_URL}/reporte-pdf`, { credentials: 'include' });
   if (!res.ok) {

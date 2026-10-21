@@ -33,7 +33,7 @@ from app.services.indice_fi_service import (
     MATERIAS_WEBASSIGN,
     indices_alumnos,
 )
-from app.services.pdf_service import generar_pdf_resultado
+from app.services.pdf_service import generar_pdf_correos, generar_pdf_resultado
 from app.services.upload_diagnostico_service import normalizar_periodo
 
 router = APIRouter()
@@ -312,6 +312,40 @@ async def mi_indice_fi(
         maximo=indice["maximo"],
         categoria=categoria["nombre"] if categoria else None,
         comentario=categoria["comentario"] if categoria else None,
+    )
+
+
+@router.get(
+    "/me/correos-pdf",
+    summary="Descargar PDF con los correos registrados del alumno",
+)
+async def mis_correos_pdf(
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(Alumno).where(Alumno.usuario_id == current_user.id)
+    alumno = (await db.execute(stmt)).scalars().first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+
+    nombre_completo = " ".join(
+        p for p in (current_user.nombre, current_user.apellido_paterno, current_user.apellido_materno)
+        if p
+    )
+    pdf_bytes = generar_pdf_correos(
+        nombre_completo=nombre_completo,
+        numero_cuenta=alumno.numero_cuenta,
+        correo_personal=current_user.correo_personal,
+        correo_institucional=current_user.correo_institucional,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="correos_{alumno.numero_cuenta or current_user.id}.pdf"'
+            )
+        },
     )
 
 
