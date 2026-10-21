@@ -43,17 +43,28 @@ def _clave_periodo(periodo: str | None) -> str:
     return normalizar_periodo(p) or "".join(p.upper().split())
 
 
-async def examenes_por_alumno(
-    db: AsyncSession, alumno_ids: list[int], periodo: str | None = None
-) -> dict[int, list[str]]:
-    """Exámenes con resultado de cada alumno ("Cuestionario 1", "Final Álgebra",
-    "WebAssign ICO"...). Sin periodo, se agrega el periodo a cada uno."""
-    examenes: dict[int, list[str]] = {aid: [] for aid in alumno_ids}
-    if not alumno_ids:
-        return examenes
+# Marcas cortas de la lista de alumnos, en este orden.
+MARCAS = ("c1", "c2", "algebra", "trigonometria", "geometria", "calculo", "wa")
 
-    def agregar(aid: int, etiqueta: str, p: str) -> None:
-        examenes[aid].append(etiqueta if periodo is not None else f"{etiqueta} ({p})")
+
+async def examenes_y_marcas(
+    db: AsyncSession, alumno_ids: list[int], periodo: str | None = None
+) -> tuple[dict[int, list[str]], dict[int, dict[str, list[str]]]]:
+    """Exámenes con resultado de cada alumno.
+
+    Devuelve las etiquetas ("Cuestionario 1", "Final Álgebra", "WebAssign ICO"...;
+    sin periodo se agrega el periodo a cada una) y, por alumno, {marca: etiquetas}
+    con las marcas de MARCAS que tiene.
+    """
+    examenes: dict[int, list[str]] = {aid: [] for aid in alumno_ids}
+    marcas: dict[int, dict[str, list[str]]] = {aid: {} for aid in alumno_ids}
+    if not alumno_ids:
+        return examenes, marcas
+
+    def agregar(aid: int, marca: str, etiqueta: str, p: str) -> None:
+        texto = etiqueta if periodo is not None else f"{etiqueta} ({p})"
+        examenes[aid].append(texto)
+        marcas[aid].setdefault(marca, []).append(texto)
 
     def filtro(modelo):
         conds = [modelo.alumno_id.in_(alumno_ids)]
@@ -67,17 +78,25 @@ async def examenes_por_alumno(
                 getattr(r, f"aciertos_c{n}_{m}") is not None
                 for m in ("algebra", "trigonometria", "geometria", "calculo")
             ):
-                agregar(r.alumno_id, f"Cuestionario {n}", r.periodo)
+                agregar(r.alumno_id, f"c{n}", f"Cuestionario {n}", r.periodo)
     for r in (await db.execute(filtro(ResultadoDiagnostico))).scalars():
         for m, nombre in MATERIAS_FINAL.items():
             if getattr(r, f"puntaje_{m}") is not None:
-                agregar(r.alumno_id, f"Final {nombre}", r.periodo)
+                agregar(r.alumno_id, m, f"Final {nombre}", r.periodo)
     for r in (await db.execute(filtro(ResultadoWebAssign))).scalars():
-        agregar(r.alumno_id, f"WebAssign {r.carrera}", r.periodo)
-    return examenes
+        agregar(r.alumno_id, "wa", f"WebAssign {r.carrera}", r.periodo)
+    return examenes, marcas
 
 
-def _fila_alumno(alumno: Alumno, examenes: list[str]) -> dict:
+async def examenes_por_alumno(
+    db: AsyncSession, alumno_ids: list[int], periodo: str | None = None
+) -> dict[int, list[str]]:
+    return (await examenes_y_marcas(db, alumno_ids, periodo))[0]
+
+
+def _fila_alumno(
+    alumno: Alumno, examenes: list[str], marcas: dict[str, list[str]] | None = None
+) -> dict:
     user = alumno.usuario
     return {
         "id": alumno.id,
@@ -91,6 +110,7 @@ def _fila_alumno(alumno: Alumno, examenes: list[str]) -> dict:
         "periodo_ingreso": alumno.periodo_ingreso,
         "es_provisional": bool(alumno.es_provisional),
         "examenes": examenes,
+        "marcas": marcas or {},
     }
 
 
@@ -98,20 +118,33 @@ def _con_relaciones(query):
     return query.options(selectinload(Alumno.usuario), selectinload(Alumno.ingenieria))
 
 
+FILTROS = ("todos", "por_revisar", "provisionales", "sin_cuenta")
+
+
 async def listar_alumnos(
     db: AsyncSession,
     *,
     busqueda: str | None,
     periodo: str | None,
+    filtro: str = "todos",
     limit: int,
     offset: int,
 ) -> dict:
+    """Lista de alumnos. Con periodo: los que ingresaron en él o tienen algún
+    resultado en él, y las marcas de exámenes son de ese periodo."""
+    periodo = (periodo or "").strip() or None
     conds = []
-    if periodo and periodo.strip():
-        clave = _clave_periodo(periodo)
-        conds.append(
-            func.upper(func.replace(Alumno.periodo_ingreso, " ", "")) == clave
-        )
+    if periodo is not None or filtro == "por_revisar":
+        grupos = await grupos_por_revisar(db, periodo)
+        ids = set(grupos["por_id"]) if periodo is not None else None
+        if filtro == "por_revisar":
+            revisar = set(grupos["duplicados"]) | {a.id for a in grupos["sin_cuenta"]}
+            ids = revisar if ids is None else ids & revisar
+        conds.append(Alumno.id.in_(ids or {-1}))
+    if filtro == "provisionales":
+        conds.append(Alumno.es_provisional.is_(True))
+    elif filtro == "sin_cuenta":
+        conds.append(Alumno.numero_cuenta.is_(None))
     if busqueda and busqueda.strip():
         term = f"%{busqueda.strip()}%"
         nombre_completo = func.concat_ws(
@@ -147,9 +180,9 @@ async def listar_alumnos(
         )
     ).scalars().all()
 
-    examenes = await examenes_por_alumno(db, [a.id for a in alumnos])
+    examenes, marcas = await examenes_y_marcas(db, [a.id for a in alumnos], periodo)
     return {
-        "items": [_fila_alumno(a, examenes[a.id]) for a in alumnos],
+        "items": [_fila_alumno(a, examenes[a.id], marcas[a.id]) for a in alumnos],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -160,8 +193,8 @@ async def obtener_alumno(db: AsyncSession, alumno_id: int) -> dict | None:
     alumno = await db.scalar(_con_relaciones(select(Alumno).where(Alumno.id == alumno_id)))
     if alumno is None:
         return None
-    examenes = await examenes_por_alumno(db, [alumno_id])
-    return _fila_alumno(alumno, examenes[alumno_id])
+    examenes, marcas = await examenes_y_marcas(db, [alumno_id])
+    return _fila_alumno(alumno, examenes[alumno_id], marcas[alumno_id])
 
 
 async def _dueno(db: AsyncSession, tipo: str, valor: str, alumno_id: int) -> Alumno | None:
@@ -243,19 +276,81 @@ ENCABEZADOS = ["Nombre", "Correo", "Cuenta", "Folio", "Ingeniería", "Exámenes 
 ANCHOS = [40, 42, 12, 14, 12, 60]
 
 
-async def _alumnos_del_periodo(db: AsyncSession, periodo: str) -> list[Alumno]:
-    """Alumnos que ingresaron en el periodo o tienen algún resultado en él."""
+async def _alumnos_del_periodo(db: AsyncSession, periodo: str | None) -> list[Alumno]:
+    """Alumnos que ingresaron en el periodo o tienen algún resultado en él
+    (todos si no hay periodo)."""
+    alumnos = (await db.execute(_con_relaciones(select(Alumno)))).scalars().all()
+    if periodo is None:
+        return list(alumnos)
     con_resultado = set()
     for modelo in (ResultadoDiagnostico, ResultadoCuestionarioDiagnostico, ResultadoWebAssign):
         con_resultado |= set(
             (await db.execute(select(modelo.alumno_id).where(modelo.periodo == periodo))).scalars()
         )
     clave = _clave_periodo(periodo)
-    alumnos = (await db.execute(_con_relaciones(select(Alumno)))).scalars().all()
     return [
         a for a in alumnos
         if a.id in con_resultado or _clave_periodo(a.periodo_ingreso) == clave
     ]
+
+
+async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
+    """Alumnos del periodo y los casos por revisar.
+
+    {"alumnos": [...del periodo], "por_id": {id: Alumno} (incluye las parejas
+    de otro periodo), "duplicados": {id: Alumno}, "sin_cuenta": [...],
+    "sin_ingenieria": [...], "no_registradas": [FilaNoRegistrada]}.
+    """
+    alumnos = await _alumnos_del_periodo(db, periodo)
+    por_id = {a.id: a for a in alumnos}
+
+    por_nombre: dict[str, list[Alumno]] = {}
+    for a in alumnos:
+        clave = normalizar_nombre(_nombre(a.usuario))
+        if clave:
+            por_nombre.setdefault(clave, []).append(a)
+    duplicados = {a.id: a for grupo in por_nombre.values() if len(grupo) > 1 for a in grupo}
+
+    # Parejas marcadas al registrarse (datos que coincidían con dos provisionales,
+    # o mismo nombre que un provisional): salen las dos si alguna es del periodo.
+    parejas = (
+        await db.execute(select(PosibleDuplicado.alumno_id, PosibleDuplicado.otro_id))
+    ).all()
+    faltan = {i for par in parejas if set(par) & por_id.keys() for i in par} - por_id.keys()
+    extra: dict[int, Alumno] = {}
+    if faltan:
+        for a in (
+            await db.execute(_con_relaciones(select(Alumno).where(Alumno.id.in_(faltan))))
+        ).scalars():
+            extra[a.id] = a
+    for par in parejas:
+        if set(par) <= (por_id.keys() | extra.keys()):
+            for i in par:
+                duplicados[i] = por_id.get(i) or extra[i]
+
+    conds = [] if periodo is None else [FilaNoRegistrada.periodo == periodo]
+    no_registradas = (await db.execute(select(FilaNoRegistrada).where(*conds))).scalars().all()
+
+    return {
+        "alumnos": alumnos,
+        "por_id": por_id,
+        "duplicados": duplicados,
+        "sin_cuenta": [a for a in alumnos if not a.numero_cuenta],
+        "sin_ingenieria": [a for a in alumnos if a.ingenieria_id is None],
+        "no_registradas": no_registradas,
+    }
+
+
+async def contar_por_revisar(db: AsyncSession, periodo: str) -> dict:
+    """Cuántos hay por revisar: posibles duplicados + sin cuenta + filas que no
+    se pudieron registrar."""
+    g = await grupos_por_revisar(db, periodo.strip())
+    conteo = {
+        "posibles_duplicados": len(g["duplicados"]),
+        "sin_cuenta": len(g["sin_cuenta"]),
+        "no_registradas": len(g["no_registradas"]),
+    }
+    return {**conteo, "total": sum(conteo.values())}
 
 
 def _fila_excel(alumno: Alumno, examenes: list[str]) -> list:
@@ -273,37 +368,9 @@ def _fila_excel(alumno: Alumno, examenes: list[str]) -> list:
 async def casos_por_revisar(db: AsyncSession, periodo: str) -> dict[str, list[list]]:
     """Filas de cada hoja del Excel, ya ordenadas por nombre."""
     periodo = periodo.strip()
-    alumnos = await _alumnos_del_periodo(db, periodo)
-    por_id = {a.id: a for a in alumnos}
-
-    por_nombre: dict[str, list[Alumno]] = {}
-    for a in alumnos:
-        clave = normalizar_nombre(_nombre(a.usuario))
-        if clave:
-            por_nombre.setdefault(clave, []).append(a)
-    duplicados = {a.id: a for grupo in por_nombre.values() if len(grupo) > 1 for a in grupo}
-
-    # Parejas marcadas al registrarse (datos que coincidían con dos provisionales,
-    # o mismo nombre que un provisional): salen las dos si alguna es del periodo.
-    parejas = (
-        await db.execute(select(PosibleDuplicado.alumno_id, PosibleDuplicado.otro_id))
-    ).all()
-    faltan = {i for par in parejas if set(par) & por_id.keys() for i in par} - por_id.keys()
-    if faltan:
-        for a in (
-            await db.execute(_con_relaciones(select(Alumno).where(Alumno.id.in_(faltan))))
-        ).scalars():
-            por_id[a.id] = a
-    for par in parejas:
-        if set(par) <= por_id.keys():
-            for i in par:
-                duplicados[i] = por_id[i]
-
-    examenes = await examenes_por_alumno(db, list(por_id), periodo)
-
-    no_registradas = (
-        await db.execute(select(FilaNoRegistrada).where(FilaNoRegistrada.periodo == periodo))
-    ).scalars().all()
+    g = await grupos_por_revisar(db, periodo)
+    duplicados, no_registradas = g["duplicados"], g["no_registradas"]
+    examenes = await examenes_por_alumno(db, list(g["por_id"].keys() | duplicados.keys()), periodo)
 
     def ordenar(filas: list[list]) -> list[list]:
         return sorted(filas, key=lambda f: (normalizar_nombre(f[0]) or "~", f[0], f[1]))
@@ -312,11 +379,9 @@ async def casos_por_revisar(db: AsyncSession, periodo: str) -> dict[str, list[li
         "Posibles duplicados": ordenar(
             [_fila_excel(a, examenes[a.id]) for a in duplicados.values()]
         ),
-        "Sin cuenta": ordenar(
-            [_fila_excel(a, examenes[a.id]) for a in alumnos if not a.numero_cuenta]
-        ),
+        "Sin cuenta": ordenar([_fila_excel(a, examenes[a.id]) for a in g["sin_cuenta"]]),
         "Sin ingeniería": ordenar(
-            [_fila_excel(a, examenes[a.id]) for a in alumnos if a.ingenieria_id is None]
+            [_fila_excel(a, examenes[a.id]) for a in g["sin_ingenieria"]]
         ),
         "No se pudieron registrar": ordenar(
             [

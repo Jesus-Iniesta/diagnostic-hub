@@ -56,12 +56,18 @@ def _periodo(periodo: str) -> str:
     return p
 
 
+def _procesado(archivo: ArchivoPeriodo) -> bool:
+    return archivo.procesado_en is not None and archivo.procesado_en >= archivo.subido_en
+
+
 def _info(archivo: ArchivoPeriodo) -> dict:
     return {
         "examen": archivo.examen,
         "etiqueta": ETIQUETAS.get(archivo.examen, archivo.examen),
         "nombre_archivo": archivo.nombre_archivo,
         "subido_en": archivo.subido_en.isoformat(),
+        "procesado_en": archivo.procesado_en.isoformat() if archivo.procesado_en else None,
+        "procesado": _procesado(archivo),
     }
 
 
@@ -95,7 +101,7 @@ async def guardar_archivo(
     return _info(archivo)
 
 
-async def _contenido(db: AsyncSession, periodo: str, examen: str) -> bytes:
+async def _archivo(db: AsyncSession, periodo: str, examen: str) -> ArchivoPeriodo:
     archivo = await db.scalar(
         select(ArchivoPeriodo).where(
             ArchivoPeriodo.periodo == periodo, ArchivoPeriodo.examen == examen
@@ -103,7 +109,7 @@ async def _contenido(db: AsyncSession, periodo: str, examen: str) -> bytes:
     )
     if archivo is None:
         raise CargaPeriodoError(f"No hay archivo guardado de {ETIQUETAS[examen]}.")
-    return archivo.contenido
+    return archivo
 
 
 async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
@@ -114,7 +120,8 @@ async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
 
     periodo = _periodo(periodo)
     validar_examen(examen)
-    contenido = await _contenido(db, periodo, examen)
+    archivo = await _archivo(db, periodo, examen)
+    archivo_id, contenido = archivo.id, archivo.contenido
 
     tipo, _, clave = examen.partition("_")
     if tipo == "cuestionario":
@@ -123,7 +130,10 @@ async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
         r = await procesar_examen_diagnostico(db, contenido, clave, periodo)
     else:
         r = await procesar_webassign(db, contenido, clave, periodo)
-        await db.commit()
+
+    archivo = await db.get(ArchivoPeriodo, archivo_id)
+    archivo.procesado_en = datetime.now()
+    await db.commit()
 
     return {
         "examen": examen,
@@ -132,6 +142,74 @@ async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
         "encontrados": r["encontrados"],
         "registrados_nuevos": r.get("registrados_nuevos", 0),
         "no_registrados": r["no_encontrados"],
+        # Filas que no se pudieron registrar; las de cuestionarios y finales se
+        # pueden asignar a mano con corregir_archivo.
+        "no_registrados_detalle": r["no_encontrados_detalle"],
+        "corregible": tipo != "webassign",
+    }
+
+
+async def corregir_archivo(
+    db: AsyncSession, periodo: str, examen: str, correcciones: list[dict]
+) -> dict:
+    """Asigna a mano filas del archivo guardado (igual que "Corregir" en las cargas)."""
+    from app.services.upload_cuestionario_service import corregir_matching_cuestionario
+    from app.services.upload_diagnostico_service import corregir_matching_diagnostico
+
+    periodo = _periodo(periodo)
+    validar_examen(examen)
+    tipo, _, clave = examen.partition("_")
+    if tipo == "webassign":
+        raise CargaPeriodoError("Las filas de WebAssign no se pueden asignar a mano.")
+    contenido = (await _archivo(db, periodo, examen)).contenido
+    if tipo == "cuestionario":
+        r = await corregir_matching_cuestionario(db, contenido, int(clave), periodo, correcciones)
+    else:
+        r = await corregir_matching_diagnostico(db, clave, periodo, contenido, correcciones)
+    return {
+        "examen": examen,
+        "aplicadas": r["encontrados"],
+        "omitidas_ya_tenian_resultado": r.get("omitidas_ya_tenian_resultado", []),
+    }
+
+
+CLAVE_CREANI = "creani_descargado:{}"
+
+
+async def marcar_creani_descargado(db: AsyncSession, periodo: str) -> None:
+    from app.repositories.configuracion_repository import ConfiguracionRepository
+
+    await ConfiguracionRepository(db).set(
+        CLAVE_CREANI.format(periodo.strip()), datetime.now().isoformat()
+    )
+
+
+async def estado_periodo(db: AsyncSession, periodo: str) -> dict:
+    """Avance del periodo para los pasos de Inicio y de Carga de exámenes."""
+    from app.repositories.configuracion_repository import ConfiguracionRepository
+    from app.services.alumnos_admin_service import contar_por_revisar
+
+    periodo = _periodo(periodo)
+    rows = (
+        await db.execute(select(ArchivoPeriodo).where(ArchivoPeriodo.periodo == periodo))
+    ).scalars().all()
+    archivos = sorted((_info(a) for a in rows), key=lambda a: ORDEN.get(a["examen"], 99))
+    procesado_en = max((a.procesado_en for a in rows if a.procesado_en), default=None)
+    creani = await ConfiguracionRepository(db).get(CLAVE_CREANI.format(periodo))
+    por_revisar = await contar_por_revisar(db, periodo)
+
+    return {
+        "periodo": periodo,
+        "archivos": archivos,
+        "total_examenes": len(EXAMENES),
+        "subidos": len(rows),
+        # Todos los archivos guardados se procesaron después de subirse.
+        "procesado": bool(rows) and all(_procesado(a) for a in rows),
+        "procesado_en": procesado_en.isoformat() if procesado_en else None,
+        "por_revisar": por_revisar,
+        # El CREANI cuenta como descargado si se bajó después del último procesamiento.
+        "creani_descargado": bool(creani)
+        and (procesado_en is None or creani >= procesado_en.isoformat()),
     }
 
 

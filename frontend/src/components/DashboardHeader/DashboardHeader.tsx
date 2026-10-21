@@ -14,9 +14,7 @@ import {
   IconChevronDown,
   IconMenu2,
 } from '@tabler/icons-react';
-import { useState } from 'react';
-
-import { periods } from '../../mocks/adminDashboard';
+import { usePeriodo } from '../../contexts/PeriodoContext';
 import classes from './DashboardHeader.module.css';
 
 interface DashboardHeaderProps {
@@ -24,7 +22,7 @@ interface DashboardHeaderProps {
 }
 
 export default function DashboardHeader({ onToggle }: DashboardHeaderProps) {
-  const [period, setPeriod] = useState(periods[0]);
+  const { periodo: period, setPeriodo: setPeriod, periodos } = usePeriodo();
   const [notificationsOpened, { open: openNotifications, close: closeNotifications }] =
     useDisclosure(false);
 
@@ -48,7 +46,7 @@ export default function DashboardHeader({ onToggle }: DashboardHeaderProps) {
       </ActionIcon>
 
       <Group gap={24} wrap="nowrap">
-        <Menu shadow="md" width={224} position="bottom-end">
+        <Menu shadow="md" width={224} position="bottom-end" withinPortal>
           <Menu.Target>
             <UnstyledButton className={classes.period} aria-label="Seleccionar periodo">
               <Group gap={12} wrap="nowrap" w="100%">
@@ -62,8 +60,9 @@ export default function DashboardHeader({ onToggle }: DashboardHeaderProps) {
             </UnstyledButton>
           </Menu.Target>
           <Menu.Dropdown>
-            {periods.map((p: string) => (
-              <Menu.Item key={p} onClick={() => setPeriod(p)}>
+            <Menu.Label>Todas las páginas usan este periodo</Menu.Label>
+            {periodos.map((p: string) => (
+              <Menu.Item key={p} onClick={() => setPeriod(p)} fw={p === period ? 700 : undefined}>
                 {p}
               </Menu.Item>
             ))}

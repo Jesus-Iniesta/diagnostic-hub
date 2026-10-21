@@ -1,0 +1,25 @@
+"""add_archivo_periodo_procesado_en
+
+Revision ID: m7n8o9p0q1r2
+Revises: l6m7n8o9p0q1
+Create Date: 2026-10-21 18:00:00.000000
+
+"""
+
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+
+revision: str = "m7n8o9p0q1r2"
+down_revision: Union[str, None] = "l6m7n8o9p0q1"
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    op.add_column("archivo_periodo", sa.Column("procesado_en", sa.DateTime(), nullable=True))
+
+
+def downgrade() -> None:
+    op.drop_column("archivo_periodo", "procesado_en")

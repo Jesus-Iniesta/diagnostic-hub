@@ -9,6 +9,7 @@ import AcreditadorLayout from './pages/acreditador/AcreditadorLayout';
 import AdminConfiguracion from './pages/admin/AdminConfiguracion';
 import AdminCargaAlumnos from './pages/admin/AdminCargaAlumnos';
 import AdminListaAlumnos from './pages/admin/AdminListaAlumnos';
+import AdminSeguridad from './pages/admin/AdminSeguridad';
 import AdminCargaExamenes from './pages/admin/AdminCargaExamenes';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminReportes from './pages/admin/AdminReportes';
@@ -61,8 +62,10 @@ export default function App() {
         }
       >
         <Route index element={<AdminDashboard />} />
-        <Route path="alumnos" element={<AdminCargaAlumnos />} />
-        <Route path="lista-alumnos" element={<AdminListaAlumnos />} />
+        <Route path="alumnos" element={<AdminListaAlumnos />} />
+        <Route path="lista-alumnos" element={<Navigate to="/admin/alumnos" replace />} />
+        <Route path="herramientas" element={<AdminCargaAlumnos />} />
+        <Route path="seguridad" element={<AdminSeguridad />} />
         <Route path="carga" element={<AdminCargaExamenes />} />
         <Route path="webassign" element={<Navigate to="/admin/carga?tab=webassign" replace />} />
         <Route path="reportes" element={<AdminReportes />} />

@@ -1,60 +1,117 @@
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Group,
+  Loader,
   Modal,
   Select,
   SimpleGrid,
   Stack,
   Tabs,
   Text,
-  TextInput,
   Title,
 } from '@mantine/core';
 import {
+  IconArrowRight,
   IconCircleCheck,
   IconClipboardList,
   IconFileSpreadsheet,
   IconInfoCircle,
+  IconPlayerPlay,
   IconUpload,
   IconWorld,
 } from '@tabler/icons-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 
 import CorreccionModal from '../../components/CorreccionModal/CorreccionModal';
-import OmitidasModal from '../../components/OmitidasModal/OmitidasModal';
-import { fetchPeriodoRango } from '../../lib/configuracionApi';
-import { getCurrentPeriodo } from '../../lib/periodo';
-import type { PeriodoRango } from '../../lib/configuracionApi';
+import { usePeriodo } from '../../contexts/PeriodoContext';
 import {
-  uploadDiagnostico,
-  corregirMatching,
+  corregirArchivo,
+  guardarArchivo,
+  juntarRepetidos,
+  listarArchivos,
+  procesarArchivo,
+  type ArchivoGuardado,
+  type FilaNoRegistrada,
+  type ResumenArchivo,
+} from '../../lib/cargaPeriodoApi';
+import { fetchPeriodoRango, type PeriodoRango } from '../../lib/configuracionApi';
+import {
   exportarResultados,
+  getRespuestaKeyStatus,
   getRespuestasCorrectas,
   saveRespuestasCorrectas,
-  getRespuestaKeyStatus,
 } from '../../lib/diagnosticoApi';
-import {
-  uploadCuestionario,
-  corregirMatchingCuestionario,
-} from '../../lib/cuestionarioApi';
-import type {
-  ResultadoProcesamientoDiagnostico,
-  DiagnosticoNoEncontrado,
-  RespuestaCorrecta,
-} from '../../types/diagnostico';
-import type {
-  CandidatoCoincidencia,
-  CuestionarioNoEncontrado,
-  ResultadoProcesamientoCuestionario,
-} from '../../types/cuestionario';
+import type { CandidatoCoincidencia } from '../../types/cuestionario';
+import type { RespuestaCorrecta } from '../../types/diagnostico';
 import classes from './AdminCargaAlumnos.module.css';
-import CargaPeriodoSection from './CargaPeriodoSection';
-import WebAssignSection from './WebAssignSection';
 
-const TABS = ['cuestionario', 'diagnostico', 'webassign'] as const;
+// ── Pasos y exámenes (en el orden en que se procesan, igual que el backend) ──
+
+interface Examen {
+  id: string;
+  label: string;
+}
+
+interface PasoCarga {
+  id: 'cuestionario' | 'diagnostico' | 'webassign';
+  numero: number;
+  titulo: string;
+  descripcion: string;
+  icono: typeof IconClipboardList;
+  examenes: Examen[];
+}
+
+const PASOS_CARGA: PasoCarga[] = [
+  {
+    id: 'cuestionario',
+    numero: 1,
+    titulo: 'Examen diagnóstico',
+    descripcion: 'Los dos cuestionarios de Google Forms (preguntas 1–10 y 11–20).',
+    icono: IconClipboardList,
+    examenes: [
+      { id: 'cuestionario_1', label: 'Cuestionario 1' },
+      { id: 'cuestionario_2', label: 'Cuestionario 2' },
+    ],
+  },
+  {
+    id: 'diagnostico',
+    numero: 2,
+    titulo: 'Examen final',
+    descripcion: 'El archivo de Google Forms de cada materia.',
+    icono: IconFileSpreadsheet,
+    examenes: [
+      { id: 'final_algebra', label: 'Álgebra' },
+      { id: 'final_trigonometria', label: 'Trigonometría' },
+      { id: 'final_geometria', label: 'Geometría' },
+      { id: 'final_calculo', label: 'Cálculo' },
+    ],
+  },
+  {
+    id: 'webassign',
+    numero: 3,
+    titulo: 'WebAssign',
+    descripcion: 'El reporte de WebAssign de cada carrera.',
+    icono: IconWorld,
+    examenes: ['ICI', 'ICO', 'IEL', 'IIA', 'IME', 'ISES'].map((c) => ({ id: `webassign_${c}`, label: c })),
+  },
+];
+
+const ETIQUETA_COMPLETA: Record<string, string> = {
+  cuestionario_1: 'Cuestionario 1',
+  cuestionario_2: 'Cuestionario 2',
+  final_algebra: 'Final Álgebra',
+  final_trigonometria: 'Final Trigonometría',
+  final_geometria: 'Final Geometría',
+  final_calculo: 'Final Cálculo',
+  ...Object.fromEntries(['ICI', 'ICO', 'IEL', 'IIA', 'IME', 'ISES'].map((c) => [`webassign_${c}`, `WebAssign ${c}`])),
+};
+const TODOS_LOS_EXAMENES = PASOS_CARGA.flatMap((p) => p.examenes.map((e) => e.id));
+
+const TABS = ['cuestionario', 'diagnostico', 'webassign', 'procesar'] as const;
 type TabId = (typeof TABS)[number];
 
 function isTabId(value: string | null): value is TabId {
@@ -66,658 +123,239 @@ function formatFecha(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function usePeriodoRango(periodo: string): PeriodoRango | null {
+function formatFechaHora(iso: string): string {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return iso;
+  return fecha.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function errorTexto(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
+function RangoPeriodoInfo({ periodo }: { periodo: string }) {
   const [rango, setRango] = useState<PeriodoRango | null>(null);
 
   useEffect(() => {
     let mounted = true;
     setRango(null);
-    const p = periodo.trim();
-    if (!p) return;
-    fetchPeriodoRango(p)
+    fetchPeriodoRango(periodo)
       .then((data) => {
         if (mounted) setRango(data);
       })
-      .catch(() => {
-        if (mounted) setRango(null);
-      });
+      .catch(() => undefined);
     return () => {
       mounted = false;
     };
   }, [periodo]);
 
-  return rango;
-}
-
-function RangoPeriodoInfo({ periodo }: { periodo: string }) {
-  const rango = usePeriodoRango(periodo);
-
   return (
     <Text size="sm" c="dimmed">
-      {rango && `Se tomarán las respuestas del ${formatFecha(rango.inicio)} al ${formatFecha(rango.fin)}`}
+      {rango && `Se toman las respuestas del ${formatFecha(rango.inicio)} al ${formatFecha(rango.fin)}`}
       {rango && ' · '}
       <Link to="/admin/configuracion">Cambiar en Configuración</Link>
     </Text>
   );
 }
 
-function DiagnosticoSection() {
-  const [periodo, setPeriodo] = useState(getCurrentPeriodo());
-  const [step, setStep] = useState(0);
-  const [materiasConfig, setMateriasConfig] = useState<Record<string, { configurada: boolean; total_preguntas: number }>>({});
-  const [loadingStatus, setLoadingStatus] = useState(true);
+// ── Pasos 1 a 3: subir (solo guardar) ───────────────────────────
 
-  const [uploadingMateria, setUploadingMateria] = useState<string | null>(null);
-  const [correccionLoading, setCorreccionLoading] = useState(false);
-  const [resultado, setResultado] = useState<ResultadoProcesamientoDiagnostico | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [avisoOmitidas, setAvisoOmitidas] = useState<string | null>(null);
-  const [verOmitidas, setVerOmitidas] = useState(false);
+interface RanuraProps {
+  examen: Examen;
+  archivo: ArchivoGuardado | undefined;
+  subiendo: boolean;
+  deshabilitado: boolean;
+  onArchivo: (examen: string, file: File) => void;
+}
+
+function RanuraArchivo({ examen, archivo, subiendo, deshabilitado, onArchivo }: RanuraProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [currentFile, setCurrentFile] = useState<File | null>(null);
 
-  const [noEncontrados, setNoEncontrados] = useState<DiagnosticoNoEncontrado[]>([]);
-  const [correcciones, setCorrecciones] = useState<Map<number, number>>(new Map());
-
-  const [corrigiendoIdx, setCorrigiendoIdx] = useState<number | null>(null);
-
-  const [showRespuestasModal, setShowRespuestasModal] = useState(false);
-  const [respuestas, setRespuestas] = useState<RespuestaCorrecta[]>([]);
-  const [respuestasLoading, setRespuestasLoading] = useState(false);
-  const [editingMateria, setEditingMateria] = useState<string | null>(null);
-
-  const [wizardResults, setWizardResults] = useState<Map<string, ResultadoProcesamientoDiagnostico>>(new Map());
-
-  const MATERIAS_ORDER = ['algebra', 'trigonometria', 'geometria', 'calculo'];
-  const MATERIAS_LABELS: Record<string, string> = {
-    algebra: 'Álgebra',
-    trigonometria: 'Trigonometría',
-    geometria: 'Geometría',
-    calculo: 'Cálculo Diferencial',
+  const elegir = () => {
+    if (!deshabilitado) inputRef.current?.click();
   };
 
-  const currentMateria = step >= 1 && step <= 4 ? MATERIAS_ORDER[step - 1] : null;
-  const noEncontradoActual = corrigiendoIdx !== null ? noEncontrados.find((n) => n.indice === corrigiendoIdx) : null;
-  const nSugeridos = noEncontrados.filter((n) => n.candidatos.some((c) => c.sugerido)).length;
+  return (
+    <div
+      className={`${classes.dropzone} ${dragging ? classes.dropzoneActive : ''}`}
+      style={{
+        padding: '1rem',
+        textAlign: 'left',
+        cursor: deshabilitado ? 'default' : 'pointer',
+        borderColor: archivo ? 'var(--mantine-color-green-5)' : undefined,
+      }}
+      onClick={elegir}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!deshabilitado) setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        const file = e.dataTransfer.files[0];
+        if (file && !deshabilitado) onArchivo(examen.id, file);
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          elegir();
+        }
+      }}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onArchivo(examen.id, file);
+          e.target.value = '';
+        }}
+      />
+      <Group justify="space-between" wrap="nowrap" gap="xs">
+        <Text fw={600} size="sm" c={archivo ? 'green.8' : undefined}>
+          {archivo ? '✓ ' : ''}
+          {examen.label}
+        </Text>
+        {subiendo ? <Loader size="xs" /> : <IconUpload size={18} color="#667085" />}
+      </Group>
+      {archivo ? (
+        <>
+          <Text size="xs" className={classes.wrapCell} title={archivo.nombre_archivo}>
+            {archivo.nombre_archivo}
+          </Text>
+          <Text size="xs" c="dimmed">
+            Subido el {formatFechaHora(archivo.subido_en)} · clic para reemplazarlo
+          </Text>
+        </>
+      ) : (
+        <Text size="xs" c="dimmed">
+          {subiendo ? 'Guardando…' : 'Arrastra el archivo o haz clic (.xlsx o .xls)'}
+        </Text>
+      )}
+    </div>
+  );
+}
 
-  // Cada consulta lleva un número; solo se aplica la respuesta de la última,
-  // para que una respuesta lenta de un periodo anterior (p. ej. "2024" mientras
-  // se escribe "2024B") no tape a la del periodo actual.
-  const ultimaConsultaStatus = useRef(0);
+// ── Respuestas correctas del examen final (antes del paso 2) ─────
 
-  const loadStatus = useCallback(async () => {
-    const consulta = ++ultimaConsultaStatus.current;
-    setLoadingStatus(true);
-    try {
-      const keys = await getRespuestaKeyStatus(periodo);
-      if (consulta === ultimaConsultaStatus.current) setMateriasConfig(keys);
-    } catch {
-      // silently fail
-    } finally {
-      if (consulta === ultimaConsultaStatus.current) setLoadingStatus(false);
-    }
+const MATERIAS_FINAL: Record<string, string> = {
+  algebra: 'Álgebra',
+  trigonometria: 'Trigonometría',
+  geometria: 'Geometría',
+  calculo: 'Cálculo Diferencial',
+};
+
+function RespuestasFinal({ periodo }: { periodo: string }) {
+  const [config, setConfig] = useState<Record<string, { configurada: boolean; total_preguntas: number }>>({});
+  const [editando, setEditando] = useState<string | null>(null);
+  const [respuestas, setRespuestas] = useState<RespuestaCorrecta[]>([]);
+  const [cargando, setCargando] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const cargarEstado = useCallback(() => {
+    getRespuestaKeyStatus(periodo)
+      .then(setConfig)
+      .catch(() => setConfig({}));
   }, [periodo]);
 
-  // Espera a que se deje de escribir el periodo antes de consultar.
   useEffect(() => {
-    const t = setTimeout(() => { loadStatus(); }, 400);
-    return () => clearTimeout(t);
-  }, [loadStatus]);
+    cargarEstado();
+  }, [cargarEstado]);
 
-  const allKeysConfigured = MATERIAS_ORDER.every((m) => materiasConfig[m]?.configurada);
-  const allDone = MATERIAS_ORDER.every((m) => wizardResults.has(m));
-
-  const goToStep = (newStep: number) => {
-    setStep(newStep);
-    setResultado(null);
+  const abrir = async (materia: string) => {
+    setCargando(materia);
     setError(null);
-    setAvisoOmitidas(null);
-    setNoEncontrados([]);
-    setCorrecciones(new Map());
-    setCurrentFile(null);
-    setUploadingMateria(null);
-  };
-
-  const handleNext = () => {
-    if (step === 0) {
-      goToStep(1);
-    } else if (step >= 1 && step <= 4) {
-      goToStep(step + 1);
-    }
-  };
-
-  const handleBack = () => {
-    if (step >= 1 && step <= 5) {
-      goToStep(step - 1);
-    }
-  };
-
-  const handleFile = useCallback(async (file: File) => {
-    if (!currentMateria) return;
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      setError('Solo se permiten archivos .xlsx o .xls');
-      return;
-    }
-    setError(null);
-    setResultado(null);
-    setAvisoOmitidas(null);
-    setCurrentFile(file);
-    setUploadingMateria(currentMateria);
-
     try {
-      const result = await uploadDiagnostico(currentMateria, periodo, file);
-      setResultado(result);
-      setNoEncontrados(result.no_encontrados_detalle);
-      setWizardResults((prev) => new Map(prev).set(currentMateria, result));
+      const r = await getRespuestasCorrectas(materia, periodo);
+      setRespuestas(r.respuestas || []);
+      setEditando(materia);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al procesar el archivo');
+      setError(errorTexto(err, 'Error al cargar las respuestas'));
     } finally {
-      setUploadingMateria(null);
+      setCargando(null);
     }
-  }, [currentMateria, periodo]);
+  };
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+  const guardar = async () => {
+    if (!editando) return;
+    try {
+      await saveRespuestasCorrectas({ materia: editando, periodo, respuestas });
+      setEditando(null);
+      cargarEstado();
+    } catch (err) {
+      setError(errorTexto(err, 'Error al guardar las respuestas'));
+    }
+  };
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => setDragging(false), []);
-
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-    e.target.value = '';
-  }, [handleFile]);
-
-  const handleExport = async () => {
+  const exportar = async () => {
     try {
       const blob = await exportarResultados(periodo);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `diagnostico_${periodo}.xlsx`;
+      a.download = `examen_final_${periodo}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al exportar');
+      setError(errorTexto(err, 'Error al exportar'));
     }
   };
 
-  const handleLoadRespuestas = async (materia: string) => {
-    setEditingMateria(materia);
-    setRespuestasLoading(true);
-    try {
-      const result = await getRespuestasCorrectas(materia, periodo);
-      setRespuestas(result.respuestas || []);
-      setShowRespuestasModal(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar respuestas');
-    } finally {
-      setRespuestasLoading(false);
-    }
-  };
-
-  const handleSaveRespuestas = async () => {
-    if (!editingMateria) return;
-    try {
-      await saveRespuestasCorrectas({ materia: editingMateria, periodo, respuestas });
-      setShowRespuestasModal(false);
-      loadStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al guardar respuestas');
-    }
-  };
-
-  const handleCorregirMatching = async () => {
-    if (!currentFile || !currentMateria || correcciones.size === 0) return;
-    setCorreccionLoading(true);
-    setAvisoOmitidas(null);
-    const indicesCorregidos = new Set(correcciones.keys());
-    try {
-      const correccionesArray = Array.from(correcciones.entries()).map(([indice, alumno_id]) => ({ indice, alumno_id }));
-      const res = await corregirMatching(currentMateria, periodo, currentFile, correccionesArray);
-      const omitidosSet = new Set(res.omitidas_ya_tenian_resultado ?? []);
-      if (omitidosSet.size > 0) {
-        setAvisoOmitidas(
-          `${omitidosSet.size} fila(s) no se aplicaron porque ese alumno ya tenía resultado de un intento anterior.`,
-        );
-      }
-
-      const nuevosDetalle = noEncontrados.filter(
-        (n) => !(indicesCorregidos.has(n.indice) || omitidosSet.has(n.indice)),
-      );
-      const corregidos = noEncontrados.length - nuevosDetalle.length;
-      setNoEncontrados(nuevosDetalle);
-      setCorrigiendoIdx(null);
-      setResultado((prev) =>
-        prev
-          ? {
-              ...prev,
-              encontrados: prev.encontrados + corregidos,
-              no_encontrados: Math.max(0, prev.no_encontrados - corregidos),
-              no_encontrados_detalle: nuevosDetalle,
-            }
-          : prev,
-      );
-      setWizardResults((prev) => {
-        const next = new Map(prev);
-        const prevRes = next.get(currentMateria);
-        if (prevRes) {
-          next.set(currentMateria, {
-            ...prevRes,
-            encontrados: prevRes.encontrados + corregidos,
-            no_encontrados: Math.max(0, prevRes.no_encontrados - corregidos),
-            no_encontrados_detalle: nuevosDetalle,
-          });
-        }
-        return next;
-      });
-      setCorrecciones(new Map());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al corregir matching');
-    } finally {
-      setCorreccionLoading(false);
-    }
-  };
-
-  const asignarAlumno = (indice: number, alumnoId: number) => {
-    setCorrecciones((prev) => {
-      const next = new Map(prev);
-      next.set(indice, alumnoId);
-      return next;
-    });
-  };
-
-  const openCorreccionModal = (indice: number) => {
-    setCorrigiendoIdx(indice);
-  };
-
-  const sugeridoDe = (item: { candidatos: CandidatoCoincidencia[] }): CandidatoCoincidencia | undefined =>
-    item.candidatos.find((c) => c.sugerido);
-
-  const confirmarSugerido = (item: DiagnosticoNoEncontrado) => {
-    const cand = sugeridoDe(item);
-    if (cand) asignarAlumno(item.indice, cand.alumno_id);
-  };
-
-  const confirmarTodosSugeridos = () => {
-    setCorrecciones((prev) => {
-      const next = new Map(prev);
-      noEncontrados.forEach((item) => {
-        const cand = sugeridoDe(item);
-        if (cand) next.set(item.indice, cand.alumno_id);
-      });
-      return next;
-    });
-  };
-
-  const renderProgressBar = () => (
-    <div className={classes.wizardProgress}>
-      {['Config', ...MATERIAS_ORDER.map((m) => MATERIAS_LABELS[m]), 'Resumen'].map((label, i) => {
-        const isActive = i === step;
-        const isDone = i < step || (i > 0 && i <= 4 && wizardResults.has(MATERIAS_ORDER[i - 1]));
-        return (
-          <div
-            key={i}
-            className={`${classes.wizardStep} ${isActive ? classes.wizardStepActive : ''} ${isDone ? classes.wizardStepDone : ''}`}
-            onClick={() => {
-              if (i === 0) goToStep(0);
-              else if (i >= 1 && i <= 4 && isDone) goToStep(i);
-              else if (i === 5 && allDone) goToStep(5);
-            }}
-          >
-            <div className={classes.wizardStepCircle}>
-              {isDone ? '✓' : i + 1}
-            </div>
-            <span className={classes.wizardStepLabel}>{label}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  const renderStep0Config = () => (
-    <Stack gap="md">
-      <Text size="sm" c="dimmed">
-        Verifica que las respuestas correctas estén configuradas para cada materia antes de subir los exámenes.
-      </Text>
-      <div className={classes.configGrid}>
-        {MATERIAS_ORDER.map((m) => {
-          const config = materiasConfig[m];
-          const configured = config?.configurada;
-          return (
-            <div key={m} className={`${classes.configCard} ${configured ? classes.configCardOk : classes.configCardMissing}`}>
-              <Group justify="space-between">
-                <div>
-                  <Text fw={600} size="sm">{MATERIAS_LABELS[m]}</Text>
-                  <Text size="xs" c="dimmed">
-                    {configured ? `${config.total_preguntas} preguntas configuradas` : 'Sin configurar'}
-                  </Text>
-                </div>
-                <Button
-                  size="xs"
-                  variant="light"
-                  color={configured ? 'green' : 'orange'}
-                  loading={respuestasLoading && editingMateria === m}
-                  onClick={() => handleLoadRespuestas(m)}
-                >
-                  {configured ? 'Ver / Editar' : 'Configurar'}
-                </Button>
-              </Group>
-            </div>
-          );
-        })}
-      </div>
-      {allKeysConfigured ? (
-        <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
-          Todas las respuestas correctas están configuradas. Puedes continuar.
-        </Alert>
-      ) : (
-        <Alert color="orange" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-          Hay materias sin respuestas configuradas para este periodo; se usará la clave por defecto.
-        </Alert>
-      )}
-    </Stack>
-  );
-
-  const renderStepUpload = () => {
-    if (!currentMateria) return null;
-    const isUploading = uploadingMateria === currentMateria;
-    const res = wizardResults.get(currentMateria);
-
-    return (
-      <Stack gap="md">
-        {res && !resultado && (
-          <Alert
-            color={res.total_filas === 0 ? 'red' : 'green'}
-            variant="light"
-            radius="md"
-            icon={res.total_filas === 0 ? <IconInfoCircle size={18} /> : <IconCircleCheck size={18} />}
-          >
-            {res.total_filas === 0
-              ? `El archivo de ${MATERIAS_LABELS[currentMateria]} no tenía filas para procesar.`
-              : `${MATERIAS_LABELS[currentMateria]} ya fue procesado — ${res.encontrados} encontrados, ${res.registrados_nuevos ?? 0} registrados nuevos, ${res.no_encontrados} sin registrar.`}
-            {' '}Puedes subir otro archivo para reemplazar.
-          </Alert>
-        )}
-
-        {isUploading && (
-          <Stack align="center" py="xl">
-            <Text c="dimmed">Procesando {MATERIAS_LABELS[currentMateria]}...</Text>
-          </Stack>
-        )}
-
-        {!isUploading && !resultado && (
-          <div
-            className={`${classes.dropzone} ${dragging ? classes.dropzoneActive : ''}`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onClick={() => fileInputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
-          >
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleInputChange} style={{ display: 'none' }} />
-            <IconUpload size={36} color="#667085" stroke={1.5} />
-            <Text className={classes.dropzoneLabel} mt="sm">
-              Arrastra el examen de {MATERIAS_LABELS[currentMateria]} aquí o haz clic
-            </Text>
-            <Text className={classes.dropzoneHint}>Formatos: .xlsx, .xls</Text>
-          </div>
-        )}
-
-        {error && (
-          <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-            {error}
-            <Group mt="md">
-              <Button size="xs" variant="light" onClick={() => { setError(null); setResultado(null); }}>
-                Intentar de nuevo
-              </Button>
-            </Group>
-          </Alert>
-        )}
-
-        {resultado && (
-          <Stack gap="md">
-            <OmitidasModal
-              opened={verOmitidas}
-              onClose={() => setVerOmitidas(false)}
-              omitidas={resultado.omitidas_detalle ?? []}
-              periodo={resultado.periodo}
-            />
-            {resultado.total_filas === 0 && (
-              <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-                El archivo no tiene filas para procesar. Revisa que sea el archivo correcto.
-              </Alert>
-            )}
-            <div className={classes.statsRow}>
-              <div className={`${classes.statBox} ${classes.statBoxGray}`}>
-                <div className={classes.statNumber}>{resultado.total_filas}</div>
-                <div className={classes.statLabel}>Total filas</div>
-              </div>
-              <div className={`${classes.statBox} ${classes.statBoxGreen}`}>
-                <div className={classes.statNumber}>{resultado.encontrados}</div>
-                <div className={classes.statLabel}>Encontrados</div>
-              </div>
-              <div className={`${classes.statBox} ${classes.statBoxBlue}`}>
-                <div className={classes.statNumber}>{resultado.registrados_nuevos ?? 0}</div>
-                <div className={classes.statLabel}>Registrados nuevos</div>
-              </div>
-              <div className={`${classes.statBox} ${classes.statBoxRed}`}>
-                <div className={classes.statNumber}>{resultado.no_encontrados}</div>
-                <div className={classes.statLabel}>No se pudieron registrar</div>
-              </div>
-              <div className={`${classes.statBox} ${classes.statBoxYellow}`}>
-                <div className={classes.statNumber}>{resultado.omitidas_otro_periodo ?? 0}</div>
-                <div className={classes.statLabel}>Omitidas (otro periodo)</div>
-                {(resultado.omitidas_detalle?.length ?? 0) > 0 && (
-                  <Button size="compact-xs" variant="subtle" color="dark" mt={4} onClick={() => setVerOmitidas(true)}>
-                    Ver omitidas
-                  </Button>
-                )}
-              </div>
-              <div className={`${classes.statBox} ${classes.statBoxGray}`}>
-                <div className={classes.statNumber}>{resultado.intentos_repetidos_ignorados ?? 0}</div>
-                <div className={classes.statLabel}>Repetidos (1er intento)</div>
-              </div>
-            </div>
-
-            {avisoOmitidas && (
-              <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-                {avisoOmitidas}
-              </Alert>
-            )}
-
-            {resultado.advertencia && (
-              <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-                {resultado.advertencia}
-              </Alert>
-            )}
-
-            {noEncontrados.length > 0 && (
-              <Card padding="md" radius="md" className={classes.expandCard}>
-                <Group justify="space-between" mb="sm">
-                  <Text fw={600} size="sm">
-                    No se pudieron registrar ({noEncontrados.length})
-                  </Text>
-                  <Group gap="sm">
-                    {nSugeridos > 0 && (
-                      <Button size="xs" variant="outline" color="green" onClick={confirmarTodosSugeridos}>
-                        Confirmar todos los sugeridos ({nSugeridos})
-                      </Button>
-                    )}
-                    {correcciones.size > 0 && (
-                      <Button size="xs" variant="filled" color="blue" loading={correccionLoading} onClick={handleCorregirMatching}>
-                        Aplicar correcciones ({correcciones.size})
-                      </Button>
-                    )}
-                  </Group>
-                </Group>
-                <div className={classes.scrollTable}>
-                  <table className={classes.table}>
-                    <thead>
-                      <tr>
-                        <th>Nombre</th>
-                        <th>Email</th>
-                        <th>Cuenta</th>
-                        <th>Folio</th>
-                        <th>Motivo</th>
-                        <th>Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {noEncontrados.map((item, idx) => {
-                        const sugerido = sugeridoDe(item);
-                        return (
-                          <tr key={idx}>
-                            <td className={classes.wrapCell}>{item.nombre_original}</td>
-                            <td>{item.correo || '—'}</td>
-                            <td>{item.cuenta || '—'}</td>
-                            <td>{item.folio || '—'}</td>
-                            <td className={classes.wrapCell}>{item.motivo || '—'}</td>
-                            <td>
-                              {correcciones.has(item.indice) ? (
-                                <Text size="xs" c="green" fw={600}>Asignado</Text>
-                              ) : (
-                                <Stack gap={4}>
-                                  {sugerido && (
-                                    <Group gap="xs" wrap="nowrap">
-                                      <Text size="xs" c="dimmed">
-                                        Sugerido: <strong>{sugerido.nombre}</strong> · {sugerido.cuenta}
-                                      </Text>
-                                      <Button size="compact-xs" variant="filled" color="green" onClick={() => confirmarSugerido(item)}>
-                                        Confirmar
-                                      </Button>
-                                    </Group>
-                                  )}
-                                  <Button size="compact-xs" variant="subtle" color="blue" onClick={() => openCorreccionModal(item.indice)}>
-                                    Corregir
-                                  </Button>
-                                </Stack>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            )}
-
-            {noEncontrados.length > 0 && (
-              <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-                <Text size="sm" fw={600}>Hay {noEncontrados.length} fila(s) que no se pudieron registrar</Text>
-                <Text size="xs" c="dimmed">
-                  No traen correo, número de cuenta ni folio. Puedes asignarlas a mano con "Corregir" o continuar a la siguiente materia; quedan en el Excel "Alumnos por revisar" de Reportes.
-                </Text>
-              </Alert>
-            )}
-          </Stack>
-        )}
-      </Stack>
-    );
-  };
-
-  const renderStep5Summary = () => (
-    <Stack gap="md">
-      <Text size="sm" c="dimmed">Resumen del proceso de diagnóstico para el periodo {periodo}.</Text>
-      <div className={classes.configGrid}>
-        {MATERIAS_ORDER.map((m) => {
-          const res = wizardResults.get(m);
-          const config = materiasConfig[m];
-          return (
-            <div key={m} className={`${classes.configCard} ${res ? classes.configCardOk : ''}`}>
-              <Group justify="space-between">
-                <div>
-                  <Text fw={600} size="sm">{MATERIAS_LABELS[m]}</Text>
-                  <Text size="xs" c="dimmed">
-                    {res
-                      ? `${res.encontrados} encontrados · ${res.registrados_nuevos ?? 0} nuevos · ${res.no_encontrados} sin registrar`
-                      : config?.configurada ? 'No procesado' : 'Sin respuestas'}
-                  </Text>
-                </div>
-                {res &&
-                  (res.total_filas === 0 ? (
-                    <IconInfoCircle size={20} color="red" />
-                  ) : (
-                    <IconCircleCheck size={20} color="green" />
-                  ))}
-              </Group>
-            </div>
-          );
-        })}
-      </div>
-      <Group justify="flex-end">
-        <Button color="green" onClick={handleExport} leftSection={<IconFileSpreadsheet size={18} />}>
-          Exportar Excel consolidado
-        </Button>
-      </Group>
-    </Stack>
-  );
+  const faltan = Object.keys(MATERIAS_FINAL).filter((m) => !config[m]?.configurada);
 
   return (
-    <Stack gap="lg">
-      <Group gap="md" wrap="wrap">
-        <TextInput
-          label="Periodo"
-          value={periodo}
-          onChange={(e) => setPeriodo(e.currentTarget.value)}
-          style={{ width: 140 }}
-          size="sm"
-        />
-        <RangoPeriodoInfo periodo={periodo} />
+    <Stack gap="xs">
+      <Group justify="space-between">
+        <Text fw={600} size="sm">
+          Respuestas correctas del periodo
+        </Text>
+        <Button size="compact-xs" variant="subtle" leftSection={<IconFileSpreadsheet size={14} />} onClick={exportar}>
+          Exportar resultados del examen final
+        </Button>
       </Group>
-
-      {renderProgressBar()}
-
-      {loadingStatus ? (
-        <Stack align="center" py="xl">
-          <Text c="dimmed">Cargando estado...</Text>
-        </Stack>
-      ) : (
-        <>
-          {step === 0 && renderStep0Config()}
-          {step >= 1 && step <= 4 && renderStepUpload()}
-          {step === 5 && renderStep5Summary()}
-        </>
+      <SimpleGrid cols={{ base: 2, md: 4 }} spacing="xs">
+        {Object.entries(MATERIAS_FINAL).map(([m, nombre]) => {
+          const ok = config[m]?.configurada;
+          return (
+            <Button
+              key={m}
+              size="xs"
+              variant="light"
+              color={ok ? 'green' : 'orange'}
+              loading={cargando === m}
+              onClick={() => abrir(m)}
+            >
+              {ok ? '✓ ' : ''}
+              {nombre}
+            </Button>
+          );
+        })}
+      </SimpleGrid>
+      {faltan.length > 0 && (
+        <Text size="xs" c="orange.8">
+          Sin configurar en {periodo}: {faltan.map((m) => MATERIAS_FINAL[m]).join(', ')}. Se usará la clave por defecto.
+        </Text>
+      )}
+      {error && (
+        <Text size="xs" c="red">
+          {error}
+        </Text>
       )}
 
-      <Group justify="space-between" mt="md">
-        <Button variant="default" onClick={handleBack} disabled={step === 0}>
-          Atrás
-        </Button>
-        {step === 0 ? (
-          <Button onClick={handleNext}>
-            Comenzar carga
-          </Button>
-        ) : step >= 1 && step <= 4 ? (
-          <Button onClick={handleNext}>
-            {step === 4 ? 'Ver resumen' : `Siguiente: ${MATERIAS_LABELS[MATERIAS_ORDER[step]]}`}
-          </Button>
-        ) : null}
-      </Group>
-
       <Modal
-        opened={showRespuestasModal}
-        onClose={() => setShowRespuestasModal(false)}
-        title={`Respuestas correctas — ${editingMateria ? MATERIAS_LABELS[editingMateria] : ''}`}
+        opened={editando !== null}
+        onClose={() => setEditando(null)}
+        title={`Respuestas correctas — ${editando ? MATERIAS_FINAL[editando] : ''}`}
         size="lg"
         centered
       >
         <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Edita las respuestas correctas para esta materia y periodo.
-          </Text>
           <div className={classes.scrollTable} style={{ maxHeight: 400 }}>
             <table className={classes.table}>
               <thead>
@@ -735,13 +373,13 @@ function DiagnosticoSection() {
                         size="xs"
                         data={['a', 'b', 'c', 'd'].map((v) => ({ value: v, label: v.toUpperCase() }))}
                         value={r.respuesta_correcta}
-                        onChange={(val) => {
+                        onChange={(val) =>
                           setRespuestas((prev) => {
                             const next = [...prev];
                             next[idx] = { ...next[idx], respuesta_correcta: val || '' };
                             return next;
-                          });
-                        }}
+                          })
+                        }
                         style={{ width: 80 }}
                       />
                     </td>
@@ -751,655 +389,409 @@ function DiagnosticoSection() {
             </table>
           </div>
           <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={() => setShowRespuestasModal(false)}>Cancelar</Button>
-            <Button color="green" onClick={handleSaveRespuestas}>Guardar</Button>
+            <Button variant="default" onClick={() => setEditando(null)}>
+              Cancelar
+            </Button>
+            <Button color="green" onClick={guardar}>
+              Guardar
+            </Button>
           </Group>
         </Stack>
       </Modal>
-
-      <CorreccionModal
-        opened={corrigiendoIdx !== null}
-        onClose={() => setCorrigiendoIdx(null)}
-        item={noEncontradoActual ?? null}
-        periodo={periodo}
-        onAsignar={asignarAlumno}
-      />
     </Stack>
   );
 }
 
-type ListaTipo = 'noEncontrados' | 'omitidas' | 'repetidos';
+// ── Paso 4: procesar todo ────────────────────────────────────────
 
-const PAGE_SIZE = 20;
-
-function buscarSugerido(item: { candidatos: CandidatoCoincidencia[] }): CandidatoCoincidencia | undefined {
-  return item.candidatos.find((c) => c.sugerido);
+interface FilaResumen extends Partial<ResumenArchivo> {
+  examen: string;
+  etiqueta: string;
+  error?: string;
 }
 
-function formatFechaHora(valor: string | null): string {
-  if (!valor) return '—';
-  const fecha = new Date(valor);
-  if (Number.isNaN(fecha.getTime())) return valor;
-  return fecha.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+interface ProcesarTodoProps {
+  periodo: string;
+  archivos: Record<string, ArchivoGuardado>;
+  onProcesado: () => void;
 }
 
-interface ListaPaginadaProps<T> {
-  items: T[];
-  headers: string[];
-  getSearchText: (item: T) => string;
-  renderRow: (item: T, index: number) => React.ReactNode;
-}
-
-/** Lista desplegable con buscador (sobre toda la lista) y paginación de 20 en 20. */
-function ListaPaginada<T>({ items, headers, getSearchText, renderRow }: ListaPaginadaProps<T>) {
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
-
-  const filtrados = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => getSearchText(item).toLowerCase().includes(q));
-  }, [items, query, getSearchText]);
-
-  const totalPaginas = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
-  const pagina = Math.min(page, totalPaginas);
-  const visibles = filtrados.slice((pagina - 1) * PAGE_SIZE, pagina * PAGE_SIZE);
-
-  return (
-    <div>
-      <TextInput
-        size="xs"
-        className={classes.listSearch}
-        placeholder="Buscar por nombre, correo o cuenta"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.currentTarget.value);
-          setPage(1);
-        }}
-      />
-      <div className={classes.scrollTable}>
-        <table className={classes.table}>
-          <thead>
-            <tr>
-              {headers.map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {visibles.length === 0 ? (
-              <tr>
-                <td colSpan={headers.length} style={{ textAlign: 'center', color: '#667085' }}>
-                  Sin resultados
-                </td>
-              </tr>
-            ) : (
-              visibles.map((item, idx) => renderRow(item, idx))
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div className={classes.paginationBar}>
-        <Button size="compact-xs" variant="default" disabled={pagina <= 1} onClick={() => setPage(pagina - 1)}>
-          Anterior
-        </Button>
-        <Text className={classes.paginationInfo}>
-          Página {pagina} de {totalPaginas}
-        </Text>
-        <Button size="compact-xs" variant="default" disabled={pagina >= totalPaginas} onClick={() => setPage(pagina + 1)}>
-          Siguiente
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-interface TarjetaCuestionarioProps {
-  cuestionario: 1 | 2;
-  label: string;
-  rango: string;
-  resultado: ResultadoProcesamientoCuestionario | null;
-  uploading: boolean;
-  archivo: File | null;
-  onUpload: (cuestionario: 1 | 2, file: File) => void;
-  onReemplazar: (cuestionario: 1 | 2) => void;
-  listaAbierta: ListaTipo | null;
-  onToggleLista: (tipo: ListaTipo, count: number) => void;
-  correcciones: Map<number, number>;
-  nSugeridos: number;
-  aplicando: boolean;
-  onConfirmarSugerido: (item: CuestionarioNoEncontrado) => void;
-  onConfirmarTodos: () => void;
-  onCorregir: (item: CuestionarioNoEncontrado) => void;
-  onAplicar: () => void;
-}
-
-function TarjetaCuestionario({
-  cuestionario,
-  label,
-  rango,
-  resultado,
-  uploading,
-  archivo,
-  onUpload,
-  onReemplazar,
-  listaAbierta,
-  onToggleLista,
-  correcciones,
-  nSugeridos,
-  aplicando,
-  onConfirmarSugerido,
-  onConfirmarTodos,
-  onCorregir,
-  onAplicar,
-}: TarjetaCuestionarioProps) {
-  const [dragging, setDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const noEncontradosList = resultado?.no_encontrados_detalle ?? [];
-  const omitidasPeriodo = resultado?.omitidas_periodo_detalle ?? [];
-  const repetidosDetalle = resultado?.repetidos_detalle ?? [];
-
-  const omitidasResumen = useMemo(() => {
-    const conteo = new Map<string, number>();
-    for (const o of resultado?.omitidas_detalle ?? []) {
-      const clave = o.periodo_detectado || 'Sin periodo';
-      conteo.set(clave, (conteo.get(clave) ?? 0) + 1);
-    }
-    return [...conteo.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [resultado]);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) onUpload(cuestionario, file);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(true);
-  };
-
-  const handleDragLeave = () => setDragging(false);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) onUpload(cuestionario, file);
-    e.target.value = '';
-  };
-
-  const toggle = (tipo: ListaTipo, count: number) => {
-    if (count <= 0) return;
-    onToggleLista(tipo, count);
-  };
-
-  return (
-    <Card className={classes.card} padding="lg" radius="lg">
-      <Stack gap="md">
-        <div>
-          <Title order={4} className={classes.title}>{label}</Title>
-          <Text className={classes.subtitle}>{rango}</Text>
-        </div>
-
-        {uploading && (
-          <Stack align="center" py="xl">
-            <Text c="dimmed">Procesando {label}...</Text>
-          </Stack>
-        )}
-
-        {!uploading && !resultado && (
-          <div
-            className={`${classes.dropzone} ${dragging ? classes.dropzoneActive : ''}`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onClick={() => fileInputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
-          >
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleInputChange} style={{ display: 'none' }} />
-            <IconUpload size={36} color="#667085" stroke={1.5} />
-            <Text className={classes.dropzoneLabel} mt="sm">
-              Arrastra el {label} aquí o haz clic
-            </Text>
-            <Text className={classes.dropzoneHint}>Formatos: .xlsx, .xls</Text>
-          </div>
-        )}
-
-        {!uploading && resultado && (
-          <Stack gap="md">
-            {resultado.total_filas === 0 && (
-              <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-                El archivo no tiene filas para procesar. Revisa que sea el archivo correcto.
-              </Alert>
-            )}
-            <div className={classes.statsRow}>
-              <div className={`${classes.statBox} ${classes.statBoxGreen}`}>
-                <div className={classes.statNumber}>{resultado.encontrados}</div>
-                <div className={classes.statLabel}>Encontrados</div>
-              </div>
-
-              <div className={`${classes.statBox} ${classes.statBoxBlue}`}>
-                <div className={classes.statNumber}>{resultado.registrados_nuevos ?? 0}</div>
-                <div className={classes.statLabel}>Registrados nuevos</div>
-              </div>
-
-              <div
-                className={`${classes.statBox} ${classes.statBoxRed} ${noEncontradosList.length > 0 ? classes.statBoxClickable : ''} ${listaAbierta === 'noEncontrados' ? classes.statBoxActive : ''}`}
-                onClick={() => toggle('noEncontrados', noEncontradosList.length)}
-                role={noEncontradosList.length > 0 ? 'button' : undefined}
-                tabIndex={noEncontradosList.length > 0 ? 0 : undefined}
-                onKeyDown={(e) => { if (noEncontradosList.length > 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle('noEncontrados', noEncontradosList.length); } }}
-              >
-                <div className={classes.statNumber}>{resultado.no_encontrados}</div>
-                <div className={classes.statLabel}>No se pudieron registrar</div>
-                {noEncontradosList.length > 0 && (
-                  <div className={classes.statExtra}>
-                    {listaAbierta === 'noEncontrados' ? 'Ocultar lista' : 'Ver lista'}
-                  </div>
-                )}
-              </div>
-
-              <div className={`${classes.statBox} ${classes.statBoxYellow} ${listaAbierta === 'omitidas' ? classes.statBoxActive : ''}`}>
-                <div className={classes.statNumber}>{resultado.omitidas_otro_periodo}</div>
-                <div className={classes.statLabel}>Omitidas (otro periodo)</div>
-                {omitidasResumen.length > 0 && (
-                  <div className={classes.statExtra}>
-                    {omitidasResumen.map(([periodo, n]) => `${periodo}: ${n}`).join(' · ')}
-                  </div>
-                )}
-                {omitidasPeriodo.length > 0 && (
-                  <span
-                    className={classes.omitidasAviso}
-                    onClick={() => toggle('omitidas', omitidasPeriodo.length)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle('omitidas', omitidasPeriodo.length); } }}
-                  >
-                    {listaAbierta === 'omitidas' ? 'Ocultar' : `${omitidasPeriodo.length} alumno(s) de ${resultado.periodo} contestaron fuera del rango de fechas`}
-                  </span>
-                )}
-              </div>
-
-              <div
-                className={`${classes.statBox} ${classes.statBoxGray} ${repetidosDetalle.length > 0 ? classes.statBoxClickable : ''} ${listaAbierta === 'repetidos' ? classes.statBoxActive : ''}`}
-                onClick={() => toggle('repetidos', repetidosDetalle.length)}
-                role={repetidosDetalle.length > 0 ? 'button' : undefined}
-                tabIndex={repetidosDetalle.length > 0 ? 0 : undefined}
-                onKeyDown={(e) => { if (repetidosDetalle.length > 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle('repetidos', repetidosDetalle.length); } }}
-              >
-                <div className={classes.statNumber}>{resultado.intentos_repetidos_ignorados}</div>
-                <div className={classes.statLabel}>Repetidos (1er intento)</div>
-                {repetidosDetalle.length > 0 && (
-                  <div className={classes.statExtra}>
-                    {listaAbierta === 'repetidos' ? 'Ocultar lista' : 'Ver lista'}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {listaAbierta === 'noEncontrados' && (
-              <Card padding="md" radius="md" className={classes.expandCard}>
-                <div className={classes.listHeaderBar}>
-                  <Text fw={600} size="sm">
-                    No se pudieron registrar ({noEncontradosList.length})
-                  </Text>
-                  <Group gap="sm">
-                    {nSugeridos > 0 && (
-                      <Button size="xs" variant="outline" color="green" onClick={onConfirmarTodos}>
-                        Confirmar todos los sugeridos ({nSugeridos})
-                      </Button>
-                    )}
-                    {correcciones.size > 0 && (
-                      <Button size="xs" variant="filled" color="blue" loading={aplicando} onClick={onAplicar}>
-                        Aplicar correcciones ({correcciones.size})
-                      </Button>
-                    )}
-                  </Group>
-                </div>
-                <ListaPaginada
-                  items={noEncontradosList}
-                  headers={['Nombre', 'Correo', 'Cuenta', 'Folio', 'Motivo', 'Acción']}
-                  getSearchText={(item) => `${item.nombre_original} ${item.correo ?? ''} ${item.cuenta ?? ''}`}
-                  renderRow={(item) => {
-                    const sugerido = buscarSugerido(item);
-                    const asignado = correcciones.has(item.indice);
-                    return (
-                      <tr key={item.indice}>
-                        <td className={classes.wrapCell}>{item.nombre_original || '—'}</td>
-                        <td className={classes.wrapCell}>{item.correo || '—'}</td>
-                        <td>{item.cuenta || '—'}</td>
-                        <td>{item.folio || '—'}</td>
-                        <td className={classes.wrapCell}>{item.motivo || '—'}</td>
-                        <td>
-                          {asignado ? (
-                            <Text size="xs" c="green" fw={600}>Asignado</Text>
-                          ) : (
-                            <Stack gap={4}>
-                              {sugerido && (
-                                <Group gap="xs" wrap="nowrap">
-                                  <Text size="xs" c="dimmed">
-                                    Sugerido: <strong>{sugerido.nombre}</strong> · {sugerido.cuenta}
-                                  </Text>
-                                  <Button size="compact-xs" variant="filled" color="green" onClick={() => onConfirmarSugerido(item)}>
-                                    Confirmar
-                                  </Button>
-                                </Group>
-                              )}
-                              <Button size="compact-xs" variant="subtle" color="blue" onClick={() => onCorregir(item)}>
-                                Corregir
-                              </Button>
-                            </Stack>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  }}
-                />
-              </Card>
-            )}
-
-            {listaAbierta === 'omitidas' && (
-              <Card padding="md" radius="md" className={classes.expandCard}>
-                <Text fw={600} size="sm" mb="sm">
-                  Alumnos de {resultado.periodo} que contestaron fuera del rango de fechas ({omitidasPeriodo.length})
-                </Text>
-                <ListaPaginada
-                  items={omitidasPeriodo}
-                  headers={['Nombre', 'Correo', 'Fecha de respuesta']}
-                  getSearchText={(item) => `${item.nombre} ${item.correo ?? ''}`}
-                  renderRow={(item, idx) => (
-                    <tr key={idx}>
-                      <td className={classes.wrapCell}>{item.nombre || '—'}</td>
-                      <td className={classes.wrapCell}>{item.correo || '—'}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{formatFechaHora(item.fecha)}</td>
-                    </tr>
-                  )}
-                />
-              </Card>
-            )}
-
-            {listaAbierta === 'repetidos' && (
-              <Card padding="md" radius="md" className={classes.expandCard}>
-                <Text fw={600} size="sm" mb="sm">
-                  Intentos repetidos ignorados ({repetidosDetalle.length})
-                </Text>
-                <ListaPaginada
-                  items={repetidosDetalle}
-                  headers={['Nombre', 'Correo', 'Intento tomado', 'Intento ignorado']}
-                  getSearchText={(item) => `${item.nombre ?? ''} ${item.correo ?? ''}`}
-                  renderRow={(item, idx) => (
-                    <tr key={idx}>
-                      <td className={classes.wrapCell}>{item.nombre || '—'}</td>
-                      <td className={classes.wrapCell}>{item.correo || '—'}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{formatFechaHora(item.fecha_tomado)}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>{formatFechaHora(item.fecha_ignorado)}</td>
-                    </tr>
-                  )}
-                />
-              </Card>
-            )}
-
-            <Group justify="space-between">
-              {archivo && (
-                <Text size="xs" c="dimmed" className={classes.wrapCell}>
-                  Archivo: {archivo.name}
-                </Text>
-              )}
-              <Button size="xs" variant="subtle" color="gray" onClick={() => onReemplazar(cuestionario)}>
-                Reemplazar archivo
-              </Button>
-            </Group>
-          </Stack>
-        )}
-      </Stack>
-    </Card>
-  );
-}
-
-function CuestionarioSection() {
-  const [periodo, setPeriodo] = useState(getCurrentPeriodo());
-  const [archivos, setArchivos] = useState<{ 1?: File; 2?: File }>({});
-  const [resultadoC1, setResultadoC1] = useState<ResultadoProcesamientoCuestionario | null>(null);
-  const [resultadoC2, setResultadoC2] = useState<ResultadoProcesamientoCuestionario | null>(null);
-  const [uploading, setUploading] = useState<1 | 2 | null>(null);
-  const [aplicando, setAplicando] = useState(false);
+function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
+  const [procesando, setProcesando] = useState(false);
+  const [progreso, setProgreso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [avisoOmitidas, setAvisoOmitidas] = useState<string | null>(null);
-  const [correcciones, setCorrecciones] = useState<Record<1 | 2, Map<number, number>>>({
-    1: new Map(),
-    2: new Map(),
-  });
-  const [corrigiendoItem, setCorrigiendoItem] = useState<CuestionarioNoEncontrado | null>(null);
-  const [listaAbierta, setListaAbierta] = useState<{ cuestionario: 1 | 2; tipo: ListaTipo } | null>(null);
+  const [resumen, setResumen] = useState<FilaResumen[] | null>(null);
+  const [juntados, setJuntados] = useState<number | null>(null);
+  // Filas sin registrar de cada examen (las de la segunda vuelta) y las asignadas a mano.
+  const [filas, setFilas] = useState<Record<string, FilaNoRegistrada[]>>({});
+  const [abierto, setAbierto] = useState<string | null>(null);
+  const [correcciones, setCorrecciones] = useState<Record<string, Map<number, number>>>({});
+  const [corrigiendo, setCorrigiendo] = useState<{ examen: string; fila: FilaNoRegistrada } | null>(null);
+  const [aplicando, setAplicando] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
-  const noEncontrados: CuestionarioNoEncontrado[] = [
-    ...(resultadoC1?.no_encontrados_detalle ?? []),
-    ...(resultadoC2?.no_encontrados_detalle ?? []),
-  ];
-
-  const handleFile = useCallback(async (cuestionario: 1 | 2, file: File) => {
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      setError('Solo se permiten archivos .xlsx o .xls');
-      return;
-    }
-    setError(null);
-    setAvisoOmitidas(null);
-    setUploading(cuestionario);
-    try {
-      const result = await uploadCuestionario(cuestionario, periodo, file);
-      setArchivos((prev) => ({ ...prev, [cuestionario]: file }));
-      if (cuestionario === 1) setResultadoC1(result);
-      else setResultadoC2(result);
-      setCorrecciones((prev) => ({ ...prev, [cuestionario]: new Map() }));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al procesar el cuestionario');
-    } finally {
-      setUploading(null);
-    }
+  // Al cambiar de periodo se limpia el resumen anterior.
+  useEffect(() => {
+    setResumen(null);
+    setJuntados(null);
+    setFilas({});
+    setCorrecciones({});
+    setAbierto(null);
+    setAviso(null);
   }, [periodo]);
 
-  const reemplazarArchivo = (cuestionario: 1 | 2) => {
-    setArchivos((prev) => ({ ...prev, [cuestionario]: undefined }));
-    setCorrecciones((prev) => ({ ...prev, [cuestionario]: new Map() }));
-    setAvisoOmitidas(null);
-    if (cuestionario === 1) setResultadoC1(null);
-    else setResultadoC2(null);
-  };
+  const guardados = TODOS_LOS_EXAMENES.filter((e) => archivos[e]);
+  const faltan = TODOS_LOS_EXAMENES.filter((e) => !archivos[e]);
 
-  const sugeridoDe = (item: { candidatos: CandidatoCoincidencia[] }): CandidatoCoincidencia | undefined =>
-    item.candidatos.find((c) => c.sugerido);
-
-  const asignarCorreccion = (indice: number, alumnoId: number) => {
-    if (!corrigiendoItem) return;
-    setCorrecciones((prev) => {
-      const next = { ...prev };
-      const m = new Map(prev[corrigiendoItem.cuestionario as 1 | 2]);
-      m.set(indice, alumnoId);
-      next[corrigiendoItem.cuestionario as 1 | 2] = m;
-      return next;
-    });
-  };
-
-  const confirmarSugerido = (item: CuestionarioNoEncontrado) => {
-    const cand = sugeridoDe(item);
-    if (!cand) return;
-    setCorrecciones((prev) => {
-      const next = { ...prev };
-      const m = new Map(prev[item.cuestionario as 1 | 2]);
-      m.set(item.indice, cand.alumno_id);
-      next[item.cuestionario as 1 | 2] = m;
-      return next;
-    });
-  };
-
-  const confirmarTodosSugeridos = (cuestionario: 1 | 2) => {
-    setCorrecciones((prev) => {
-      const next = { ...prev, 1: new Map(prev[1]), 2: new Map(prev[2]) };
-      noEncontrados
-        .filter((item) => Number(item.cuestionario) === cuestionario)
-        .forEach((item) => {
-          const cand = sugeridoDe(item);
-          if (cand) next[cuestionario].set(item.indice, cand.alumno_id);
-        });
-      return next;
-    });
-  };
-
-  const aplicarCorrecciones = async (solo?: 1 | 2) => {
-    const pendientes = ([1, 2] as const).filter(
-      (c) => correcciones[c].size > 0 && Boolean(archivos[c]) && (solo === undefined || c === solo),
-    );
-    if (pendientes.length === 0) return;
-    setAplicando(true);
+  const procesarTodo = async () => {
+    if (guardados.length === 0) return;
+    setProcesando(true);
     setError(null);
-    setAvisoOmitidas(null);
-    const originales = noEncontrados;
-    try {
-      let totalOmitidas = 0;
-      for (const c of pendientes) {
-        const indicesCorregidos = new Set(correcciones[c].keys());
-        const correccionesArray = Array.from(correcciones[c].entries()).map(([indice, alumno_id]) => ({ indice, alumno_id }));
-        const res = await corregirMatchingCuestionario(c, periodo, archivos[c]!, correccionesArray);
-        const omitidosSet = new Set(res.omitidas_ya_tenian_resultado ?? []);
-        totalOmitidas += omitidosSet.size;
+    setAviso(null);
+    setResumen(null);
+    setJuntados(null);
+    setFilas({});
+    setCorrecciones({});
+    setAbierto(null);
 
-        const detalleQueda = originales.filter(
-          (n) => !(Number(n.cuestionario) === c && (indicesCorregidos.has(n.indice) || omitidosSet.has(n.indice))),
-        );
-        const detalleC = detalleQueda.filter((n) => Number(n.cuestionario) === c);
-        const corregidos = originales.length - detalleQueda.length;
-        const merge = (prev: ResultadoProcesamientoCuestionario | null) =>
-          prev
-            ? {
-                ...prev,
-                encontrados: prev.encontrados + corregidos,
-                no_encontrados: Math.max(0, prev.no_encontrados - corregidos),
-                no_encontrados_detalle: detalleC,
-              }
-            : prev;
-        if (c === 1) setResultadoC1(merge);
-        else setResultadoC2(merge);
-        setCorrecciones((prev) => ({ ...prev, [c]: new Map() }));
+    // Primera vuelta: registra y empareja; sus números son los del resumen.
+    const primera: FilaResumen[] = [];
+    const detalle: Record<string, FilaNoRegistrada[]> = {};
+    for (const [i, examen] of guardados.entries()) {
+      setProgreso(`Primera vuelta: ${ETIQUETA_COMPLETA[examen]} (${i + 1} de ${guardados.length})`);
+      try {
+        const r = await procesarArchivo(periodo, examen);
+        primera.push(r);
+        detalle[examen] = r.no_registrados_detalle;
+      } catch (err) {
+        primera.push({ examen, etiqueta: ETIQUETA_COMPLETA[examen], error: errorTexto(err, 'Error al procesar') });
       }
-      if (totalOmitidas > 0) {
-        setAvisoOmitidas(
-          `${totalOmitidas} fila(s) no se aplicaron porque ese alumno ya tenía resultado de un intento anterior.`,
-        );
+    }
+
+    // Segunda vuelta: junta a los alumnos que ahora se reconocen como la misma
+    // persona y vuelve a pasar los archivos para acomodar sus resultados.
+    let total: number | null = null;
+    try {
+      setProgreso('Segunda vuelta: buscando alumnos registrados dos veces');
+      total = (await juntarRepetidos(periodo)).juntados;
+      for (const [i, examen] of guardados.entries()) {
+        if (primera[i]?.error) continue;
+        setProgreso(`Segunda vuelta: ${ETIQUETA_COMPLETA[examen]} (${i + 1} de ${guardados.length})`);
+        detalle[examen] = (await procesarArchivo(periodo, examen)).no_registrados_detalle;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al corregir matching');
+      setError(`La segunda vuelta no terminó: ${errorTexto(err, 'error desconocido')}`);
+    }
+
+    setResumen(primera);
+    setJuntados(total);
+    setFilas(detalle);
+    setProgreso(null);
+    setProcesando(false);
+    onProcesado();
+  };
+
+  const asignar = (examen: string, indice: number, alumnoId: number) => {
+    setCorrecciones((prev) => {
+      const m = new Map(prev[examen] ?? []);
+      m.set(indice, alumnoId);
+      return { ...prev, [examen]: m };
+    });
+  };
+
+  const aplicar = async (examen: string) => {
+    const pendientes = correcciones[examen];
+    if (!pendientes || pendientes.size === 0) return;
+    setAplicando(examen);
+    setError(null);
+    setAviso(null);
+    try {
+      const r = await corregirArchivo(
+        periodo,
+        examen,
+        [...pendientes.entries()].map(([indice, alumno_id]) => ({ indice, alumno_id })),
+      );
+      const quitadas = new Set([...pendientes.keys()]);
+      setFilas((prev) => ({ ...prev, [examen]: (prev[examen] ?? []).filter((f) => !quitadas.has(f.indice)) }));
+      setCorrecciones((prev) => ({ ...prev, [examen]: new Map() }));
+      const omitidas = r.omitidas_ya_tenian_resultado.length;
+      setAviso(
+        `${ETIQUETA_COMPLETA[examen]}: se asignaron ${r.aplicadas} fila(s).` +
+          (omitidas > 0 ? ` ${omitidas} no se aplicaron porque ese alumno ya tenía resultado.` : ''),
+      );
+      onProcesado();
+    } catch (err) {
+      setError(errorTexto(err, 'No se pudieron aplicar las correcciones'));
     } finally {
-      setAplicando(false);
+      setAplicando(null);
     }
   };
 
-  const toggleLista = (cuestionario: 1 | 2, tipo: ListaTipo, count: number) => {
-    if (count <= 0) return;
-    setListaAbierta((prev) =>
-      prev && prev.cuestionario === cuestionario && prev.tipo === tipo
-        ? null
-        : { cuestionario, tipo },
-    );
-  };
+  const sugeridoDe = (fila: { candidatos: CandidatoCoincidencia[] }) => fila.candidatos.find((c) => c.sugerido);
 
   return (
     <Stack gap="lg">
-      <Group gap="md" wrap="wrap">
-        <TextInput
-          label="Periodo"
-          value={periodo}
-          onChange={(e) => setPeriodo(e.currentTarget.value)}
-          style={{ width: 140 }}
-          size="sm"
-        />
-        <RangoPeriodoInfo periodo={periodo} />
+      <div>
+        <Text fw={600} size="sm" mb="xs">
+          Archivos del periodo ({guardados.length} de {TODOS_LOS_EXAMENES.length})
+        </Text>
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing={6}>
+          {TODOS_LOS_EXAMENES.map((e) => (
+            <Group key={e} gap={6} wrap="nowrap">
+              {archivos[e] ? (
+                <Text size="sm" c="green.8" fw={600}>
+                  ✓
+                </Text>
+              ) : (
+                <Badge size="xs" color="orange" variant="light">
+                  falta
+                </Badge>
+              )}
+              <Text size="sm">{ETIQUETA_COMPLETA[e]}</Text>
+              {archivos[e]?.procesado && (
+                <Text size="xs" c="dimmed">
+                  · procesado
+                </Text>
+              )}
+            </Group>
+          ))}
+        </SimpleGrid>
+      </div>
+
+      {faltan.length > 0 && guardados.length > 0 && (
+        <Alert color="orange" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+          Faltan {faltan.length} archivo(s): {faltan.map((e) => ETIQUETA_COMPLETA[e]).join(', ')}. Puedes procesar los
+          que hay y subir los demás después.
+        </Alert>
+      )}
+      {guardados.length === 0 && (
+        <Alert color="gray" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+          Aún no hay archivos guardados en {periodo}. Súbelos en los pasos 1 a 3.
+        </Alert>
+      )}
+
+      <Group justify="flex-end">
+        <Button
+          size="md"
+          leftSection={<IconPlayerPlay size={18} />}
+          onClick={procesarTodo}
+          loading={procesando}
+          disabled={procesando || guardados.length === 0}
+        >
+          Procesar todo
+        </Button>
       </Group>
 
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        <TarjetaCuestionario
-          cuestionario={1}
-          label="Cuestionario 1"
-          rango="preguntas 1–10"
-          resultado={resultadoC1}
-          uploading={uploading === 1}
-          archivo={archivos[1] ?? null}
-          onUpload={handleFile}
-          onReemplazar={reemplazarArchivo}
-          listaAbierta={listaAbierta?.cuestionario === 1 ? listaAbierta.tipo : null}
-          onToggleLista={(tipo, count) => toggleLista(1, tipo, count)}
-          correcciones={correcciones[1]}
-          nSugeridos={(resultadoC1?.no_encontrados_detalle ?? []).filter((n) => buscarSugerido(n)).length}
-          aplicando={aplicando}
-          onConfirmarSugerido={confirmarSugerido}
-          onConfirmarTodos={() => confirmarTodosSugeridos(1)}
-          onCorregir={setCorrigiendoItem}
-          onAplicar={() => aplicarCorrecciones(1)}
-        />
-        <TarjetaCuestionario
-          cuestionario={2}
-          label="Cuestionario 2"
-          rango="preguntas 11–20"
-          resultado={resultadoC2}
-          uploading={uploading === 2}
-          archivo={archivos[2] ?? null}
-          onUpload={handleFile}
-          onReemplazar={reemplazarArchivo}
-          listaAbierta={listaAbierta?.cuestionario === 2 ? listaAbierta.tipo : null}
-          onToggleLista={(tipo, count) => toggleLista(2, tipo, count)}
-          correcciones={correcciones[2]}
-          nSugeridos={(resultadoC2?.no_encontrados_detalle ?? []).filter((n) => buscarSugerido(n)).length}
-          aplicando={aplicando}
-          onConfirmarSugerido={confirmarSugerido}
-          onConfirmarTodos={() => confirmarTodosSugeridos(2)}
-          onCorregir={setCorrigiendoItem}
-          onAplicar={() => aplicarCorrecciones(2)}
-        />
-      </SimpleGrid>
-
-      {avisoOmitidas && (
-        <Alert color="yellow" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-          {avisoOmitidas}
+      {progreso && (
+        <Alert color="blue" variant="light" radius="md" icon={<Loader size="xs" />}>
+          {progreso}
         </Alert>
       )}
-
       {error && (
-        <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
+        <Alert color="red" variant="light" radius="md" icon={<IconInfoCircle size={18} />} withCloseButton onClose={() => setError(null)}>
           {error}
-          <Group mt="md">
-            <Button size="xs" variant="light" onClick={() => setError(null)}>
-              Intentar de nuevo
-            </Button>
-          </Group>
+        </Alert>
+      )}
+      {aviso && (
+        <Alert color="green" variant="light" radius="md" withCloseButton onClose={() => setAviso(null)}>
+          {aviso}
         </Alert>
       )}
 
-      {noEncontrados.length === 0 &&
-        [resultadoC1, resultadoC2].some((r) => r !== null && r.total_filas > 0) && (
-        <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
-          Todas las filas de los cuestionarios cargados quedaron guardadas para el periodo {periodo} (los alumnos que no existían se registraron).
-        </Alert>
+      {resumen && (
+        <Card padding="md" radius="md" className={classes.expandCard}>
+          <Group justify="space-between" mb="sm" wrap="wrap">
+            <Text fw={600} size="sm">
+              Resumen del periodo {periodo}
+            </Text>
+            {juntados !== null && (
+              <Badge color={juntados > 0 ? 'blue' : 'gray'} variant="light" size="lg">
+                {juntados} alumno(s) juntados en la segunda vuelta
+              </Badge>
+            )}
+          </Group>
+          <div className={classes.scrollTable}>
+            <table className={classes.table}>
+              <thead>
+                <tr>
+                  <th>Examen</th>
+                  <th>Encontrados</th>
+                  <th>Registrados nuevos</th>
+                  <th>No se pudieron registrar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumen.map((f) => {
+                  const pendientes = filas[f.examen] ?? [];
+                  return (
+                    <tr key={f.examen}>
+                      <td>{f.etiqueta}</td>
+                      {f.error ? (
+                        <td colSpan={3} className={classes.wrapCell} style={{ color: 'var(--mantine-color-red-7)' }}>
+                          {f.error}
+                        </td>
+                      ) : (
+                        <>
+                          <td>{f.encontrados}</td>
+                          <td>{f.registrados_nuevos}</td>
+                          <td>
+                            {pendientes.length > 0 ? (
+                              <Button
+                                size="compact-xs"
+                                variant={abierto === f.examen ? 'filled' : 'light'}
+                                color="red"
+                                onClick={() => setAbierto(abierto === f.examen ? null : f.examen)}
+                              >
+                                {pendientes.length} · {abierto === f.examen ? 'ocultar' : 'ver'}
+                              </Button>
+                            ) : (
+                              0
+                            )}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {abierto && (
+            <Card padding="md" radius="md" mt="md" withBorder>
+              <Group justify="space-between" mb="sm" wrap="wrap">
+                <Text fw={600} size="sm">
+                  {ETIQUETA_COMPLETA[abierto]}: no se pudieron registrar ({(filas[abierto] ?? []).length})
+                </Text>
+                {(correcciones[abierto]?.size ?? 0) > 0 && (
+                  <Button size="xs" loading={aplicando === abierto} onClick={() => aplicar(abierto)}>
+                    Aplicar correcciones ({correcciones[abierto]?.size})
+                  </Button>
+                )}
+              </Group>
+              <div className={classes.scrollTable}>
+                <table className={classes.table}>
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Correo</th>
+                      <th>Motivo</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(filas[abierto] ?? []).map((fila) => {
+                      const corregible = resumen.find((r) => r.examen === abierto)?.corregible;
+                      const asignado = correcciones[abierto]?.has(fila.indice);
+                      const sugerido = sugeridoDe(fila);
+                      return (
+                        <tr key={fila.indice}>
+                          <td className={classes.wrapCell}>{fila.nombre_original || '—'}</td>
+                          <td className={classes.wrapCell}>{fila.correo || '—'}</td>
+                          <td className={classes.wrapCell}>{fila.motivo}</td>
+                          <td>
+                            {!corregible ? (
+                              <Text size="xs" c="dimmed">
+                                —
+                              </Text>
+                            ) : asignado ? (
+                              <Text size="xs" c="green" fw={600}>
+                                Asignado
+                              </Text>
+                            ) : (
+                              <Group gap={4} wrap="nowrap">
+                                {sugerido && (
+                                  <Button
+                                    size="compact-xs"
+                                    color="green"
+                                    title={`Sugerido: ${sugerido.nombre}`}
+                                    onClick={() => asignar(abierto, fila.indice, sugerido.alumno_id)}
+                                  >
+                                    Confirmar sugerido
+                                  </Button>
+                                )}
+                                <Button
+                                  size="compact-xs"
+                                  variant="subtle"
+                                  onClick={() => setCorrigiendo({ examen: abierto, fila })}
+                                >
+                                  Corregir
+                                </Button>
+                              </Group>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+          <Text size="xs" c="dimmed" mt="sm">
+            Las filas que no se pudieron registrar no traen correo, cuenta ni folio. También salen en Reportes → "Alumnos
+            por revisar".
+          </Text>
+        </Card>
       )}
 
       <CorreccionModal
-        opened={corrigiendoItem !== null}
-        onClose={() => setCorrigiendoItem(null)}
-        item={corrigiendoItem}
+        opened={corrigiendo !== null}
+        onClose={() => setCorrigiendo(null)}
+        item={
+          corrigiendo
+            ? {
+                ...corrigiendo.fila,
+                cuenta: corrigiendo.fila.cuenta ?? null,
+                folio: corrigiendo.fila.folio ?? null,
+              }
+            : null
+        }
         periodo={periodo}
-        onAsignar={asignarCorreccion}
+        onAsignar={(indice, alumnoId) => {
+          if (corrigiendo) asignar(corrigiendo.examen, indice, alumnoId);
+        }}
       />
     </Stack>
   );
 }
 
+// ── Página ───────────────────────────────────────────────────────
+
 export default function AdminCargaExamenes() {
+  const { periodo } = usePeriodo();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const activeTab: TabId = isTabId(tabParam) ? tabParam : 'cuestionario';
 
-  const handleTabChange = (value: string | null) => {
+  const [archivos, setArchivos] = useState<Record<string, ArchivoGuardado>>({});
+  const [cargando, setCargando] = useState(false);
+  const [subiendo, setSubiendo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const ultimaConsulta = useRef(0);
+
+  const cargarArchivos = useCallback(async () => {
+    const consulta = ++ultimaConsulta.current;
+    setCargando(true);
+    try {
+      const lista = await listarArchivos(periodo);
+      if (consulta === ultimaConsulta.current) setArchivos(Object.fromEntries(lista.map((a) => [a.examen, a])));
+    } catch (err) {
+      if (consulta === ultimaConsulta.current) {
+        setArchivos({});
+        setError(errorTexto(err, 'No se pudieron cargar los archivos guardados'));
+      }
+    } finally {
+      if (consulta === ultimaConsulta.current) setCargando(false);
+    }
+  }, [periodo]);
+
+  useEffect(() => {
+    setError(null);
+    cargarArchivos();
+  }, [cargarArchivos]);
+
+  const irA = (value: string | null) => {
     if (!isTabId(value)) return;
     setSearchParams(
       (prev) => {
@@ -1411,90 +803,127 @@ export default function AdminCargaExamenes() {
     );
   };
 
-  // Enlaces viejos a la pestaña de alumnos: ahora es su propia página.
+  const handleArchivo = async (examen: string, file: File) => {
+    if (!/\.xlsx?$/i.test(file.name)) {
+      setError('Solo se permiten archivos .xlsx o .xls');
+      return;
+    }
+    setError(null);
+    setSubiendo(examen);
+    try {
+      const guardado = await guardarArchivo(periodo, examen, file);
+      setArchivos((prev) => ({ ...prev, [examen]: guardado }));
+    } catch (err) {
+      setError(errorTexto(err, 'No se pudo guardar el archivo'));
+    } finally {
+      setSubiendo(null);
+    }
+  };
+
+  // Enlaces viejos a la pestaña de alumnos: ahora son las herramientas de prueba.
   if (tabParam === 'alumnos') {
-    return <Navigate to="/admin/alumnos" replace />;
+    return <Navigate to="/admin/herramientas" replace />;
   }
+
+  const guardadosDe = (paso: PasoCarga) => paso.examenes.filter((e) => archivos[e.id]).length;
+  const completo = (paso: PasoCarga) => guardadosDe(paso) === paso.examenes.length;
+  const lista = Object.values(archivos);
+  const procesado = lista.length > 0 && lista.every((a) => a.procesado);
 
   return (
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          Carga de exámenes
+          Carga de exámenes · {periodo}
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Sube todos los archivos del periodo y procésalos juntos. Abajo puedes subir uno por uno para revisar casos sueltos.
+          Sube los archivos paso por paso (solo se guardan) y al final presiona "Procesar todo".
         </Text>
+        <RangoPeriodoInfo periodo={periodo} />
       </div>
 
-      <div style={{ marginTop: 'var(--mantine-spacing-lg)' }}>
-        <CargaPeriodoSection />
-      </div>
+      {error && (
+        <Alert color="red" variant="light" radius="md" mt="md" icon={<IconInfoCircle size={18} />} withCloseButton onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
 
-      <Title order={4} mt="xl">
-        Subir un examen a la vez
-      </Title>
-
-      <Tabs value={activeTab} onChange={handleTabChange} mt="sm">
+      <Tabs value={activeTab} onChange={irA} mt="lg">
         <Tabs.List>
-          <Tabs.Tab value="cuestionario" leftSection={<IconClipboardList size={16} />}>
-            1. Examen diagnóstico
-          </Tabs.Tab>
-          <Tabs.Tab value="diagnostico" leftSection={<IconFileSpreadsheet size={16} />}>
-            2. Examen final
-          </Tabs.Tab>
-          <Tabs.Tab value="webassign" leftSection={<IconWorld size={16} />}>
-            3. WebAssign
+          {PASOS_CARGA.map((paso) => (
+            <Tabs.Tab
+              key={paso.id}
+              value={paso.id}
+              leftSection={completo(paso) ? <IconCircleCheck size={16} color="var(--mantine-color-green-6)" /> : <paso.icono size={16} />}
+            >
+              {paso.numero}. {paso.titulo}
+            </Tabs.Tab>
+          ))}
+          <Tabs.Tab
+            value="procesar"
+            leftSection={procesado ? <IconCircleCheck size={16} color="var(--mantine-color-green-6)" /> : <IconPlayerPlay size={16} />}
+          >
+            4. Procesar todo
           </Tabs.Tab>
         </Tabs.List>
 
-        <Tabs.Panel value="cuestionario" pt="md">
+        {PASOS_CARGA.map((paso, i) => (
+          <Tabs.Panel key={paso.id} value={paso.id} pt="md">
+            <Card className={classes.card} padding="xl" radius="lg">
+              <Stack gap="lg">
+                <Group justify="space-between" align="flex-start" wrap="wrap">
+                  <div>
+                    <Title order={3} className={classes.title}>
+                      Paso {paso.numero} · {paso.titulo}
+                    </Title>
+                    <Text className={classes.subtitle}>
+                      {paso.descripcion} Al subir un archivo solo se guarda; si subes otro del mismo examen, reemplaza
+                      al anterior.
+                    </Text>
+                  </div>
+                  <Badge size="lg" variant="light" color={completo(paso) ? 'green' : 'gray'}>
+                    {cargando ? '…' : `${guardadosDe(paso)} de ${paso.examenes.length}`}
+                  </Badge>
+                </Group>
+
+                {paso.id === 'diagnostico' && <RespuestasFinal periodo={periodo} />}
+
+                <SimpleGrid cols={{ base: 1, sm: 2, md: paso.examenes.length > 4 ? 3 : paso.examenes.length }} spacing="sm">
+                  {paso.examenes.map((examen) => (
+                    <RanuraArchivo
+                      key={examen.id}
+                      examen={examen}
+                      archivo={archivos[examen.id]}
+                      subiendo={subiendo === examen.id}
+                      deshabilitado={subiendo !== null}
+                      onArchivo={handleArchivo}
+                    />
+                  ))}
+                </SimpleGrid>
+
+                <Group justify="flex-end">
+                  <Button rightSection={<IconArrowRight size={16} />} onClick={() => irA(TABS[i + 1])}>
+                    Siguiente paso
+                  </Button>
+                </Group>
+              </Stack>
+            </Card>
+          </Tabs.Panel>
+        ))}
+
+        <Tabs.Panel value="procesar" pt="md">
           <Card className={classes.card} padding="xl" radius="lg">
             <Stack gap="lg">
               <div>
                 <Title order={3} className={classes.title}>
-                  Procesar exámenes de diagnóstico
+                  Paso 4 · Procesar todo
                 </Title>
                 <Text className={classes.subtitle}>
-                  Sube los dos cuestionarios de Google Forms (preguntas 1–10 y 11–20) del examen diagnóstico para el periodo indicado.
+                  Procesa los archivos guardados en orden (cuestionarios → finales → WebAssign) y da una segunda vuelta
+                  para juntar a los alumnos que se registraron dos veces. Los alumnos que no existen se registran solos.
                 </Text>
               </div>
-
-              <CuestionarioSection />
-            </Stack>
-          </Card>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="diagnostico" pt="md">
-          <Card className={classes.card} padding="xl" radius="lg">
-            <Stack gap="lg">
-              <div>
-                <Title order={3} className={classes.title}>
-                  Procesar examen final
-                </Title>
-                <Text className={classes.subtitle}>
-                  Sube el archivo Excel de Google Forms con las respuestas de los alumnos.
-                </Text>
-              </div>
-
-              <DiagnosticoSection />
-            </Stack>
-          </Card>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="webassign" pt="md">
-          <Card className={classes.card} padding="xl" radius="lg">
-            <Stack gap="lg">
-              <div>
-                <Title order={3} className={classes.title}>
-                  Procesar resultados de WebAssign
-                </Title>
-                <Text className={classes.subtitle}>
-                  Sube el archivo Excel de WebAssign de cada carrera. Los resultados se guardan en escala de 0 a 10.
-                </Text>
-              </div>
-
-              <WebAssignSection />
+              <ProcesarTodo periodo={periodo} archivos={archivos} onProcesado={cargarArchivos} />
             </Stack>
           </Card>
         </Tabs.Panel>

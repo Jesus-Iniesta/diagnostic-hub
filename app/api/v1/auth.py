@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Form, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -6,6 +7,7 @@ from app.core.config import settings
 from app.core.security import (
     create_access_token,
     get_current_user,
+    hash_password,
     invalid_credentials,
     verify_password,
 )
@@ -104,4 +106,26 @@ async def read_current_user(current_user: User = Depends(get_current_user)) -> U
 @router.post("/logout", status_code=204, summary="Cerrar sesión (borra la cookie)")
 async def logout(response: Response) -> None:
     response.delete_cookie(settings.jwt_cookie_name, path="/")
+    return None
+
+class CambiarPasswordPayload(BaseModel):
+    actual: str
+    nueva: str = Field(min_length=8)
+
+
+@router.post("/cambiar-password", status_code=204, summary="Cambiar mi contraseña")
+async def cambiar_password(
+    payload: CambiarPasswordPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    if current_user.auth_method == AuthMethod.NUMERO_CUENTA:
+        raise HTTPException(status_code=400, detail="Los alumnos entran con su número de cuenta, sin contraseña.")
+    if not current_user.hashed_password or not verify_password(payload.actual, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="La contraseña actual no es correcta.")
+    if payload.nueva == payload.actual:
+        raise HTTPException(status_code=400, detail="La contraseña nueva debe ser distinta de la actual.")
+    user = await db.get(User, current_user.id)
+    user.hashed_password = hash_password(payload.nueva)
+    await db.commit()
     return None

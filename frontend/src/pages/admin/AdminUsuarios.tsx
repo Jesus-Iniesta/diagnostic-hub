@@ -1,8 +1,10 @@
 import {
+  Alert,
   Button,
   Card,
   Group,
   Modal,
+  PasswordInput,
   Select,
   SegmentedControl,
   SimpleGrid,
@@ -11,10 +13,11 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconSearch, IconX } from '@tabler/icons-react';
+import { IconInfoCircle, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { fetchUsers } from '../../lib/usersApi';
+import { useAuth } from '../../contexts/AuthContext';
+import { crearUsuario, editarUsuario, fetchUsers, type UsuarioPersonalDatos } from '../../lib/usersApi';
 import type { User } from '../../types';
 import classes from './AdminUsuarios.module.css';
 
@@ -23,8 +26,122 @@ const ROLE_OPTIONS = [
   { value: 'administrador', label: 'Administrador' },
   { value: 'profesor', label: 'Profesor' },
   { value: 'acreditador', label: 'Acreditador' },
-  { value: 'alumno', label: 'Alumno' },
 ];
+
+// Roles que se pueden asignar desde aquí (los alumnos están en "Alumnos").
+const ROLES_PERSONAL = ROLE_OPTIONS.filter((r) => r.value);
+
+const LARGO_MINIMO_PASSWORD = 8;
+
+interface UsuarioModalProps {
+  /** null = cerrado; 'nuevo' = crear; un usuario = editar. */
+  usuario: User | 'nuevo' | null;
+  onClose: () => void;
+  onGuardado: () => void;
+}
+
+function UsuarioModal({ usuario, onClose, onGuardado }: UsuarioModalProps) {
+  const editando = usuario !== null && usuario !== 'nuevo' ? usuario : null;
+  const [datos, setDatos] = useState<UsuarioPersonalDatos>({
+    nombre: '', apellido_paterno: '', apellido_materno: '', correo_personal: '', rfc: '', rol: 'administrador', password: '',
+  });
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setError(null);
+    setDatos({
+      nombre: editando?.nombre ?? '',
+      apellido_paterno: editando?.apellido_paterno ?? '',
+      apellido_materno: editando?.apellido_materno ?? '',
+      correo_personal: editando?.correo_personal ?? '',
+      rfc: editando?.rfc ?? '',
+      rol: editando?.role.name ?? 'administrador',
+      password: '',
+    });
+  }, [usuario]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const campo = (key: keyof UsuarioPersonalDatos) => ({
+    value: (datos[key] as string) ?? '',
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.currentTarget.value;
+      setDatos((d) => ({ ...d, [key]: value }));
+    },
+  });
+
+  const guardar = async () => {
+    if (!datos.nombre.trim() || !datos.apellido_paterno.trim() || !datos.correo_personal.trim()) {
+      setError('Nombre, apellido paterno y correo son obligatorios.');
+      return;
+    }
+    if (datos.rol === 'profesor' && !datos.rfc?.trim()) {
+      setError('El profesor entra con su RFC: escríbelo.');
+      return;
+    }
+    const password = datos.password ?? '';
+    if ((!editando || password) && password.length < LARGO_MINIMO_PASSWORD) {
+      setError(`La contraseña debe tener al menos ${LARGO_MINIMO_PASSWORD} caracteres.`);
+      return;
+    }
+    setGuardando(true);
+    setError(null);
+    try {
+      const payload = { ...datos, rfc: datos.rfc?.trim() || null, password: password || undefined };
+      if (editando) await editarUsuario(editando.id, payload);
+      else await crearUsuario(payload);
+      onGuardado();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el usuario');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Modal opened={usuario !== null} onClose={onClose} title={editando ? 'Editar usuario' : 'Nuevo usuario'} centered>
+      <Stack gap="sm">
+        <TextInput label="Nombre(s)" withAsterisk {...campo('nombre')} />
+        <SimpleGrid cols={2}>
+          <TextInput label="Apellido paterno" withAsterisk {...campo('apellido_paterno')} />
+          <TextInput label="Apellido materno" {...campo('apellido_materno')} />
+        </SimpleGrid>
+        <TextInput label="Correo" withAsterisk {...campo('correo_personal')} />
+        <Select
+          label="Rol"
+          data={ROLES_PERSONAL}
+          value={datos.rol}
+          onChange={(v) => setDatos((d) => ({ ...d, rol: v ?? 'administrador' }))}
+          allowDeselect={false}
+        />
+        <TextInput
+          label="RFC"
+          description="Los profesores entran con su RFC; administradores y acreditadores, con su correo."
+          withAsterisk={datos.rol === 'profesor'}
+          {...campo('rfc')}
+        />
+        <PasswordInput
+          label={editando ? 'Nueva contraseña (opcional)' : 'Contraseña'}
+          description={editando ? 'Déjala vacía para no cambiarla.' : `Mínimo ${LARGO_MINIMO_PASSWORD} caracteres.`}
+          withAsterisk={!editando}
+          {...campo('password')}
+        />
+        {error && (
+          <Alert color="red" variant="light" icon={<IconInfoCircle size={18} />}>
+            {error}
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={guardar} loading={guardando}>
+            Guardar
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
 
 const ACTIVO_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -53,6 +170,9 @@ export default function AdminUsuarios() {
   const [busqueda, setBusqueda] = useState('');
   const [busquedaInput, setBusquedaInput] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editando, setEditando] = useState<User | 'nuevo' | null>(null);
+  const [cambiandoEstado, setCambiandoEstado] = useState<number | null>(null);
+  const { user: yo } = useAuth();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +183,7 @@ export default function AdminUsuarios() {
         role_name: roleFilter || undefined,
         activo: activoFilter === 'true' ? true : activoFilter === 'false' ? false : undefined,
         busqueda: busqueda || undefined,
+        solo_personal: true,
         limit: PAGE_SIZE,
         offset,
       });
@@ -94,6 +215,19 @@ export default function AdminUsuarios() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  const cambiarEstado = async (u: User) => {
+    setCambiandoEstado(u.id);
+    setError(null);
+    try {
+      await editarUsuario(u.id, { activo: !u.activo });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cambiar el estado');
+    } finally {
+      setCambiandoEstado(null);
+    }
+  };
+
   return (
     <>
       <div className={classes.welcome}>
@@ -101,20 +235,25 @@ export default function AdminUsuarios() {
           Usuarios
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Consulta y gestiona los usuarios del sistema.
+          Personal del sistema: administradores, profesores y acreditadores. Los alumnos están en "Alumnos".
         </Text>
       </div>
 
       <Card className={classes.card} padding="xl" radius="lg" mt="lg">
         <Stack gap="lg">
-          <div>
-            <Title order={3} className={classes.title}>
-              Filtros de búsqueda
-            </Title>
-            <Text className={classes.subtitle}>
-              Filtra por rol, estado o texto libre.
-            </Text>
-          </div>
+          <Group justify="space-between" align="flex-start">
+            <div>
+              <Title order={3} className={classes.title}>
+                Filtros de búsqueda
+              </Title>
+              <Text className={classes.subtitle}>
+                Filtra por rol, estado o texto libre.
+              </Text>
+            </div>
+            <Button leftSection={<IconPlus size={16} />} onClick={() => setEditando('nuevo')}>
+              Nuevo usuario
+            </Button>
+          </Group>
 
           <div className={classes.filtersRow}>
             <div className={classes.filterGroup}>
@@ -187,6 +326,7 @@ export default function AdminUsuarios() {
                       <th className={classes.hideOnMobile}>Auth</th>
                       <th>Estado</th>
                       <th className={classes.hideOnMobile}>Creado</th>
+                      <th>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -207,6 +347,24 @@ export default function AdminUsuarios() {
                           </span>
                         </td>
                         <td className={classes.hideOnMobile}>{new Date(u.created_at).toLocaleDateString()}</td>
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <Group gap={4} wrap="nowrap">
+                            <Button size="compact-xs" variant="subtle" onClick={() => setEditando(u)}>
+                              Editar
+                            </Button>
+                            <Button
+                              size="compact-xs"
+                              variant="subtle"
+                              color={u.activo ? 'red' : 'green'}
+                              loading={cambiandoEstado === u.id}
+                              disabled={u.id === yo?.id}
+                              title={u.id === yo?.id ? 'No puedes desactivarte a ti mismo' : undefined}
+                              onClick={() => cambiarEstado(u)}
+                            >
+                              {u.activo ? 'Desactivar' : 'Activar'}
+                            </Button>
+                          </Group>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -243,6 +401,15 @@ export default function AdminUsuarios() {
           )}
         </Stack>
       </Card>
+
+      <UsuarioModal
+        usuario={editando}
+        onClose={() => setEditando(null)}
+        onGuardado={() => {
+          setEditando(null);
+          load();
+        }}
+      />
 
       <Modal
         opened={selectedUser !== null}

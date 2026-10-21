@@ -5,6 +5,7 @@ from app.api.deps import DbSession
 from app.core.security import require_permission
 from app.models.user import User
 from app.services.alumnos_admin_service import (
+    FILTROS,
     DatosAlumnoError,
     actualizar_datos,
     listar_alumnos,
@@ -31,12 +32,15 @@ async def get_alumnos(
     db: DbSession,
     busqueda: str | None = Query(default=None),
     periodo: str | None = Query(default=None),
+    filtro: str = Query(default="todos", description="todos | por_revisar | provisionales | sin_cuenta"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     _current_user: User = Depends(require_permission("administrar_sistema")),
 ):
+    if filtro not in FILTROS:
+        raise HTTPException(status_code=400, detail=f"Filtro no válido: {filtro}")
     return await listar_alumnos(
-        db, busqueda=busqueda, periodo=periodo, limit=limit, offset=offset
+        db, busqueda=busqueda, periodo=periodo, filtro=filtro, limit=limit, offset=offset
     )
 
 

@@ -25,6 +25,13 @@ export interface DashboardStats {
   periodos_con_datos: number;
   level_distribution: LevelDistribution[];
   quick_summary: QuickSummary;
+  /** Posibles duplicados + sin cuenta + filas que no se pudieron registrar. */
+  por_revisar: {
+    posibles_duplicados: number;
+    sin_cuenta: number;
+    no_registradas: number;
+    total: number;
+  };
 }
 
 export interface PeriodoResponse {

@@ -7,26 +7,91 @@ import {
   Loader,
   Modal,
   Radio,
+  SegmentedControl,
   Select,
   SimpleGrid,
+  Switch,
   Stack,
   Text,
   TextInput,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { IconArrowsJoin, IconInfoCircle, IconPencil, IconSearch } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
+import { usePeriodo } from '../../contexts/PeriodoContext';
 import {
   editarDatosAlumno,
   listarAlumnosAdmin,
   unirAlumnos,
   type AlumnoAdmin,
+  type FiltroAlumnos,
+  type MarcaExamen,
 } from '../../lib/alumnosAdminApi';
 import { getProgramas, type Ingenieria } from '../../lib/dashboardApi';
 import classes from './AdminCargaAlumnos.module.css';
 
 const PAGE_SIZE = 20;
+
+const FILTROS: { value: FiltroAlumnos; label: string }[] = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'por_revisar', label: 'Por revisar' },
+  { value: 'provisionales', label: 'Provisionales' },
+  { value: 'sin_cuenta', label: 'Sin cuenta' },
+];
+
+function esFiltro(v: string | null): v is FiltroAlumnos {
+  return FILTROS.some((f) => f.value === v);
+}
+
+const MARCAS: { key: MarcaExamen; label: string; nombre: string }[] = [
+  { key: 'c1', label: 'C1', nombre: 'Cuestionario 1' },
+  { key: 'c2', label: 'C2', nombre: 'Cuestionario 2' },
+  { key: 'algebra', label: 'Álg', nombre: 'Final Álgebra' },
+  { key: 'trigonometria', label: 'Trig', nombre: 'Final Trigonometría' },
+  { key: 'geometria', label: 'Geo', nombre: 'Final Geometría' },
+  { key: 'calculo', label: 'Cálc', nombre: 'Final Cálculo' },
+  { key: 'wa', label: 'WA', nombre: 'WebAssign' },
+];
+
+/** Las 7 marcas cortas con ✓ o —; al pasar el mouse se ve el detalle. */
+function MarcasExamenes({ alumno }: { alumno: AlumnoAdmin }) {
+  const detalle = MARCAS.map((m) => {
+    const lista = alumno.marcas[m.key];
+    if (!lista?.length) return `${m.nombre}: sin resultado`;
+    // Solo se agrega el detalle si dice algo más (carrera de WebAssign o periodo).
+    const extra = lista.filter((t) => t !== m.nombre);
+    return `${m.nombre}: ✓${extra.length ? ` (${extra.join(', ')})` : ''}`;
+  }).join('\n');
+  return (
+    <Tooltip label={<span style={{ whiteSpace: 'pre-line' }}>{detalle}</span>} withArrow multiline w={300}>
+      <div style={{ display: 'flex', gap: 4, whiteSpace: 'nowrap' }}>
+        {MARCAS.map((m) => {
+          const tiene = Boolean(alumno.marcas[m.key]?.length);
+          return (
+            <span
+              key={m.key}
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                lineHeight: '18px',
+                padding: '0 5px',
+                borderRadius: 4,
+                border: `1px solid ${tiene ? 'var(--mantine-color-green-3)' : 'var(--mantine-color-gray-3)'}`,
+                background: tiene ? 'var(--mantine-color-green-0)' : 'transparent',
+                color: tiene ? 'var(--mantine-color-green-8)' : 'var(--mantine-color-gray-5)',
+              }}
+            >
+              {m.label} {tiene ? '✓' : '—'}
+            </span>
+          );
+        })}
+      </div>
+    </Tooltip>
+  );
+}
 
 function errorTexto(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -339,10 +404,13 @@ function UnirModal({ alumno, onClose, onUnido }: UnirModalProps) {
 // ── Página ───────────────────────────────────────────────────────
 
 export default function AdminListaAlumnos() {
+  const { periodo } = usePeriodo();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filtroParam = searchParams.get('filtro');
+  const filtro: FiltroAlumnos = esFiltro(filtroParam) ? filtroParam : 'todos';
+  const [soloPeriodo, setSoloPeriodo] = useState(true);
   const [busqueda, setBusqueda] = useState('');
-  const [periodo, setPeriodo] = useState('');
   const busquedaDebounced = useDebounced(busqueda);
-  const periodoDebounced = useDebounced(periodo);
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<AlumnoAdmin[]>([]);
   const [total, setTotal] = useState(0);
@@ -366,7 +434,8 @@ export default function AdminListaAlumnos() {
     try {
       const r = await listarAlumnosAdmin({
         busqueda: busquedaDebounced.trim() || undefined,
-        periodo: periodoDebounced.trim() || undefined,
+        periodo: soloPeriodo ? periodo : undefined,
+        filtro,
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       });
@@ -380,7 +449,7 @@ export default function AdminListaAlumnos() {
     } finally {
       if (consulta === ultimaConsulta.current) setLoading(false);
     }
-  }, [busquedaDebounced, periodoDebounced, page]);
+  }, [busquedaDebounced, periodo, soloPeriodo, filtro, page]);
 
   useEffect(() => {
     cargar();
@@ -388,7 +457,19 @@ export default function AdminListaAlumnos() {
 
   useEffect(() => {
     setPage(1);
-  }, [busquedaDebounced, periodoDebounced]);
+  }, [busquedaDebounced, periodo, soloPeriodo, filtro]);
+
+  const cambiarFiltro = (v: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (v === 'todos') next.delete('filtro');
+        else next.set('filtro', v);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -396,7 +477,7 @@ export default function AdminListaAlumnos() {
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          Lista de alumnos
+          Alumnos · {periodo}
         </Text>
         <Text className={classes.welcomeSubtitle}>
           Corrige la cuenta, el folio o la ingeniería de un alumno, o une dos registros que son la misma persona.
@@ -414,14 +495,22 @@ export default function AdminListaAlumnos() {
               onChange={(e) => setBusqueda(e.currentTarget.value)}
               style={{ flex: 1, minWidth: 220 }}
             />
-            <TextInput
-              label="Periodo de ingreso"
-              placeholder="Ej. 2026B"
-              value={periodo}
-              onChange={(e) => setPeriodo(e.currentTarget.value)}
-              style={{ width: 160 }}
+            <Switch
+              label={`Solo ${periodo}`}
+              description="Ingresaron o tienen exámenes en el periodo"
+              checked={soloPeriodo}
+              onChange={(e) => setSoloPeriodo(e.currentTarget.checked)}
+              mb={4}
             />
           </Group>
+
+          <SegmentedControl data={FILTROS} value={filtro} onChange={cambiarFiltro} style={{ alignSelf: 'flex-start' }} />
+          {filtro === 'por_revisar' && (
+            <Text size="xs" c="dimmed">
+              Posibles duplicados (mismo nombre o marcados al registrarse) y alumnos sin número de cuenta. Las filas que
+              no se pudieron registrar están en Reportes → "Alumnos por revisar".
+            </Text>
+          )}
 
           {aviso && (
             <Alert color="green" variant="light" withCloseButton onClose={() => setAviso(null)}>
@@ -475,8 +564,8 @@ export default function AdminListaAlumnos() {
                       <td>{a.numero_folio || '—'}</td>
                       <td>{a.ingenieria || '—'}</td>
                       <td>{a.periodo_ingreso}</td>
-                      <td className={classes.wrapCell} style={{ fontSize: 12 }}>
-                        {a.examenes.length > 0 ? a.examenes.join(', ') : '—'}
+                      <td>
+                        <MarcasExamenes alumno={a} />
                       </td>
                       <td>
                         <Group gap={4} wrap="nowrap">

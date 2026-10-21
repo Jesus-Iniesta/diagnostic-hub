@@ -15,7 +15,12 @@ export interface AlumnoAdmin {
   periodo_ingreso: string;
   es_provisional: boolean;
   examenes: string[];
+  /** Exámenes con resultado por marca (c1, c2, algebra, trigonometria, geometria, calculo, wa). */
+  marcas: Partial<Record<MarcaExamen, string[]>>;
 }
+
+export type MarcaExamen = 'c1' | 'c2' | 'algebra' | 'trigonometria' | 'geometria' | 'calculo' | 'wa';
+export type FiltroAlumnos = 'todos' | 'por_revisar' | 'provisionales' | 'sin_cuenta';
 
 export interface AlumnosAdminPage {
   items: AlumnoAdmin[];
@@ -27,12 +32,14 @@ export interface AlumnosAdminPage {
 export function listarAlumnosAdmin(params: {
   busqueda?: string;
   periodo?: string;
+  filtro?: FiltroAlumnos;
   limit?: number;
   offset?: number;
 }): Promise<AlumnosAdminPage> {
   const qs = new URLSearchParams();
   if (params.busqueda) qs.set('busqueda', params.busqueda);
   if (params.periodo) qs.set('periodo', params.periodo);
+  if (params.filtro && params.filtro !== 'todos') qs.set('filtro', params.filtro);
   if (params.limit) qs.set('limit', String(params.limit));
   if (params.offset) qs.set('offset', String(params.offset));
   return apiFetch<AlumnosAdminPage>(`${URL_BASE}?${qs.toString()}`);

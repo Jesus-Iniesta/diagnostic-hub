@@ -37,9 +37,17 @@ class DashboardRepository:
     async def get_stats(
         self, periodo: str, ingenieria_clave: str | None = None
     ) -> dict:
-        alumnos_total = (
-            await self.db.execute(select(func.count()).select_from(Alumno))
-        ).scalar_one()
+        from app.services.alumnos_admin_service import grupos_por_revisar
+
+        # Solo los alumnos del periodo (ingresaron en él o tienen resultados en él).
+        grupos = await grupos_por_revisar(self.db, periodo.strip())
+        alumnos_total = len(grupos["alumnos"])
+        por_revisar = {
+            "posibles_duplicados": len(grupos["duplicados"]),
+            "sin_cuenta": len(grupos["sin_cuenta"]),
+            "no_registradas": len(grupos["no_registradas"]),
+        }
+        por_revisar["total"] = sum(por_revisar.values())
 
         programas_activos = (
             await self.db.execute(
@@ -80,6 +88,7 @@ class DashboardRepository:
             "periodos_con_datos": periodos_con_datos,
             "level_distribution": level_distribution,
             "quick_summary": quick_summary,
+            "por_revisar": por_revisar,
         }
 
     async def _get_level_distribution(

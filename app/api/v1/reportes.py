@@ -8,6 +8,7 @@ from app.services.alumnos_admin_service import (
     casos_por_revisar,
     generar_excel_por_revisar,
 )
+from app.services.carga_periodo_service import marcar_creani_descargado
 from app.services.reportes_service import (
     generar_excel_reporte,
     get_periodos_disponibles,
@@ -30,6 +31,9 @@ async def download_excel(
     _current_user: User = Depends(require_permission("consultar_estadisticas")),
 ):
     content = await generar_excel_reporte(db, periodo, licenciatura)
+    if not licenciatura:
+        # Último paso del periodo en Inicio ("Descarga el CREANI").
+        await marcar_creani_descargado(db, periodo)
     suffix = f"_{licenciatura}" if licenciatura else ""
     filename = f"reporte{ suffix}_{periodo}.xlsx"
     return Response(

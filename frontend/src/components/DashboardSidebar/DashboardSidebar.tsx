@@ -28,16 +28,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import classes from './DashboardSidebar.module.css';
 
+// En el orden en que se trabaja un periodo.
 const NAV_ITEMS = [
   { id: 'inicio', label: 'Inicio', icon: IconHome, to: '/admin' },
-  { id: 'alumnos', label: 'Carga de alumnos', icon: IconUserPlus, to: '/admin/alumnos' },
-  { id: 'lista-alumnos', label: 'Lista de alumnos', icon: IconListDetails, to: '/admin/lista-alumnos' },
   { id: 'carga', label: 'Carga de exámenes', icon: IconUpload, to: '/admin/carga' },
+  { id: 'alumnos', label: 'Alumnos', icon: IconListDetails, to: '/admin/alumnos' },
   { id: 'reportes', label: 'Reportes', icon: IconReport, to: '/admin/reportes' },
+  { id: 'ligas', label: 'Ligas de exámenes', icon: IconLink, to: '/admin/ligas' },
   { id: 'configuracion', label: 'Configuración', icon: IconSettings, to: '/admin/configuracion' },
   { id: 'usuarios', label: 'Usuarios', icon: IconUsers, to: '/admin/usuarios' },
-  { id: 'ligas', label: 'Ligas exámenes', icon: IconLink, to: '/admin/ligas' },
-  { id: 'seguridad', label: 'Seguridad', icon: IconShield },
+  { id: 'seguridad', label: 'Seguridad', icon: IconShield, to: '/admin/seguridad' },
+  { id: 'herramientas', label: 'Herramientas de prueba', icon: IconUserPlus, to: '/admin/herramientas' },
 ] as const;
 
 export type SidebarItemId = (typeof NAV_ITEMS)[number]['id'];
@@ -52,7 +53,8 @@ interface SidebarNavItem {
 function initialActiveFromPath(pathname: string): SidebarItemId {
   if (pathname.startsWith('/admin/configuracion')) return 'configuracion';
   if (pathname.startsWith('/admin/alumnos')) return 'alumnos';
-  if (pathname.startsWith('/admin/lista-alumnos')) return 'lista-alumnos';
+  if (pathname.startsWith('/admin/herramientas')) return 'herramientas';
+  if (pathname.startsWith('/admin/seguridad')) return 'seguridad';
   if (pathname.startsWith('/admin/carga')) return 'carga';
   if (pathname.startsWith('/admin/reportes')) return 'reportes';
   if (pathname.startsWith('/admin/usuarios')) return 'usuarios';

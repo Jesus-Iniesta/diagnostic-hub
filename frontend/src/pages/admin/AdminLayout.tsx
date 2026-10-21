@@ -5,6 +5,7 @@ import { Outlet } from 'react-router-dom';
 
 import DashboardHeader from '../../components/DashboardHeader/DashboardHeader';
 import DashboardSidebar from '../../components/DashboardSidebar/DashboardSidebar';
+import { PeriodoProvider } from '../../contexts/PeriodoContext';
 import classes from './AdminLayout.module.css';
 
 export default function AdminLayout() {
@@ -22,32 +23,34 @@ export default function AdminLayout() {
   };
 
   return (
-    <AppShell
-      layout="alt"
-      header={{ height: 88 }}
-      navbar={{
-        width: desktopCollapsed ? 88 : 326,
-        breakpoint: 'md',
-        collapsed: { mobile: !mobileOpened },
-      }}
-      padding={0}
-    >
-      <AppShell.Navbar className={classes.navbar}>
-        <DashboardSidebar
-          collapsed={desktopCollapsed}
-          onNavigate={closeMobile}
-        />
-      </AppShell.Navbar>
+    <PeriodoProvider>
+      <AppShell
+        layout="alt"
+        header={{ height: 88 }}
+        navbar={{
+          width: desktopCollapsed ? 88 : 326,
+          breakpoint: 'md',
+          collapsed: { mobile: !mobileOpened },
+        }}
+        padding={0}
+      >
+        <AppShell.Navbar className={classes.navbar}>
+          <DashboardSidebar
+            collapsed={desktopCollapsed}
+            onNavigate={closeMobile}
+          />
+        </AppShell.Navbar>
 
-      <AppShell.Header className={classes.header}>
-        <DashboardHeader onToggle={handleToggle} />
-      </AppShell.Header>
+        <AppShell.Header className={classes.header}>
+          <DashboardHeader onToggle={handleToggle} />
+        </AppShell.Header>
 
-      <AppShell.Main className={classes.mainArea}>
-        <Box className={classes.main}>
-          <Outlet />
-        </Box>
-      </AppShell.Main>
-    </AppShell>
+        <AppShell.Main className={classes.mainArea}>
+          <Box className={classes.main}>
+            <Outlet />
+          </Box>
+        </AppShell.Main>
+      </AppShell>
+    </PeriodoProvider>
   );
 }

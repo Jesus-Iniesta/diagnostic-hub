@@ -72,7 +72,7 @@ export default function StudentsLevelChart({
           <div>
             <Text className={classes.title}>Distribución de alumnos por nivel</Text>
             <Text className={classes.subtitle}>
-              Resultados del examen diagnóstico
+              Examen final
             </Text>
           </div>
         </Group>

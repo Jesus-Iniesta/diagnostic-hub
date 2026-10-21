@@ -6,6 +6,8 @@ from app.core.security import require_permission
 from app.models.user import User
 from app.services.carga_periodo_service import (
     CargaPeriodoError,
+    corregir_archivo,
+    estado_periodo,
     guardar_archivo,
     juntar_repetidos,
     listar_archivos,
@@ -23,6 +25,43 @@ class ProcesarArchivoPayload(BaseModel):
 
 class JuntarPayload(BaseModel):
     periodo: str
+
+
+class Correccion(BaseModel):
+    indice: int
+    alumno_id: int
+
+
+class CorregirArchivoPayload(BaseModel):
+    periodo: str
+    examen: str
+    correcciones: list[Correccion]
+
+
+@router.get("/estado", summary="Avance del periodo (archivos, procesado, por revisar, CREANI)")
+async def get_estado(
+    db: DbSession,
+    periodo: str = Query(...),
+    _current_user: User = Depends(require_permission("cargar_diagnostico")),
+):
+    try:
+        return await estado_periodo(db, periodo)
+    except CargaPeriodoError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/corregir", summary="Asignar a mano filas de un archivo guardado")
+async def post_corregir(
+    db: DbSession,
+    payload: CorregirArchivoPayload,
+    _current_user: User = Depends(require_permission("cargar_diagnostico")),
+):
+    try:
+        return await corregir_archivo(
+            db, payload.periodo, payload.examen, [c.model_dump() for c in payload.correcciones]
+        )
+    except (CargaPeriodoError, ArchivoExcelError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/archivos", summary="Archivos guardados del periodo")

@@ -19,11 +19,14 @@ class UserRepository:
         activo: bool | None = None,
         limit: int = 20,
         offset: int = 0,
+        roles: tuple[str, ...] | None = None,
     ) -> tuple[list[User], int]:
         conditions = []
 
         if role_name:
             conditions.append(Role.name == role_name)
+        if roles:
+            conditions.append(Role.name.in_(roles))
 
         if busqueda:
             term = f"%{busqueda}%"
@@ -40,7 +43,7 @@ class UserRepository:
             conditions.append(User.activo == activo)
 
         query = select(User)
-        if role_name:
+        if role_name or roles:
             query = query.join(Role, User.role_id == Role.id)
 
         result = await self.db.execute(
@@ -53,7 +56,7 @@ class UserRepository:
         items = list(result.scalars().unique().all())
 
         count_query = select(func.count()).select_from(User)
-        if role_name:
+        if role_name or roles:
             count_query = count_query.join(Role, User.role_id == Role.id)
         count_query = count_query.where(*conditions)
         total = (await self.db.execute(count_query)).scalar_one()

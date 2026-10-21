@@ -5,6 +5,7 @@ import {
   IconUserCheck,
 } from '@tabler/icons-react';
 import type { ReactElement } from 'react';
+import { Link } from 'react-router-dom';
 
 import type { QuickSummary as QuickSummaryData } from '../../lib/dashboardApi';
 import { dashboardColors } from '../../theme/theme';
@@ -12,6 +13,8 @@ import classes from './QuickSummary.module.css';
 
 interface QuickSummaryProps {
   summary: QuickSummaryData | null;
+  /** Posibles duplicados + sin cuenta + no se pudieron registrar. */
+  porRevisar: number | null;
   loading: boolean;
 }
 
@@ -35,9 +38,10 @@ interface SummaryItem {
   color: string;
   lightColor: string;
   statusColor: string;
+  to?: string;
 }
 
-function buildItems(summary: QuickSummaryData): SummaryItem[] {
+function buildItems(summary: QuickSummaryData, porRevisar: number): SummaryItem[] {
   return [
     {
       icon: <IconClock size={20} aria-hidden="true" />,
@@ -59,23 +63,19 @@ function buildItems(summary: QuickSummaryData): SummaryItem[] {
     },
     {
       icon: <IconAlertTriangle size={20} aria-hidden="true" />,
-      title: 'Pendientes',
-      text: `${summary.alumnos_pendientes.toLocaleString()} alumnos`,
-      status:
-        summary.alumnos_pendientes === 0
-          ? 'Todos procesados'
-          : 'Requieren revisión',
+      title: `Por revisar: ${porRevisar.toLocaleString()}`,
+      text: 'Posibles duplicados, sin cuenta y no registrados',
+      status: porRevisar === 0 ? 'Nada por revisar' : 'Ver en Alumnos →',
       color: dashboardColors.orange,
       lightColor: dashboardColors.orangeLight,
-      statusColor: summary.alumnos_pendientes === 0
-        ? dashboardColors.green
-        : dashboardColors.orange,
+      statusColor: porRevisar === 0 ? dashboardColors.green : dashboardColors.orange,
+      to: '/admin/alumnos?filtro=por_revisar',
     },
   ];
 }
 
-export default function QuickSummary({ summary, loading }: QuickSummaryProps) {
-  const items = summary ? buildItems(summary) : [];
+export default function QuickSummary({ summary, porRevisar, loading }: QuickSummaryProps) {
+  const items = summary ? buildItems(summary, porRevisar ?? 0) : [];
 
   return (
     <Card className={classes.card} padding="xl" radius="lg">
@@ -102,9 +102,20 @@ export default function QuickSummary({ summary, loading }: QuickSummaryProps) {
                 <Stack gap={2} style={{ minWidth: 0 }}>
                   <Text className={classes.itemTitle}>{item.title}</Text>
                   <Text className={classes.itemText}>{item.text}</Text>
-                  <Text className={classes.itemStatus} style={{ color: item.statusColor }}>
-                    {item.status}
-                  </Text>
+                  {item.to ? (
+                    <Text
+                      component={Link}
+                      to={item.to}
+                      className={classes.itemStatus}
+                      style={{ color: item.statusColor, textDecoration: 'none' }}
+                    >
+                      {item.status}
+                    </Text>
+                  ) : (
+                    <Text className={classes.itemStatus} style={{ color: item.statusColor }}>
+                      {item.status}
+                    </Text>
+                  )}
                 </Stack>
               </Group>
             </div>

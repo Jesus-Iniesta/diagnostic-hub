@@ -1,8 +1,6 @@
 import {
   Box,
   Grid,
-  Group,
-  Select,
   SimpleGrid,
   Skeleton,
   Text,
@@ -16,13 +14,14 @@ import {
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 
+import PasosPeriodo from '../../components/PasosPeriodo/PasosPeriodo';
 import QuickSummary from '../../components/QuickSummary/QuickSummary';
 import StatCard from '../../components/StatCard/StatCard';
 import StudentsLevelChart from '../../components/StudentsLevelChart/StudentsLevelChart';
 import SystemAlert from '../../components/SystemAlert/SystemAlert';
+import { usePeriodo } from '../../contexts/PeriodoContext';
 import {
   getDashboardStats,
-  getPeriodos,
   getProgramas,
   type DashboardStats,
   type Ingenieria,
@@ -46,7 +45,7 @@ const STAT_CONFIGS: StatConfig[] = [
     color: dashboardColors.blue,
     lightColor: dashboardColors.blueLight,
     title: 'Alumnos',
-    description: 'Totales registrados',
+    description: 'Del periodo',
     getValue: (s) => s.alumnos_total,
   },
   {
@@ -76,33 +75,25 @@ const STAT_CONFIGS: StatConfig[] = [
 ];
 
 export default function AdminDashboard() {
-  const [periodos, setPeriodos] = useState<string[]>([]);
-  const [periodo, setPeriodo] = useState<string | null>(null);
+  const { periodo } = usePeriodo();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [programs, setPrograms] = useState<Ingenieria[]>([]);
   const [programa, setPrograma] = useState<string | null>(null);
-  const [loadingPeriodos, setLoadingPeriodos] = useState(true);
   const [loadingStats, setLoadingStats] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([getPeriodos(), getProgramas()])
-      .then(([periodosData, programasData]) => {
-        if (mounted) {
-          setPeriodos(periodosData);
-          if (periodosData.length > 0) setPeriodo(periodosData[0]);
-          setPrograms(programasData);
-        }
+    getProgramas()
+      .then((programasData) => {
+        if (mounted) setPrograms(programasData);
       })
-      .finally(() => {
-        if (mounted) setLoadingPeriodos(false);
-      });
+      .catch(() => undefined);
     return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
-    if (!periodo) return;
     let mounted = true;
+    setStats(null);
     setLoadingStats(true);
     getDashboardStats(periodo, programa ?? undefined)
       .then((data) => {
@@ -113,8 +104,6 @@ export default function AdminDashboard() {
       });
     return () => { mounted = false; };
   }, [periodo, programa]);
-
-  const periodoSelectData = periodos.map((p) => ({ value: p, label: p }));
 
   const programSelectData = [
     { value: '__all__', label: 'Todos los programas' },
@@ -129,22 +118,16 @@ export default function AdminDashboard() {
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
-          {welcome.title}
+          Inicio · {periodo}
         </Text>
-        <Text className={classes.welcomeSubtitle}>{welcome.subtitle}</Text>
-
-        <Group gap="sm" mt="md">
-          <Select
-            data={periodoSelectData}
-            value={periodo}
-            onChange={setPeriodo}
-            disabled={loadingPeriodos}
-            placeholder="Selecciona periodo"
-            w={160}
-            size="sm"
-          />
-        </Group>
+        <Text className={classes.welcomeSubtitle}>
+          {welcome.title.replace(' 👋', '')} {welcome.subtitle}
+        </Text>
       </div>
+
+      <Box mt="xl">
+        <PasosPeriodo periodo={periodo} />
+      </Box>
 
       {loadingStats && !stats && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mt="xl">
@@ -182,7 +165,11 @@ export default function AdminDashboard() {
           />
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 3 }}>
-          <QuickSummary summary={stats?.quick_summary ?? null} loading={loadingStats} />
+          <QuickSummary
+            summary={stats?.quick_summary ?? null}
+            porRevisar={stats?.por_revisar?.total ?? null}
+            loading={loadingStats}
+          />
         </Grid.Col>
       </Grid>
 

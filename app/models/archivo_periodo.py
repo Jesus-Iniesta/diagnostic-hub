@@ -28,3 +28,5 @@ class ArchivoPeriodo(Base):
     subido_en: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, nullable=False
     )
+    # Última vez que se procesó; si es anterior a subido_en, falta procesarlo.
+    procesado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
