@@ -50,6 +50,8 @@ class IndiceFiRead(BaseModel):
     valores: IndiceFiValores
     maximo: float
     categorias: list[IndiceFiCategoria]
+    # Apagado: la asistencia vale 0 y no cuenta para el máximo.
+    usar_asistencia: bool
     # Periodo del que se copió la configuración (este periodo aún no tiene la suya).
     heredado_de: str | None
     es_default: bool
@@ -59,3 +61,4 @@ class IndiceFiUpdate(BaseModel):
     periodo: str
     valores: IndiceFiValores
     categorias: list[IndiceFiCategoria]
+    usar_asistencia: bool = False

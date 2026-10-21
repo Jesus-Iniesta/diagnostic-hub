@@ -42,6 +42,15 @@ export interface AlumnoPerfil {
   ingenieria_id?: number | null;
   usuario: UserBrief;
   ingenieria: IngenieriaBrief | null;
+  /** Lo que el sistema ya conoce del alumno (p. ej. la cuenta que puso en el examen final). */
+  sugeridos?: DatosSugeridos;
+}
+
+export interface DatosSugeridos {
+  correo_personal: string | null;
+  numero_cuenta: string | null;
+  numero_folio: string | null;
+  ingenieria_id: number | null;
 }
 
 export interface CamposFaltantes {

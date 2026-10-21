@@ -18,7 +18,7 @@ from app.models.user import User
 from app.repositories.configuracion_repository import ConfiguracionRepository
 from app.repositories.diagnostico_repository import DiagnosticoRepository
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
-from app.services.alumnos_provisionales import nombre_desde_completo
+from app.services.alumnos_provisionales import nombre_desde_examen_final
 from app.services.alumnos_provisionales_service import completar_nombre_si_falta
 from app.services.excel_utils import leer_filas
 from app.services.identificadores_service import (
@@ -787,7 +787,7 @@ async def procesar_examen_diagnostico(
             correos=[f["email"]],
             cuentas=[f["cuenta"]],
             folios=[f["folio"]],
-            nombre=nombre_desde_completo(f["nombre"]),
+            nombre=nombre_desde_examen_final(f["nombre"]),
             indice=f["idx"],
         )
         if alumno_id is None:
@@ -823,7 +823,7 @@ async def procesar_examen_diagnostico(
             indice=e["idx"],
         )
         await completar_nombre_si_falta(
-            db, e["alumno_id"], nombre_desde_completo(e["nombre"]), alumno_details
+            db, e["alumno_id"], nombre_desde_examen_final(e["nombre"]), alumno_details
         )
         if e["alumno_id"] in vistos:
             repetidos += 1
@@ -1015,7 +1015,7 @@ async def corregir_matching_diagnostico(
                 alumno_id, correos=[email], cuentas=[cuenta], folios=[folio], indice=idx
             )
             await completar_nombre_si_falta(
-                db, alumno_id, nombre_desde_completo(nombres_fila[idx]), alumno_details
+                db, alumno_id, nombre_desde_examen_final(nombres_fila[idx]), alumno_details
             )
         for j, (idx, _ts) in enumerate(items):
             if j > 0:

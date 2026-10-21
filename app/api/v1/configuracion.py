@@ -155,8 +155,9 @@ async def read_indice_fi(
     return IndiceFiRead(
         periodo=normalizado,
         valores=config["valores"],
-        maximo=maximo_indice(config["valores"]),
+        maximo=maximo_indice(config["valores"], config["usar_asistencia"]),
         categorias=config["categorias"],
+        usar_asistencia=config["usar_asistencia"],
         heredado_de=config["heredado_de"],
         es_default=config["es_default"],
     )
@@ -177,19 +178,21 @@ async def update_indice_fi(
         raise HTTPException(status_code=400, detail=PERIODO_INVALIDO_MSG)
     valores = payload.valores.model_dump()
     categorias = [c.model_dump() for c in payload.categorias]
-    generales, por_categoria = validar_config(valores, categorias)
+    usar_asistencia = payload.usar_asistencia
+    generales, por_categoria = validar_config(valores, categorias, usar_asistencia)
     if generales or por_categoria:
         errores = list(generales)
         for i, msgs in sorted(por_categoria.items()):
             nombre = categorias[i]["nombre"].strip() or f"Categoría {i + 1}"
             errores.extend(f"{nombre}: {m}" for m in msgs)
         raise HTTPException(status_code=400, detail=" ".join(errores))
-    await guardar_config(db, normalizado, valores, categorias)
+    await guardar_config(db, normalizado, valores, categorias, usar_asistencia)
     return IndiceFiRead(
         periodo=normalizado,
         valores=valores,
-        maximo=maximo_indice(valores),
+        maximo=maximo_indice(valores, usar_asistencia),
         categorias=categorias,
+        usar_asistencia=usar_asistencia,
         heredado_de=None,
         es_default=False,
     )

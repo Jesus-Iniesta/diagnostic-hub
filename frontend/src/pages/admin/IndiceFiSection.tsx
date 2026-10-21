@@ -7,6 +7,7 @@ import {
   NumberInput,
   SimpleGrid,
   Stack,
+  Switch,
   Text,
   TextInput,
   Textarea,
@@ -58,10 +59,16 @@ function fmtValor(valor: number): string {
   return String(Number(valor.toFixed(2)));
 }
 
+/** Componentes que cuentan para el índice (la asistencia solo si se usa). */
+function activos(usarAsistencia: boolean) {
+  return COMPONENTES.filter(({ key }) => usarAsistencia || key !== 'asistencia');
+}
+
 /** Mismas reglas que indice_fi_service.validar_config. */
 function validar(
   valores: Record<ComponenteIndice, Numero>,
   categorias: CategoriaForm[],
+  usarAsistencia: boolean,
 ): { generales: string[]; porCategoria: Map<number, string[]> } {
   const generales: string[] = [];
   const porCategoria = new Map<number, string[]>();
@@ -69,7 +76,7 @@ function validar(
     porCategoria.set(i, [...(porCategoria.get(i) ?? []), msg]);
   };
 
-  const nums = COMPONENTES.map(({ key }) => valores[key]);
+  const nums = activos(usarAsistencia).map(({ key }) => valores[key]);
   if (nums.some((v) => v === '')) {
     generales.push('Escribe el valor de cada componente.');
   } else if (nums.some((v) => (v as number) < 0)) {
@@ -143,6 +150,7 @@ export default function IndiceFiSection() {
     final: '',
   });
   const [categorias, setCategorias] = useState<CategoriaForm[]>([]);
+  const [usarAsistencia, setUsarAsistencia] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
@@ -159,6 +167,7 @@ export default function IndiceFiSection() {
         setConfig(data);
         setValores(data.valores);
         setCategorias(data.categorias.map(aForm));
+        setUsarAsistencia(data.usar_asistencia);
       })
       .catch((err) => {
         if (mounted) setError(err instanceof Error ? err.message : 'No se pudo consultar el índice.');
@@ -172,12 +181,12 @@ export default function IndiceFiSection() {
   }, [periodo]);
 
   const { generales, porCategoria } = useMemo(
-    () => validar(valores, categorias),
-    [valores, categorias],
+    () => validar(valores, categorias, usarAsistencia),
+    [valores, categorias, usarAsistencia],
   );
   const hayErrores = generales.length > 0 || porCategoria.size > 0;
 
-  const maximo = COMPONENTES.reduce(
+  const maximo = activos(usarAsistencia).reduce(
     (a, { key }) => a + (valores[key] === '' ? 0 : (valores[key] as number)),
     0,
   );
@@ -222,6 +231,7 @@ export default function IndiceFiSection() {
           maximo: max as number,
           comentario,
         })),
+        usar_asistencia: usarAsistencia,
       });
       setConfig(data);
       setGuardado(true);
@@ -261,6 +271,17 @@ export default function IndiceFiSection() {
           <Text className={classes.fieldLabel} mb="xs">
             Valor de cada componente
           </Text>
+          <Switch
+            label="Usar asistencia"
+            description="Apagado: la asistencia vale 0 y no cuenta para el máximo del índice. La columna sigue saliendo vacía en el CREANI."
+            checked={usarAsistencia}
+            onChange={(e) => {
+              cambiar();
+              setUsarAsistencia(e.currentTarget.checked);
+            }}
+            disabled={cargando}
+            mb="md"
+          />
           <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="md">
             {COMPONENTES.map(({ key, label }) => (
               <NumberInput
@@ -271,7 +292,7 @@ export default function IndiceFiSection() {
                 min={0}
                 step={0.5}
                 decimalScale={2}
-                disabled={cargando}
+                disabled={cargando || (key === 'asistencia' && !usarAsistencia)}
               />
             ))}
           </SimpleGrid>

@@ -25,8 +25,11 @@ VALORES_DEFAULT: dict[str, float] = {
     "asistencia": 1.0,
     "diagnostico": 3.0,
     "webassign": 3.0,
-    "final": 3.0,
+    "final": 4.0,
 }
+
+# Por ahora la asistencia no se usa: vale 0 y no cuenta para el máximo.
+USAR_ASISTENCIA_DEFAULT = False
 
 CATEGORIAS_DEFAULT: list[dict] = [
     {
@@ -95,8 +98,12 @@ def periodo_actual() -> str:
     return f"{hoy.year}{'A' if hoy.month <= 6 else 'B'}"
 
 
-def maximo_indice(valores: dict[str, float]) -> float:
-    return round(sum(valores[c] for c in COMPONENTES), 4)
+def componentes_activos(usar_asistencia: bool) -> tuple[str, ...]:
+    return COMPONENTES if usar_asistencia else tuple(c for c in COMPONENTES if c != "asistencia")
+
+
+def maximo_indice(valores: dict[str, float], usar_asistencia: bool) -> float:
+    return round(sum(valores[c] for c in componentes_activos(usar_asistencia)), 4)
 
 
 def fmt_num(valor: float) -> str:
@@ -109,7 +116,7 @@ def fmt_num(valor: float) -> str:
 
 
 def validar_config(
-    valores: dict[str, float], categorias: list[dict]
+    valores: dict[str, float], categorias: list[dict], usar_asistencia: bool
 ) -> tuple[list[str], dict[int, list[str]]]:
     """Errores generales y errores por categoría (índice en la lista recibida)."""
     generales: list[str] = []
@@ -118,12 +125,12 @@ def validar_config(
     def agregar(i: int, msg: str) -> None:
         por_categoria.setdefault(i, []).append(msg)
 
-    for c in COMPONENTES:
+    for c in componentes_activos(usar_asistencia):
         v = valores.get(c)
         if v is None or v < 0:
             generales.append("Los valores de los componentes no pueden ser negativos.")
             break
-    maximo = maximo_indice(valores) if not generales else 0.0
+    maximo = maximo_indice(valores, usar_asistencia) if not generales else 0.0
     if not generales and maximo <= 0:
         generales.append("La suma de los valores de los componentes debe ser mayor que 0.")
 
@@ -191,7 +198,9 @@ def _normalizar(raw: dict) -> dict:
         }
         for c in raw.get("categorias", [])
     ]
-    return {"valores": valores, "categorias": categorias}
+    # Sin la llave (guardada antes de existir el interruptor) se toma el valor por defecto.
+    usar_asistencia = bool(raw.get("usar_asistencia", USAR_ASISTENCIA_DEFAULT))
+    return {"valores": valores, "categorias": categorias, "usar_asistencia": usar_asistencia}
 
 
 async def obtener_config(db: AsyncSession, periodo: str) -> dict:
@@ -220,17 +229,25 @@ async def obtener_config(db: AsyncSession, periodo: str) -> dict:
     return {
         "valores": dict(VALORES_DEFAULT),
         "categorias": [dict(c) for c in CATEGORIAS_DEFAULT],
+        "usar_asistencia": USAR_ASISTENCIA_DEFAULT,
         "heredado_de": None,
         "es_default": True,
     }
 
 
 async def guardar_config(
-    db: AsyncSession, periodo: str, valores: dict[str, float], categorias: list[dict]
+    db: AsyncSession,
+    periodo: str,
+    valores: dict[str, float],
+    categorias: list[dict],
+    usar_asistencia: bool,
 ) -> None:
     await ConfiguracionRepository(db).set(
         f"{INDICE_FI_KEY_PREFIX}{periodo}",
-        json.dumps({"valores": valores, "categorias": categorias}, ensure_ascii=False),
+        json.dumps(
+            {"valores": valores, "categorias": categorias, "usar_asistencia": usar_asistencia},
+            ensure_ascii=False,
+        ),
     )
 
 
@@ -269,9 +286,11 @@ def calcular_indice(datos: dict, config: dict) -> dict:
     `datos` usa las llaves de reportes_service._load_data: aciertos_c1_<materia>,
     aciertos_c2_<materia>, <materia>_trabajo, <materia>_examen y puntaje_<materia>.
     Lo que no hizo cuenta 0. La asistencia no se registra en el sistema (la llena
-    el coordinador en el CREANI), así que aquí siempre vale 0.
+    el coordinador en el CREANI), así que aquí siempre vale 0; si no se usa,
+    tampoco cuenta para el máximo.
     """
     valores = config["valores"]
+    usar_asistencia = config["usar_asistencia"]
 
     parte_diag = valores["diagnostico"] / 8
     cuestionarios = {}
@@ -313,12 +332,16 @@ def calcular_indice(datos: dict, config: dict) -> dict:
     suma = asistencia + diagnostico["total"] + webassign["total"] + final["total"]
     indice = redondear_indice(suma)
     return {
-        "asistencia": {"total": asistencia, "valor": valores["asistencia"]},
+        "asistencia": {
+            "total": asistencia,
+            "valor": valores["asistencia"] if usar_asistencia else 0.0,
+            "usar": usar_asistencia,
+        },
         "diagnostico": diagnostico,
         "webassign": webassign,
         "final": final,
         "indice": indice,
-        "maximo": maximo_indice(valores),
+        "maximo": maximo_indice(valores, usar_asistencia),
         "categoria": categoria_para(indice, config["categorias"]),
     }
 

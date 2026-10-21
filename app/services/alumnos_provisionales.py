@@ -117,6 +117,21 @@ def nombre_desde_completo(raw: object | None) -> tuple[str, str, str] | None:
     return s.title(), "", ""
 
 
+def nombre_desde_examen_final(raw: object | None) -> tuple[str, str, str] | None:
+    """'Juan Andrick Juarez Arzate' -> ('Juan Andrick', 'Juarez', 'Arzate').
+
+    Las dos últimas palabras son los apellidos. Con menos de tres palabras no
+    se puede separar y se deja completo en `nombre` (como nombre_desde_completo).
+    """
+    completo = nombre_desde_completo(raw)
+    if completo is None:
+        return None
+    palabras = completo[0].split()
+    if len(palabras) < 3:
+        return completo
+    return " ".join(palabras[:-2]), palabras[-2], palabras[-1]
+
+
 YA_REGISTRADO = "ya_registrado"
 
 

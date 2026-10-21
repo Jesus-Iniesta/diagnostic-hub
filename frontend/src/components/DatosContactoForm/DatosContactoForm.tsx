@@ -255,10 +255,13 @@ function getMissingFields(perfil: AlumnoPerfil | null): MissingField[] {
 }
 
 function valorActual(perfil: AlumnoPerfil, key: string): string {
-  if (key === 'ingenieria_id') return perfil.ingenieria_id != null ? String(perfil.ingenieria_id) : '';
+  const sugerido = (perfil.sugeridos as unknown as Record<string, unknown> | undefined)?.[key];
+  const texto = (val: unknown) => (val === null || val === undefined ? '' : String(val));
+  if (key === 'ingenieria_id') return texto(perfil.ingenieria_id ?? sugerido);
   const usuario = perfil.usuario as unknown as Record<string, unknown>;
   const val = key in usuario ? usuario[key] : (perfil as unknown as Record<string, unknown>)[key];
-  return val === null || val === undefined ? '' : String(val);
+  // Si el perfil no lo tiene, se llena con lo que el sistema ya conoce del alumno.
+  return texto(val) || texto(sugerido);
 }
 
 const CATEGORY_LABELS: Record<string, string> = {

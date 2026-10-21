@@ -19,6 +19,7 @@ from app.services.indice_fi_service import (
     calcular_indice,
     formula_categoria,
     formula_indice,
+    maximo_indice,
     obtener_config,
 )
 
@@ -187,7 +188,8 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
     letra = {nombre: get_column_letter(c) for nombre, c in col.items()}
     ultima_col = c0 + len(INDICE_HEADERS) - 1
     v = config["valores"]
-    maximo = v["asistencia"] + v["diagnostico"] + v["webassign"] + v["final"]
+    usar_asistencia = config["usar_asistencia"]
+    maximo = maximo_indice(v, usar_asistencia)
 
     def grupo(desde: str, hasta: str, texto: str, fill) -> None:
         if desde == hasta:
@@ -205,7 +207,13 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
         "ÍNDICES FI UAEMEX",
         INDICE_FILL_RESULTADO,
     ).font = CREANI_FONT_BOLD
-    grupo("Asistencia", "Asistencia", f"Sobre {v['asistencia']:g}", INDICE_FILL)
+    # La columna sale siempre (vacía) para usarla a futuro; si no se usa, no suma.
+    grupo(
+        "Asistencia",
+        "Asistencia",
+        f"Sobre {v['asistencia']:g}" if usar_asistencia else "No se usa",
+        INDICE_FILL,
+    )
     grupo("Diag. C1", "Diag. total", f"Diagnóstico (sobre {v['diagnostico']:g})", INDICE_FILL)
     grupo("WA Álgebra", "WA total", f"WebAssign (sobre {v['webassign']:g})", INDICE_FILL)
     grupo("Final Álgebra", "Final total", f"Final (sobre {v['final']:g})", INDICE_FILL)
@@ -252,9 +260,10 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
                 f"={ref('Final Álgebra')}+{ref('Final Trigonometría')}"
                 f"+{ref('Final Geometría')}+{ref('Final Cálculo')}"
             ),
-            "Índice FI UAEMex": formula_indice([
-                ref("Asistencia"), ref("Diag. total"), ref("WA total"), ref("Final total"),
-            ]),
+            "Índice FI UAEMex": formula_indice(
+                ([ref("Asistencia")] if usar_asistencia else [])
+                + [ref("Diag. total"), ref("WA total"), ref("Final total")]
+            ),
             "Categoría": formula_categoria(ref("Índice FI UAEMex"), config["categorias"]),
         }
         for nombre, valor in valores.items():

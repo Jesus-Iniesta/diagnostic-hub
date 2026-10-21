@@ -129,6 +129,8 @@ export interface ConfigIndiceFi {
   valores: ValoresIndice;
   maximo: number;
   categorias: CategoriaIndice[];
+  /** Apagado: la asistencia vale 0 y no cuenta para el máximo del índice. */
+  usar_asistencia: boolean;
   /** Periodo del que se copiaron los valores (este periodo aún no tiene los suyos). */
   heredado_de: string | null;
   es_default: boolean;
@@ -157,6 +159,7 @@ export async function guardarIndiceFi(payload: {
   periodo: string;
   valores: ValoresIndice;
   categorias: CategoriaIndice[];
+  usar_asistencia: boolean;
 }): Promise<ConfigIndiceFi> {
   const response = await fetch(CONFIG_INDICE_FI_URL, {
     method: 'PUT',

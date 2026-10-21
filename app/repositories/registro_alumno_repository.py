@@ -4,7 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.alumno import Alumno
+from app.models.identificador_alumno import IdentificadorAlumno
 from app.models.ingenieria import Ingenieria
+from app.models.resultado_webassign import ResultadoWebAssign
 from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.schemas.registro_alumno import RegistroAlumnoCreate, RegistroAlumnoUpdate
@@ -117,6 +119,49 @@ class RegistroAlumnoRepository:
 
     async def get_by_user_id(self, user_id: int) -> Alumno | None:
         return await self._fetch_with_relations(user_id)
+
+    async def datos_sugeridos(self, alumno: Alumno) -> dict:
+        """Correo, cuenta, folio e ingeniería que el sistema ya conoce del alumno.
+
+        Al alumno creado desde los exámenes la cuenta, el folio y los correos se le
+        guardan como identificadores aprendidos (no en su perfil), y la ingeniería
+        puede salir de WebAssign. Sirven para llenar de inicio su formulario.
+        """
+        rows = await self.db.execute(
+            select(IdentificadorAlumno.tipo, IdentificadorAlumno.valor)
+            .where(IdentificadorAlumno.alumno_id == alumno.id)
+            .order_by(IdentificadorAlumno.created_at, IdentificadorAlumno.id)
+        )
+        por_tipo: dict[str, list[str]] = {}
+        for tipo, valor in rows.all():
+            por_tipo.setdefault(tipo, []).append(valor)
+
+        correo = alumno.usuario.correo_personal
+        if not correo:
+            correos = [
+                c for c in por_tipo.get("correo", [])
+                if c != alumno.usuario.correo_institucional
+            ]
+            # El personal (el de WebAssign) no es el institucional de la UAEMex.
+            personales = [c for c in correos if not c.endswith("uaemex.mx")]
+            correo = (personales or correos or [None])[0]
+
+        ingenieria_id = alumno.ingenieria_id
+        if ingenieria_id is None:
+            ingenieria_id = await self.db.scalar(
+                select(Ingenieria.id)
+                .join(ResultadoWebAssign, ResultadoWebAssign.carrera == Ingenieria.clave)
+                .where(ResultadoWebAssign.alumno_id == alumno.id, Ingenieria.activo.is_(True))
+                .order_by(ResultadoWebAssign.created_at.desc())
+                .limit(1)
+            )
+
+        return {
+            "correo_personal": correo,
+            "numero_cuenta": alumno.numero_cuenta or next(iter(por_tipo.get("cuenta", [])), None),
+            "numero_folio": alumno.numero_folio or next(iter(por_tipo.get("folio", [])), None),
+            "ingenieria_id": ingenieria_id,
+        }
 
     async def create(self, data: RegistroAlumnoCreate) -> Alumno:
         await self._get_ingenieria(data.ingenieria_id)

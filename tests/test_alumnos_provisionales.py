@@ -11,6 +11,7 @@ from app.services.alumnos_provisionales import (
     destino_fila_padron,
     lugar_desde_usuario,
     nombre_desde_completo,
+    nombre_desde_examen_final,
     nombre_desde_webassign,
     nombre_vacio,
 )
@@ -66,6 +67,10 @@ check("webassign incompleto", nombre_desde_webassign("Alamo, "), None)
 check("final", nombre_desde_completo("  Juan Andrick  Juarez Arzate "), ("Juan Andrick Juarez Arzate", "", ""))
 check("final basura '1.0'", nombre_desde_completo("1.0"), None)
 check("final una palabra", nombre_desde_completo("Ana"), None)
+check("final separado", nombre_desde_examen_final("  juan andrick  JUAREZ arzate "), ("Juan Andrick", "Juarez", "Arzate"))
+check("final tres palabras", nombre_desde_examen_final("Ana Lopez Ruiz"), ("Ana", "Lopez", "Ruiz"))
+check("final dos palabras se queda igual", nombre_desde_examen_final("Ana Lopez"), ("Ana Lopez", "", ""))
+check("final basura", nombre_desde_examen_final("1.0"), None)
 
 if FALLOS:
     print("\nFALLARON:", len(FALLOS))

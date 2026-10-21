@@ -55,6 +55,19 @@ class AlumnoRead(AlumnoBase):
     ingenieria: IngenieriaRead | None = None
 
 
+class DatosSugeridos(BaseModel):
+    """Datos que el sistema ya conoce del alumno (de su perfil o de los exámenes)."""
+
+    correo_personal: str | None = None
+    numero_cuenta: str | None = None
+    numero_folio: str | None = None
+    ingenieria_id: int | None = None
+
+
+class AlumnoPerfilRead(AlumnoRead):
+    sugeridos: DatosSugeridos
+
+
 class AlumnoListResponse(BaseModel):
     items: list[AlumnoRead]
     total: int
