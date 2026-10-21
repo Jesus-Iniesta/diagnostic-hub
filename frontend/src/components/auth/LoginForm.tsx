@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
-import { loginWithNumeroCuenta, loginWithPassword } from '../../lib/api';
+import { ApiError, loginWithNumeroCuenta, loginWithPassword } from '../../lib/api';
 import { roleHome } from '../../lib/roles';
 import classes from './LoginForm.module.css';
 
@@ -26,6 +26,8 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
   const navigate = useNavigate();
   const esAlumno = mode === 'alumno';
   const [error, setError] = useState<string | null>(null);
+  // El número de cuenta no existe: se le invita a registrarse.
+  const [cuentaNoEncontrada, setCuentaNoEncontrada] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const form = useForm({
@@ -45,6 +47,7 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
 
   const handleSubmit = form.onSubmit(async ({ username, password, numeroCuenta }) => {
     setError(null);
+    setCuentaNoEncontrada(false);
     setSubmitting(true);
     try {
       const user = await login(async () => {
@@ -56,6 +59,10 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
       });
       navigate(roleHome(user.role.name), { replace: true });
     } catch (err) {
+      if (esAlumno && err instanceof ApiError && err.status === 404) {
+        setCuentaNoEncontrada(true);
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Credenciales inválidas');
     } finally {
       setSubmitting(false);
@@ -107,6 +114,17 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
       {error && (
         <Alert color="red" p="sm">
           {error}
+        </Alert>
+      )}
+
+      {cuentaNoEncontrada && (
+        <Alert color="orange" p="sm">
+          <Text size="sm">
+            No encontramos tu número de cuenta. Si es tu primera vez, regístrate aquí.
+          </Text>
+          <Button component={Link} to="/registro" color="orange" size="sm" mt="sm">
+            ¿Es tu primera vez en el sistema?
+          </Button>
         </Alert>
       )}
 

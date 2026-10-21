@@ -119,3 +119,19 @@ class IndiceFiAlumnoResponse(BaseModel):
     maximo: float
     categoria: str | None = None
     comentario: str | None = None
+
+
+class ExamenFinalMateria(BaseModel):
+    materia: str
+    nombre: str
+    hecho: bool
+
+
+class MisExamenesResponse(BaseModel):
+    """Exámenes registrados del periodo más reciente con resultados."""
+
+    periodo: str | None = None
+    cuestionario_1: bool
+    cuestionario_2: bool
+    examen_final: list[ExamenFinalMateria]
+    webassign: bool

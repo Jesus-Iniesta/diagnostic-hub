@@ -323,13 +323,13 @@ export default function AlumnoResultados() {
           title="Te falta completar tus datos"
         >
           <Text size="sm">
-            Tus resultados estarán disponibles en cuanto completes tus datos obligatorios en Inicio.
+            Tus resultados estarán disponibles en cuanto completes tus datos obligatorios.
           </Text>
           <Button
             mt="md"
             color="orange"
             rightSection={<IconArrowRight size={16} aria-hidden="true" />}
-            onClick={() => navigate('/alumno')}
+            onClick={() => navigate('/alumno/contacto')}
           >
             Completar mis datos
           </Button>

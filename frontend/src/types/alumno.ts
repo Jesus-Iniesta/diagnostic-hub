@@ -156,3 +156,11 @@ export interface IndiceFiAlumno {
   categoria: string | null;
   comentario: string | null;
 }
+
+export interface MisExamenes {
+  periodo: string | null;
+  cuestionario_1: boolean;
+  cuestionario_2: boolean;
+  examen_final: { materia: string; nombre: string; hecho: boolean }[];
+  webassign: boolean;
+}

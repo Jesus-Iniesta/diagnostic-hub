@@ -18,8 +18,10 @@ from app.schemas.alumno import (
     CuestionarioAlumnoResponse,
     CuestionarioMateriaResultado,
     DiagnosticoAlumnoResponse,
+    ExamenFinalMateria,
     IndiceFiAlumnoResponse,
     MateriaResultado,
+    MisExamenesResponse,
 )
 from app.services.feedback_service import (
     MATERIAS_NOMBRES,
@@ -286,6 +288,46 @@ async def mi_webassign(
         "nivel_general": nivel_gen,
         "materias": materias,
     }
+
+
+@router.get(
+    "/me/examenes",
+    response_model=MisExamenesResponse,
+    summary="Qué exámenes ya tiene registrados el alumno",
+)
+async def mis_examenes(
+    db: DbSession,
+    current_user: User = Depends(get_current_user),
+):
+    """Solo dice qué exámenes hizo (sin calificaciones), así que también lo ve
+    un alumno que aún no completa sus datos."""
+    stmt = select(Alumno).where(Alumno.usuario_id == current_user.id)
+    alumno = (await db.execute(stmt)).scalars().first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
+
+    indice = await _indice_fi_alumno(db, alumno.id)
+    cuest, final, wa = (indice["filas"][k] for k in ("cuestionario", "final", "webassign"))
+
+    def hizo_cuestionario(n: int) -> bool:
+        return cuest is not None and any(
+            getattr(cuest, f"aciertos_c{n}_{m}") is not None for m in MATERIAS_DIAGNOSTICO
+        )
+
+    return MisExamenesResponse(
+        periodo=indice["periodo"] if indice["tiene_resultados"] else None,
+        cuestionario_1=hizo_cuestionario(1),
+        cuestionario_2=hizo_cuestionario(2),
+        examen_final=[
+            ExamenFinalMateria(
+                materia=m,
+                nombre=MATERIAS_NOMBRES[m],
+                hecho=final is not None and getattr(final, f"puntaje_{m}") is not None,
+            )
+            for m in MATERIAS_FINAL
+        ],
+        webassign=wa is not None,
+    )
 
 
 @router.get(

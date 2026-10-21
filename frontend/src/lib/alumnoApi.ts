@@ -6,6 +6,7 @@ import type {
   DatosContactoUpdate,
   DiagnosticoAlumnoResponse,
   IndiceFiAlumno,
+  MisExamenes,
 } from '../types/alumno';
 
 const API_BASE = ALUMNO_ME_URL.replace('/me', '');
@@ -108,6 +109,13 @@ export async function fetchMiIndiceFi(): Promise<IndiceFiAlumno | null> {
   const res = await fetch(`${ALUMNO_ME_URL}/indice-fi`, { credentials: 'include' });
   if (!res.ok) return null;
   return res.json() as Promise<IndiceFiAlumno>;
+}
+
+/** Qué exámenes ya tiene registrados (sin calificaciones). */
+export async function fetchMisExamenes(): Promise<MisExamenes | null> {
+  const res = await fetch(`${ALUMNO_ME_URL}/examenes`, { credentials: 'include' });
+  if (!res.ok) return null;
+  return res.json() as Promise<MisExamenes>;
 }
 
 export async function descargarCorreosPdf(): Promise<void> {

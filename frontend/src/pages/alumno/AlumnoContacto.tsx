@@ -1,28 +1,14 @@
-import { Alert, Button, Stack, Text } from '@mantine/core';
-import { IconArrowRight, IconInfoCircle } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Stack, Text } from '@mantine/core';
+import { useState } from 'react';
 
 import CorreosRegistrados from '../../components/CorreosRegistrados/CorreosRegistrados';
 import DatosContactoForm from '../../components/DatosContactoForm/DatosContactoForm';
 import ResumenAlumno from '../../components/ResumenAlumno/ResumenAlumno';
-import { fetchMiPerfil } from '../../lib/alumnoApi';
 import classes from './AlumnoContacto.module.css';
 
 export default function AlumnoContacto() {
-  const navigate = useNavigate();
-  // Mientras no complete su registro, el formulario solo se muestra en Inicio.
-  const [pendienteRegistro, setPendienteRegistro] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    void fetchMiPerfil()
-      .then((perfil) => {
-        if (mounted) setPendienteRegistro(Boolean(perfil.es_provisional));
-      })
-      .catch(() => {});
-    return () => { mounted = false; };
-  }, []);
+  // Al guardar el formulario se vuelven a cargar los correos y el panel.
+  const [version, setVersion] = useState(0);
 
   return (
     <>
@@ -36,34 +22,12 @@ export default function AlumnoContacto() {
         </Text>
       </div>
 
-      <CorreosRegistrados />
+      <CorreosRegistrados key={`correos-${version}`} />
 
-      {pendienteRegistro ? (
-        <Alert
-          color="orange"
-          variant="light"
-          radius="md"
-          mt="lg"
-          maw={720}
-          icon={<IconInfoCircle size={18} />}
-          title="Te falta completar tus datos"
-        >
-          <Text size="sm">Completa tus datos obligatorios en Inicio.</Text>
-          <Button
-            mt="md"
-            color="orange"
-            rightSection={<IconArrowRight size={16} aria-hidden="true" />}
-            onClick={() => navigate('/alumno')}
-          >
-            Completar mis datos
-          </Button>
-        </Alert>
-      ) : (
-        <Stack gap="lg" mt="lg">
-          <DatosContactoForm />
-          <ResumenAlumno />
-        </Stack>
-      )}
+      <Stack gap="lg" mt="lg">
+        <DatosContactoForm onSaved={() => setVersion((v) => v + 1)} />
+        <ResumenAlumno key={`resumen-${version}`} />
+      </Stack>
     </>
   );
 }

@@ -16,6 +16,85 @@
   margin-top: 6px;
 }
 
+.card {
+  background: #ffffff;
+  border: 1px solid #eef0f4;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04), 0 1px 2px rgba(16, 24, 40, 0.03);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cardTitle {
+  color: #17153b;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.cardText {
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.indice {
+  color: #17153b;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.indiceMax {
+  color: #98a2b3;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.fila {
+  padding: 7px 0;
+  border-bottom: 1px solid #f0f1f5;
+}
+
+.fila:last-child {
+  border-bottom: none;
+}
+
+.hecho {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #067647;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pendiente {
+  color: #98a2b3;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.liga {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #eef0f4;
+  border-radius: 10px;
+  color: #4f46e5;
+  text-decoration: none;
+}
+
+.liga:hover {
+  border-color: #c7cbf2;
+  background: #f5f6ff;
+}
+
 @media (max-width: 576px) {
   .welcomeTitle {
     font-size: 24px;

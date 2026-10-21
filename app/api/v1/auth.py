@@ -41,11 +41,21 @@ def _set_auth_cookie(response: Response, token: str) -> None:
     )
 
 
+CUENTA_NO_ENCONTRADA = "No encontramos tu número de cuenta."
+
+
 async def _token_por_numero_cuenta(
-    repo: UserRepository, numero: str, response: Response | None = None
+    repo: UserRepository,
+    numero: str,
+    response: Response | None = None,
+    avisar_no_encontrada: bool = False,
 ) -> SessionResponse:
     alumno = await repo.get_alumno_por_numero_cuenta(numero)
     if not alumno or not alumno.usuario:
+        # En la pantalla del alumno se le invita a registrarse (404); el
+        # endpoint OAuth2 genérico sigue respondiendo credenciales inválidas.
+        if avisar_no_encontrada:
+            raise HTTPException(status_code=404, detail=CUENTA_NO_ENCONTRADA)
         raise invalid_credentials()
 
     user = alumno.usuario
@@ -95,7 +105,9 @@ async def login_numero_cuenta(
     response: Response = Response(),
 ) -> SessionResponse:
     repo = UserRepository(db)
-    return await _token_por_numero_cuenta(repo, payload.numero_cuenta, response)
+    return await _token_por_numero_cuenta(
+        repo, payload.numero_cuenta, response, avisar_no_encontrada=True
+    )
 
 
 @router.get("/me", response_model=UserRead, summary="Usuario autenticado actual")
