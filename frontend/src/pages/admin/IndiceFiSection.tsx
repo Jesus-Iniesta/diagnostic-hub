@@ -4,17 +4,19 @@ import {
   Button,
   Card,
   Group,
+  Modal,
   NumberInput,
-  SimpleGrid,
   Stack,
   Switch,
+  Table,
   Text,
   TextInput,
   Textarea,
   Title,
+  UnstyledButton,
 } from '@mantine/core';
 import { IconAlertTriangle, IconCircleCheck, IconPlus, IconTrash } from '@tabler/icons-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 
 import { usePeriodo } from '../../contexts/PeriodoContext';
 import { fetchIndiceFi, guardarIndiceFi } from '../../lib/configuracionApi';
@@ -155,6 +157,8 @@ export default function IndiceFiSection() {
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Categoría cuyo comentario se está editando en el modal.
+  const [comentarioId, setComentarioId] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -242,199 +246,241 @@ export default function IndiceFiSection() {
     }
   };
 
+  const editando = categorias.find((c) => c.id === comentarioId) ?? null;
+
   return (
-    <Card className={`${classes.card} ${classes.cardAncha}`} padding="xl" radius="lg" mt="lg">
-      <Stack gap="lg">
-        <div>
-          <Title order={3} className={classes.title}>
-            Índice FI UAEMex
-          </Title>
-          <Text className={classes.subtitle}>
-            Valor de cada componente y categorías del índice para el periodo {periodo}. Se usan en
-            el CREANI y en la carta de recomendación del alumno.
-          </Text>
-        </div>
+    <>
+      <Card className={classes.card} padding="lg" radius="lg">
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
+          <div>
+            <Title order={4} className={classes.title}>
+              Índice FI UAEMex · periodo {periodo}
+            </Title>
+            <Text className={classes.fieldHelp}>
+              Se usa en el CREANI y en la carta de recomendación del alumno.
+            </Text>
+          </div>
+          {(config?.heredado_de || config?.es_default) && (
+            <Text className={classes.aviso}>
+              {config.heredado_de
+                ? `Sin valores propios: se muestran los de ${config.heredado_de}.`
+                : 'Se muestran los valores por defecto.'}{' '}
+              Al guardar quedan para {periodo}.
+            </Text>
+          )}
+        </Group>
 
-        {config?.heredado_de && (
-          <Alert color="blue" variant="light" radius="md">
-            El periodo {periodo} aún no tiene valores propios: se muestran los de {config.heredado_de}.
-            Al guardar quedan registrados para {periodo}.
-          </Alert>
-        )}
-        {config?.es_default && (
-          <Alert color="blue" variant="light" radius="md">
-            Se muestran los valores por defecto. Al guardar quedan registrados para {periodo}.
-          </Alert>
-        )}
-
-        <div>
-          <Text className={classes.fieldLabel} mb="xs">
-            Valor de cada componente
-          </Text>
+        <Group align="flex-end" gap="sm" mt="md" wrap="wrap">
           <Switch
             label="Usar asistencia"
-            description="Apagado: la asistencia vale 0 y no cuenta para el máximo del índice. La columna sigue saliendo vacía en el CREANI."
             checked={usarAsistencia}
             onChange={(e) => {
               cambiar();
               setUsarAsistencia(e.currentTarget.checked);
             }}
             disabled={cargando}
-            mb="md"
+            className={classes.switchAsistencia}
+            title="Apagado: la asistencia vale 0 y no cuenta para el máximo. En el CREANI la columna sale vacía."
           />
-          <SimpleGrid cols={{ base: 1, xs: 2, md: 4 }} spacing="md">
-            {COMPONENTES.map(({ key, label }) => (
-              <NumberInput
-                key={key}
-                label={label}
-                value={valores[key]}
-                onChange={(v) => setValor(key, v)}
-                min={0}
-                step={0.5}
-                decimalScale={2}
-                disabled={cargando || (key === 'asistencia' && !usarAsistencia)}
-              />
-            ))}
-          </SimpleGrid>
-          <Text className={classes.indiceMaximo} mt="sm">
-            Índice sobre {fmtValor(maximo)}
-          </Text>
-        </div>
+          {COMPONENTES.map(({ key, label }) => (
+            <NumberInput
+              key={key}
+              label={label}
+              value={valores[key]}
+              onChange={(v) => setValor(key, v)}
+              min={0}
+              step={0.5}
+              decimalScale={2}
+              size="sm"
+              w={130}
+              disabled={cargando || (key === 'asistencia' && !usarAsistencia)}
+            />
+          ))}
+          <Text className={classes.indiceMaximo}>Índice sobre {fmtValor(maximo)}</Text>
+        </Group>
 
-        <div>
-          <Text className={classes.fieldLabel}>Categorías</Text>
-          <Text className={classes.fieldHelp}>
-            Cada categoría debe empezar 0.1 arriba del máximo de la anterior, y entre todas deben
-            cubrir de 0 a {fmtValor(maximo)}. El comentario aparece en la carta del alumno.
-          </Text>
-        </div>
+        <Text className={classes.fieldLabel} mt="lg">
+          Categorías
+        </Text>
+        <Text className={classes.fieldHelp}>
+          Cada una empieza 0.1 arriba del máximo de la anterior y entre todas cubren de 0 a{' '}
+          {fmtValor(maximo)}. El comentario aparece en la carta del alumno; da clic para editarlo.
+        </Text>
 
-        <Stack gap="md">
-          {categorias.map((c, i) => {
-            const errores = porCategoria.get(i);
-            return (
-              <div
-                key={c.id}
-                className={`${classes.categoria} ${errores ? classes.categoriaError : ''}`}
-              >
-                <Group align="flex-end" gap="sm" wrap="wrap">
-                  <TextInput
-                    label="Nombre"
-                    value={c.nombre}
-                    onChange={(e) => setCategoria(c.id, { nombre: e.currentTarget.value })}
-                    style={{ flex: '1 1 180px' }}
-                    disabled={cargando}
-                  />
-                  <NumberInput
-                    label="Mínimo"
-                    value={c.minimo}
-                    onChange={(v) => setCategoria(c.id, { minimo: v === '' ? '' : Number(v) })}
-                    min={0}
-                    step={0.1}
-                    decimalScale={2}
-                    style={{ width: 110 }}
-                    disabled={cargando}
-                  />
-                  <NumberInput
-                    label="Máximo"
-                    value={c.maximo}
-                    onChange={(v) => setCategoria(c.id, { maximo: v === '' ? '' : Number(v) })}
-                    min={0}
-                    step={0.1}
-                    decimalScale={2}
-                    style={{ width: 110 }}
-                    disabled={cargando}
-                  />
-                  <ActionIcon
-                    variant="subtle"
-                    color="red"
-                    size="lg"
-                    mb={2}
-                    aria-label={`Quitar la categoría ${c.nombre || i + 1}`}
-                    onClick={() => quitarCategoria(c.id)}
-                    disabled={cargando}
-                  >
-                    <IconTrash size={18} />
-                  </ActionIcon>
-                </Group>
-                <Textarea
-                  label="Comentario para la carta del alumno"
-                  value={c.comentario}
-                  onChange={(e) => setCategoria(c.id, { comentario: e.currentTarget.value })}
-                  autosize
-                  minRows={2}
-                  maxRows={8}
-                  mt="sm"
-                  disabled={cargando}
-                />
-                {errores && (
-                  <Alert
-                    color="red"
-                    variant="light"
-                    radius="md"
-                    mt="sm"
-                    icon={<IconAlertTriangle size={18} aria-hidden="true" />}
-                  >
-                    {errores.map((msg) => (
-                      <div key={msg}>{msg}</div>
-                    ))}
-                  </Alert>
-                )}
-              </div>
-            );
-          })}
-        </Stack>
+        <Table.ScrollContainer minWidth={640} mt="xs">
+          <Table verticalSpacing={6} className={classes.tablaCategorias}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={180}>Nombre</Table.Th>
+                <Table.Th w={100}>Mínimo</Table.Th>
+                <Table.Th w={100}>Máximo</Table.Th>
+                <Table.Th>Comentario</Table.Th>
+                <Table.Th w={44} />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {categorias.map((c, i) => {
+                const errores = porCategoria.get(i);
+                return (
+                  <Fragment key={c.id}>
+                    <Table.Tr className={errores ? classes.filaError : undefined}>
+                      <Table.Td>
+                        <TextInput
+                          size="xs"
+                          value={c.nombre}
+                          onChange={(e) => setCategoria(c.id, { nombre: e.currentTarget.value })}
+                          disabled={cargando}
+                          aria-label="Nombre de la categoría"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput
+                          size="xs"
+                          value={c.minimo}
+                          onChange={(v) => setCategoria(c.id, { minimo: v === '' ? '' : Number(v) })}
+                          min={0}
+                          step={0.1}
+                          decimalScale={2}
+                          disabled={cargando}
+                          aria-label={`Mínimo de ${c.nombre || 'la categoría'}`}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput
+                          size="xs"
+                          value={c.maximo}
+                          onChange={(v) => setCategoria(c.id, { maximo: v === '' ? '' : Number(v) })}
+                          min={0}
+                          step={0.1}
+                          decimalScale={2}
+                          disabled={cargando}
+                          aria-label={`Máximo de ${c.nombre || 'la categoría'}`}
+                        />
+                      </Table.Td>
+                      <Table.Td className={classes.celdaComentario}>
+                        <UnstyledButton
+                          className={classes.comentario}
+                          onClick={() => setComentarioId(c.id)}
+                          disabled={cargando}
+                          title="Editar comentario"
+                        >
+                          {c.comentario.trim() ? (
+                            c.comentario
+                          ) : (
+                            <span className={classes.sinComentario}>Sin comentario</span>
+                          )}
+                        </UnstyledButton>
+                      </Table.Td>
+                      <Table.Td>
+                        <ActionIcon
+                          variant="subtle"
+                          color="red"
+                          aria-label={`Quitar la categoría ${c.nombre || i + 1}`}
+                          onClick={() => quitarCategoria(c.id)}
+                          disabled={cargando}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Table.Td>
+                    </Table.Tr>
+                    {errores && (
+                      <Table.Tr className={classes.filaAlerta}>
+                        <Table.Td colSpan={5}>
+                          <Alert
+                            color="red"
+                            variant="light"
+                            radius="md"
+                            py={6}
+                            icon={<IconAlertTriangle size={16} aria-hidden="true" />}
+                          >
+                            {errores.map((msg) => (
+                              <div key={msg}>{msg}</div>
+                            ))}
+                          </Alert>
+                        </Table.Td>
+                      </Table.Tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
 
         <Button
           variant="light"
-          leftSection={<IconPlus size={18} />}
+          size="xs"
+          leftSection={<IconPlus size={16} />}
           onClick={agregarCategoria}
           disabled={cargando}
-          className={classes.addButton}
+          mt="sm"
         >
           Agregar categoría
         </Button>
 
         {generales.length > 0 && (
-          <Alert color="red" variant="light" radius="md">
+          <Alert color="red" variant="light" radius="md" mt="sm" py="xs">
             {generales.map((msg) => (
               <div key={msg}>{msg}</div>
             ))}
           </Alert>
         )}
 
-        {guardado && (
-          <Alert
-            color="green"
-            variant="light"
-            radius="md"
-            icon={<IconCircleCheck size={18} aria-hidden="true" />}
-          >
-            Los cambios se guardaron correctamente.
-          </Alert>
-        )}
-
         {error && (
-          <Alert color="red" variant="light" radius="md">
+          <Alert color="red" variant="light" radius="md" mt="sm" py="xs">
             {error}
           </Alert>
         )}
+      </Card>
 
-        {hayErrores && !cargando && (
-          <Text className={classes.fieldHelp}>Corrige las alertas para poder guardar.</Text>
+      {/* Fijo abajo a la derecha para no tener que bajar hasta el final. */}
+      <Group gap="sm" className={classes.barraGuardar} wrap="nowrap">
+        {guardado && (
+          <Text className={classes.guardado}>
+            <IconCircleCheck size={14} aria-hidden="true" /> Guardado
+          </Text>
         )}
-
+        {hayErrores && !cargando && (
+          <Text size="xs" c="red">
+            Corrige las alertas para guardar
+          </Text>
+        )}
         <Button
-          size="md"
           color="indigo"
-          className={classes.submitButton}
           loading={guardando}
           disabled={cargando || hayErrores}
           onClick={handleGuardar}
         >
           Guardar índice
         </Button>
-      </Stack>
-    </Card>
+      </Group>
+
+      <Modal
+        opened={editando !== null}
+        onClose={() => setComentarioId(null)}
+        title={`Comentario de «${editando?.nombre.trim() || 'la categoría'}»`}
+        centered
+        size="lg"
+      >
+        {editando && (
+          <Stack gap="md">
+            <Textarea
+              value={editando.comentario}
+              onChange={(e) => setCategoria(editando.id, { comentario: e.currentTarget.value })}
+              autosize
+              minRows={4}
+              maxRows={12}
+              data-autofocus
+              description="Aparece en la carta de recomendación de los alumnos de esta categoría."
+            />
+            <Group justify="flex-end">
+              <Button color="indigo" onClick={() => setComentarioId(null)}>
+                Listo
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+    </>
   );
 }

@@ -2,16 +2,19 @@ import {
   Alert,
   Button,
   Card,
-  SegmentedControl,
+  Group,
   SimpleGrid,
   Stack,
+  Switch,
+  Tabs,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconCircleCheck } from '@tabler/icons-react';
+import { IconCheck } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
+import { usePeriodo } from '../../contexts/PeriodoContext';
 import {
   actualizarEstadoFormularioContacto,
   actualizarEstadoFormularioRegistro,
@@ -21,17 +24,23 @@ import {
   guardarPeriodoRango,
 } from '../../lib/configuracionApi';
 import type { PeriodoRango } from '../../lib/configuracionApi';
-import { getCurrentPeriodo } from '../../lib/periodo';
 import classes from './AdminConfiguracion.module.css';
 import IndiceFiSection from './IndiceFiSection';
 
-type EstadoFormulario = 'activo' | 'inactivo';
+function Guardado() {
+  return (
+    <Text className={classes.guardado}>
+      <IconCheck size={14} aria-hidden="true" /> Guardado
+    </Text>
+  );
+}
 
-function useToggleCard(
+/** Interruptor que se guarda al cambiarlo. */
+function useInterruptor(
   fetcher: () => Promise<{ habilitado: boolean }>,
   saver: (habilitado: boolean) => Promise<{ habilitado: boolean }>,
 ) {
-  const [estado, setEstado] = useState<EstadoFormulario>('activo');
+  const [activo, setActivo] = useState(true);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
@@ -41,7 +50,7 @@ function useToggleCard(
     let mounted = true;
     void fetcher()
       .then(({ habilitado }) => {
-        if (mounted) setEstado(habilitado ? 'activo' : 'inactivo');
+        if (mounted) setActivo(habilitado);
       })
       .catch(() => {
         if (mounted) setError('No se pudo consultar el estado del formulario.');
@@ -54,31 +63,68 @@ function useToggleCard(
     };
   }, [fetcher]);
 
-  const activo = estado === 'activo';
-
-  const handleGuardar = async () => {
+  const cambiar = async (nuevo: boolean) => {
+    const anterior = activo;
+    setActivo(nuevo);
     setError(null);
     setGuardado(false);
     setGuardando(true);
     try {
-      const { habilitado } = await saver(activo);
-      setEstado(habilitado ? 'activo' : 'inactivo');
+      const { habilitado } = await saver(nuevo);
+      setActivo(habilitado);
       setGuardado(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudieron guardar los cambios');
+      setActivo(anterior);
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el cambio');
     } finally {
       setGuardando(false);
     }
   };
 
-  return { estado, setEstado, cargando, guardando, guardado, error, activo, handleGuardar };
+  return { activo, cargando, guardando, guardado, error, cambiar };
 }
 
-export default function AdminConfiguracion() {
-  const registro = useToggleCard(fetchEstadoFormularioRegistro, actualizarEstadoFormularioRegistro);
-  const contacto = useToggleCard(fetchEstadoFormularioContacto, actualizarEstadoFormularioContacto);
+function FilaInterruptor({
+  titulo,
+  descripcion,
+  estado,
+}: {
+  titulo: string;
+  descripcion: string;
+  estado: ReturnType<typeof useInterruptor>;
+}) {
+  return (
+    <div className={classes.filaInterruptor}>
+      <Group justify="space-between" wrap="nowrap" align="flex-start">
+        <div>
+          <Text className={classes.fieldLabel}>{titulo}</Text>
+          <Text className={classes.fieldHelp}>{descripcion}</Text>
+        </div>
+        <Group gap="xs" wrap="nowrap">
+          {estado.guardado && <Guardado />}
+          <Switch
+            checked={estado.activo}
+            onChange={(e) => void estado.cambiar(e.currentTarget.checked)}
+            disabled={estado.cargando || estado.guardando}
+            aria-label={titulo}
+            size="md"
+          />
+        </Group>
+      </Group>
+      {estado.error && (
+        <Text c="red" size="xs" mt={4}>
+          {estado.error}
+        </Text>
+      )}
+    </div>
+  );
+}
 
-  const [periodo, setPeriodo] = useState(getCurrentPeriodo());
+function PestanaGeneral() {
+  const registro = useInterruptor(fetchEstadoFormularioRegistro, actualizarEstadoFormularioRegistro);
+  const contacto = useInterruptor(fetchEstadoFormularioContacto, actualizarEstadoFormularioContacto);
+
+  const { periodo } = usePeriodo();
   const [rango, setRango] = useState<PeriodoRango | null>(null);
   const [inicio, setInicio] = useState('');
   const [fin, setFin] = useState('');
@@ -89,17 +135,10 @@ export default function AdminConfiguracion() {
 
   useEffect(() => {
     let mounted = true;
-    const p = periodo.trim();
     setGuardadoRango(false);
     setErrorRango(null);
-    if (!p) {
-      setRango(null);
-      setInicio('');
-      setFin('');
-      return;
-    }
     setCargandoRango(true);
-    fetchPeriodoRango(p)
+    fetchPeriodoRango(periodo)
       .then((data) => {
         if (!mounted) return;
         setRango(data);
@@ -128,7 +167,7 @@ export default function AdminConfiguracion() {
       if (!inicio || !fin) {
         throw new Error('Indica las fechas de inicio y fin del periodo.');
       }
-      const data = await guardarPeriodoRango({ periodo: periodo.trim(), inicio, fin });
+      const data = await guardarPeriodoRango({ periodo, inicio, fin });
       setRango(data);
       setGuardadoRango(true);
     } catch (err) {
@@ -139,224 +178,113 @@ export default function AdminConfiguracion() {
   };
 
   return (
+    <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+      <Card className={classes.card} padding="lg" radius="lg">
+        <Title order={4} className={classes.title}>
+          Formularios
+        </Title>
+        <Stack gap={0} mt="xs">
+          <FilaInterruptor
+            titulo="Registro de alumnos"
+            descripcion={
+              registro.activo
+                ? 'Abierto: los alumnos nuevos pueden crear su cuenta.'
+                : 'Cerrado: no se pueden crear cuentas nuevas.'
+            }
+            estado={registro}
+          />
+          <FilaInterruptor
+            titulo="Datos de contacto"
+            descripcion={
+              contacto.activo
+                ? 'Abierto: los alumnos pueden registrar o actualizar sus datos.'
+                : 'Cerrado: los alumnos no pueden modificar sus datos.'
+            }
+            estado={contacto}
+          />
+        </Stack>
+      </Card>
+
+      <Card className={classes.card} padding="lg" radius="lg">
+        <Title order={4} className={classes.title}>
+          Fechas del periodo {periodo}
+        </Title>
+        <Text className={classes.fieldHelp} mt={2}>
+          Rango en el que se toman las respuestas del periodo.{' '}
+          {rango?.es_default
+            ? 'Es el rango por defecto; se usa salvo que guardes otro.'
+            : rango
+              ? 'Es un rango personalizado.'
+              : ''}
+        </Text>
+        <Group align="flex-end" gap="sm" mt="sm" wrap="wrap">
+          <TextInput
+            label="Inicio"
+            type="date"
+            value={inicio}
+            onChange={(e) => {
+              setGuardadoRango(false);
+              setInicio(e.currentTarget.value);
+            }}
+            disabled={cargandoRango}
+            size="sm"
+          />
+          <TextInput
+            label="Fin"
+            type="date"
+            value={fin}
+            onChange={(e) => {
+              setGuardadoRango(false);
+              setFin(e.currentTarget.value);
+            }}
+            disabled={cargandoRango}
+            size="sm"
+          />
+          <Button
+            color="indigo"
+            size="sm"
+            loading={guardandoRango}
+            disabled={cargandoRango || !inicio || !fin}
+            onClick={handleGuardarRango}
+          >
+            Guardar fechas
+          </Button>
+          {guardadoRango && <Guardado />}
+        </Group>
+        {errorRango && (
+          <Alert color="red" variant="light" radius="md" mt="sm" py="xs">
+            {errorRango}
+          </Alert>
+        )}
+      </Card>
+    </SimpleGrid>
+  );
+}
+
+export default function AdminConfiguracion() {
+  return (
     <>
       <div className={classes.welcome}>
         <Text component="h1" className={classes.welcomeTitle}>
           Configuración
         </Text>
         <Text className={classes.welcomeSubtitle}>
-          Administra la disponibilidad de los formularios del sistema y el Índice FI UAEMex.
+          Formularios, fechas del periodo e Índice FI UAEMex.
         </Text>
       </div>
 
-      <Card className={classes.card} padding="xl" radius="lg" mt="lg">
-        <Stack gap="lg">
-          <div>
-            <Title order={3} className={classes.title}>
-              Formulario de registro de alumnos
-            </Title>
-            <Text className={classes.subtitle}>
-              Controla si los alumnos nuevos pueden crear su cuenta en el sistema.
-            </Text>
-          </div>
-
-          <div className={classes.fieldRow}>
-            <Text className={classes.fieldLabel}>Estado</Text>
-            <SegmentedControl
-              value={registro.estado}
-              onChange={(value) => registro.setEstado(value as EstadoFormulario)}
-              data={[
-                { label: '🟢 ACTIVO', value: 'activo' },
-                { label: '⚪ INACTIVO', value: 'inactivo' },
-              ]}
-              size="md"
-              radius="md"
-              disabled={registro.cargando}
-            />
-          </div>
-
-          <Text className={classes.fieldHelp}>
-            {registro.activo
-              ? 'Los alumnos nuevos pueden crear su cuenta desde el login.'
-              : 'El formulario de registro está cerrado. Los alumnos no pueden crear cuentas nuevas.'}
-          </Text>
-
-          {registro.guardado && (
-            <Alert
-              color="green"
-              variant="light"
-              radius="md"
-              icon={<IconCircleCheck size={18} aria-hidden="true" />}
-            >
-              Los cambios se guardaron correctamente.
-            </Alert>
-          )}
-
-          {registro.error && (
-            <Alert color="red" variant="light" radius="md">
-              {registro.error}
-            </Alert>
-          )}
-
-          <Button
-            size="md"
-            color="indigo"
-            className={classes.submitButton}
-            loading={registro.guardando}
-            disabled={registro.cargando}
-            onClick={registro.handleGuardar}
-          >
-            Guardar cambios
-          </Button>
-        </Stack>
-      </Card>
-
-      <Card className={classes.card} padding="xl" radius="lg" mt="lg">
-        <Stack gap="lg">
-          <div>
-            <Title order={3} className={classes.title}>
-              Formulario de datos de contacto
-            </Title>
-            <Text className={classes.subtitle}>
-              Controla si los alumnos pueden registrar o actualizar sus datos de contacto.
-            </Text>
-          </div>
-
-          <div className={classes.fieldRow}>
-            <Text className={classes.fieldLabel}>Estado</Text>
-            <SegmentedControl
-              value={contacto.estado}
-              onChange={(value) => contacto.setEstado(value as EstadoFormulario)}
-              data={[
-                { label: '🟢 ACTIVO', value: 'activo' },
-                { label: '⚪ INACTIVO', value: 'inactivo' },
-              ]}
-              size="md"
-              radius="md"
-              disabled={contacto.cargando}
-            />
-          </div>
-
-          <Text className={classes.fieldHelp}>
-            {contacto.activo
-              ? 'Los alumnos pueden registrar o actualizar sus datos de contacto.'
-              : 'El formulario de contacto está cerrado. Los alumnos no pueden modificar sus datos.'}
-          </Text>
-
-          {contacto.guardado && (
-            <Alert
-              color="green"
-              variant="light"
-              radius="md"
-              icon={<IconCircleCheck size={18} aria-hidden="true" />}
-            >
-              Los cambios se guardaron correctamente.
-            </Alert>
-          )}
-
-          {contacto.error && (
-            <Alert color="red" variant="light" radius="md">
-              {contacto.error}
-            </Alert>
-          )}
-
-          <Button
-            size="md"
-            color="indigo"
-            className={classes.submitButton}
-            loading={contacto.guardando}
-            disabled={contacto.cargando}
-            onClick={contacto.handleGuardar}
-          >
-            Guardar cambios
-          </Button>
-        </Stack>
-      </Card>
-
-      <Card className={classes.card} padding="xl" radius="lg" mt="lg">
-        <Stack gap="lg">
-          <div>
-            <Title order={3} className={classes.title}>
-              Fechas de cada periodo
-            </Title>
-            <Text className={classes.subtitle}>
-              Define el rango de fechas (inicio y fin) en el que se toman las respuestas
-              de cada periodo A/B.
-            </Text>
-          </div>
-
-          <div className={classes.fieldRow}>
-            <Text className={classes.fieldLabel}>Periodo</Text>
-            <TextInput
-              value={periodo}
-              onChange={(e) => setPeriodo(e.currentTarget.value)}
-              style={{ width: 140 }}
-              placeholder="2026B"
-            />
-          </div>
-
-          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-            <div className={classes.fieldRow}>
-              <Text className={classes.fieldLabel}>Inicio</Text>
-              <TextInput
-                type="date"
-                value={inicio}
-                onChange={(e) => setInicio(e.currentTarget.value)}
-                disabled={cargandoRango}
-                style={{ flex: 1 }}
-              />
-            </div>
-            <div className={classes.fieldRow}>
-              <Text className={classes.fieldLabel}>Fin</Text>
-              <TextInput
-                type="date"
-                value={fin}
-                onChange={(e) => setFin(e.currentTarget.value)}
-                disabled={cargandoRango}
-                style={{ flex: 1 }}
-              />
-            </div>
-          </SimpleGrid>
-
-          <Text className={classes.fieldHelp}>
-            {rango?.es_default
-              ? 'Este es el rango por defecto del periodo. Se usará salvo que guardes uno personalizado.'
-              : rango
-                ? 'Este es un rango personalizado guardado para el periodo.'
-                : 'Escribe un periodo con formato AAAA A / AAAA B (ej. 2026B).'}
-          </Text>
-
-          {guardadoRango && (
-            <Alert
-              color="green"
-              variant="light"
-              radius="md"
-              icon={<IconCircleCheck size={18} aria-hidden="true" />}
-            >
-              Los cambios se guardaron correctamente.
-            </Alert>
-          )}
-
-          {errorRango && (
-            <Alert color="red" variant="light" radius="md">
-              {errorRango}
-            </Alert>
-          )}
-
-          <Button
-            size="md"
-            color="indigo"
-            className={classes.submitButton}
-            loading={guardandoRango}
-            disabled={cargandoRango || !inicio || !fin}
-            onClick={handleGuardarRango}
-          >
-            Guardar rango de fechas
-          </Button>
-        </Stack>
-      </Card>
-
-      <IndiceFiSection />
+      <Tabs defaultValue="general" mt="md" keepMounted={false}>
+        <Tabs.List>
+          <Tabs.Tab value="general">General</Tabs.Tab>
+          <Tabs.Tab value="indice">Índice FI UAEMex</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="general" pt="md">
+          <PestanaGeneral />
+        </Tabs.Panel>
+        <Tabs.Panel value="indice" pt="md">
+          <IndiceFiSection />
+        </Tabs.Panel>
+      </Tabs>
     </>
   );
 }
