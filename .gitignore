@@ -12,3 +12,6 @@ postgres-data/
 frontend/node_modules/
 frontend/dist/
 docker-compose.override.yml
+frontend/.env
+frontend/.pnpm-store/v10
+*.log

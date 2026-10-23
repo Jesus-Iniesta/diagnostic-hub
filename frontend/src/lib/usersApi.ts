@@ -1,6 +1,6 @@
 import { API_BASE_URL, USERS_URL } from '../config';
 import { apiFetch } from './api';
-import type { User, UserListResponse } from '../types';
+import type { ProfesorListResponse, User, UserListResponse } from '../types';
 
 export async function fetchUsers(params: {
   role_name?: string;
@@ -28,6 +28,23 @@ export async function fetchUsers(params: {
     throw new Error(body.detail ?? 'Error al obtener usuarios');
   }
   return res.json() as Promise<UserListResponse>;
+}
+
+/** Profesores con sus grupos (solo los del periodo, si se indica). */
+export function fetchProfesores(params: {
+  busqueda?: string;
+  activo?: boolean;
+  periodo?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<ProfesorListResponse> {
+  const searchParams = new URLSearchParams();
+  if (params.busqueda) searchParams.set('busqueda', params.busqueda);
+  if (params.activo !== undefined) searchParams.set('activo', String(params.activo));
+  if (params.periodo) searchParams.set('periodo', params.periodo);
+  if (params.limit) searchParams.set('limit', String(params.limit));
+  if (params.offset) searchParams.set('offset', String(params.offset));
+  return apiFetch<ProfesorListResponse>(`${USERS_URL}/profesores?${searchParams}`);
 }
 
 export interface UsuarioPersonalDatos {

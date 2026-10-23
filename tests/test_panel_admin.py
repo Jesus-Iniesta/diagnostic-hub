@@ -124,6 +124,30 @@ async def prueba_db():
             lista = await users.list_users(db, None, f"{P}", None, True, 20, 0, admin)
             check("lista solo personal", [u.correo_personal for u in lista.items], [f"{P}.acr@gmail.com"])
 
+            # Profesores: alta con RFC y lista con sus grupos del periodo.
+            prof = await users.crear_usuario(users.UsuarioPersonalCreate(
+                nombre="Paula", apellido_paterno="Prueba", correo_personal=f"{P}.prof@gmail.com",
+                rfc="zzpp010101aaa", rol="profesor", password="secreta123"), db, admin)
+            check("crear profesor: RFC en mayúsculas", (prof.role.name, prof.rfc), ("profesor", "ZZPP010101AAA"))
+            from app.models.grupo import Grupo
+            from app.models.grupo_profesor import grupo_profesor
+            from app.models.materia import Materia
+
+            materia = await db.scalar(select(Materia).limit(1))
+            for nombre, periodo in (("ZZ1", PERIODO), ("ZZ2", "2031A")):
+                grupo = Grupo(nombre=nombre, materia_id=materia.id, periodo=periodo)
+                db.add(grupo)
+                await db.flush()
+                await db.execute(grupo_profesor.insert().values(grupo_id=grupo.id, user_id=prof.id))
+            res = await users.listar_profesores(db, "ZZPP0101", None, PERIODO, 20, 0, admin)
+            check("profesores: busca por RFC y solo grupos del periodo",
+                  [(p.correo_personal, [g.nombre for g in p.grupos]) for p in res.items],
+                  [(f"{P}.prof@gmail.com", ["ZZ1"])])
+            res = await users.listar_profesores(db, f"{P}", None, None, 20, 0, admin)
+            check("profesores: sin periodo, todos sus grupos y ningún otro rol",
+                  [(p.correo_personal, sorted(g.nombre for g in p.grupos)) for p in res.items],
+                  [(f"{P}.prof@gmail.com", ["ZZ1", "ZZ2"])])
+
             # Cambiar contraseña.
             await esperar_error("contraseña actual incorrecta", auth.cambiar_password(
                 auth.CambiarPasswordPayload(actual="mala", nueva="Nueva12345"), db, admin), 400)

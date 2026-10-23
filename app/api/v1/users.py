@@ -5,6 +5,10 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
 from app.core.security import hash_password, require_permission
+from app.models.grupo import Grupo
+from app.models.grupo_alumno import grupo_alumno
+from app.models.grupo_profesor import grupo_profesor
+from app.models.materia import Materia
 from app.models.role import Role
 from app.models.user import AuthMethod, User
 from app.repositories.user_repository import UserRepository
@@ -37,6 +41,25 @@ class UsuarioPersonalUpdate(BaseModel):
     activo: bool | None = None
     # Si viene, se cambia la contraseña.
     password: str | None = Field(default=None, min_length=LARGO_MINIMO_PASSWORD)
+
+
+class GrupoDeProfesor(BaseModel):
+    id: int
+    nombre: str
+    materia: str
+    periodo: str
+    alumnos: int
+
+
+class ProfesorRead(UserRead):
+    grupos: list[GrupoDeProfesor]
+
+
+class ProfesorListResponse(BaseModel):
+    items: list[ProfesorRead]
+    total: int
+    limit: int
+    offset: int
 
 
 async def _rol(db, nombre: str) -> Role:
@@ -99,6 +122,57 @@ async def list_users(
     )
     return UserListResponse(
         items=[UserRead.model_validate(u) for u in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/profesores",
+    response_model=ProfesorListResponse,
+    summary="Listar profesores con sus grupos",
+)
+async def listar_profesores(
+    db: DbSession,
+    busqueda: str | None = Query(default=None, description="Buscar por nombre, correo o RFC"),
+    activo: bool | None = Query(default=None, description="Filtrar por estado activo"),
+    periodo: str | None = Query(default=None, description="Solo los grupos de este periodo"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    _current_user: User = Depends(require_permission("consultar_usuarios")),
+):
+    items, total = await UserRepository(db).list(
+        role_name="profesor", busqueda=busqueda, activo=activo, limit=limit, offset=offset
+    )
+    grupos: dict[int, list[GrupoDeProfesor]] = {u.id: [] for u in items}
+    if items:
+        query = (
+            select(
+                grupo_profesor.c.user_id,
+                Grupo.id,
+                Grupo.nombre,
+                func.coalesce(Grupo.materia_nombre, Materia.nombre),
+                Grupo.periodo,
+                func.count(grupo_alumno.c.alumno_id.distinct()),
+            )
+            .join(Grupo, Grupo.id == grupo_profesor.c.grupo_id)
+            .join(Materia, Materia.id == Grupo.materia_id)
+            .outerjoin(grupo_alumno, grupo_alumno.c.grupo_id == Grupo.id)
+            .where(grupo_profesor.c.user_id.in_(grupos), Grupo.activo)
+            .group_by(grupo_profesor.c.user_id, Grupo.id, Materia.nombre)
+            .order_by(Grupo.periodo.desc(), Grupo.nombre)
+        )
+        if periodo:
+            query = query.where(Grupo.periodo == periodo)
+        for user_id, gid, nombre, materia, per, alumnos in await db.execute(query):
+            grupos[user_id].append(
+                GrupoDeProfesor(id=gid, nombre=nombre, materia=materia, periodo=per, alumnos=alumnos)
+            )
+    return ProfesorListResponse(
+        items=[
+            ProfesorRead(**UserRead.model_validate(u).model_dump(), grupos=grupos[u.id]) for u in items
+        ],
         total=total,
         limit=limit,
         offset=offset,

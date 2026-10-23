@@ -39,3 +39,22 @@ export interface UserListResponse {
   limit: number;
   offset: number;
 }
+
+export interface GrupoDeProfesor {
+  id: number;
+  nombre: string;
+  materia: string;
+  periodo: string;
+  alumnos: number;
+}
+
+export interface Profesor extends User {
+  grupos: GrupoDeProfesor[];
+}
+
+export interface ProfesorListResponse {
+  items: Profesor[];
+  total: number;
+  limit: number;
+  offset: number;
+}

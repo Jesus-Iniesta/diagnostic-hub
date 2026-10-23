@@ -38,12 +38,16 @@ interface UsuarioModalProps {
   usuario: User | 'nuevo' | null;
   onClose: () => void;
   onGuardado: () => void;
+  /** Si viene, el rol no se puede cambiar (p. ej. el apartado Profesores). */
+  rolFijo?: string;
 }
 
-function UsuarioModal({ usuario, onClose, onGuardado }: UsuarioModalProps) {
+export function UsuarioModal({ usuario, onClose, onGuardado, rolFijo }: UsuarioModalProps) {
   const editando = usuario !== null && usuario !== 'nuevo' ? usuario : null;
+  const rolInicial = rolFijo ?? 'administrador';
+  const nombreRol = ROLES_PERSONAL.find((r) => r.value === rolFijo)?.label.toLowerCase() ?? 'usuario';
   const [datos, setDatos] = useState<UsuarioPersonalDatos>({
-    nombre: '', apellido_paterno: '', apellido_materno: '', correo_personal: '', rfc: '', rol: 'administrador', password: '',
+    nombre: '', apellido_paterno: '', apellido_materno: '', correo_personal: '', rfc: '', rol: rolInicial, password: '',
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +60,7 @@ function UsuarioModal({ usuario, onClose, onGuardado }: UsuarioModalProps) {
       apellido_materno: editando?.apellido_materno ?? '',
       correo_personal: editando?.correo_personal ?? '',
       rfc: editando?.rfc ?? '',
-      rol: editando?.role.name ?? 'administrador',
+      rol: editando?.role.name ?? rolInicial,
       password: '',
     });
   }, [usuario]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -98,7 +102,7 @@ function UsuarioModal({ usuario, onClose, onGuardado }: UsuarioModalProps) {
   };
 
   return (
-    <Modal opened={usuario !== null} onClose={onClose} title={editando ? 'Editar usuario' : 'Nuevo usuario'} centered>
+    <Modal opened={usuario !== null} onClose={onClose} title={editando ? `Editar ${nombreRol}` : `Nuevo ${nombreRol}`} centered>
       <Stack gap="sm">
         <TextInput label="Nombre(s)" withAsterisk {...campo('nombre')} />
         <SimpleGrid cols={2}>
@@ -106,16 +110,22 @@ function UsuarioModal({ usuario, onClose, onGuardado }: UsuarioModalProps) {
           <TextInput label="Apellido materno" {...campo('apellido_materno')} />
         </SimpleGrid>
         <TextInput label="Correo" withAsterisk {...campo('correo_personal')} />
-        <Select
-          label="Rol"
-          data={ROLES_PERSONAL}
-          value={datos.rol}
-          onChange={(v) => setDatos((d) => ({ ...d, rol: v ?? 'administrador' }))}
-          allowDeselect={false}
-        />
+        {!rolFijo && (
+          <Select
+            label="Rol"
+            data={ROLES_PERSONAL}
+            value={datos.rol}
+            onChange={(v) => setDatos((d) => ({ ...d, rol: v ?? 'administrador' }))}
+            allowDeselect={false}
+          />
+        )}
         <TextInput
           label="RFC"
-          description="Los profesores entran con su RFC; administradores y acreditadores, con su correo."
+          description={
+            rolFijo === 'profesor'
+              ? 'El profesor inicia sesión con su RFC y la contraseña de abajo.'
+              : 'Los profesores entran con su RFC; administradores y acreditadores, con su correo.'
+          }
           withAsterisk={datos.rol === 'profesor'}
           {...campo('rfc')}
         />

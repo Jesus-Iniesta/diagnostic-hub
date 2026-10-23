@@ -15,6 +15,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminReportes from './pages/admin/AdminReportes';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminLigasExamenes from './pages/admin/AdminLigasExamenes';
+import AdminProfesores from './pages/admin/AdminProfesores';
 import AdminUsuarios from './pages/admin/AdminUsuarios';
 import AlumnoContacto from './pages/alumno/AlumnoContacto';
 import AlumnoHome from './pages/alumno/AlumnoHome';
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="webassign" element={<Navigate to="/admin/carga?tab=webassign" replace />} />
         <Route path="reportes" element={<AdminReportes />} />
         <Route path="configuracion" element={<AdminConfiguracion />} />
+        <Route path="profesores" element={<AdminProfesores />} />
         <Route path="usuarios" element={<AdminUsuarios />} />
         <Route path="ligas" element={<AdminLigasExamenes />} />
       </Route>

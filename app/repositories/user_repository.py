@@ -36,6 +36,7 @@ class UserRepository:
                     User.apellido_paterno.ilike(term),
                     User.apellido_materno.ilike(term),
                     User.correo_personal.ilike(term),
+                    User.rfc.ilike(term),
                 )
             )
 
