@@ -34,6 +34,9 @@ VALORES_DEFAULT: dict[str, float] = {
 # Por ahora la asistencia no se usa: vale 0 y no cuenta para el máximo.
 USAR_ASISTENCIA_DEFAULT = False
 
+# El máximo de una categoría no puede pasar de este valor.
+CATEGORIA_MAXIMO_TOPE = 10.0
+
 CATEGORIAS_DEFAULT: list[dict] = [
     {
         "nombre": "Alto",
@@ -146,6 +149,8 @@ def validar_config(
             agregar(i, "Escribe el nombre de la categoría.")
         if cat["minimo"] > cat["maximo"] + _EPS:
             agregar(i, "El valor mínimo es mayor que el máximo.")
+        if cat["maximo"] > CATEGORIA_MAXIMO_TOPE + _EPS:
+            agregar(i, f"El valor máximo no puede ser mayor a {CATEGORIA_MAXIMO_TOPE:g}.")
 
     # Las que tienen mínimo > máximo ya llevan su alerta; si entraran a la cadena
     # marcarían huecos y encimes falsos en las demás.
@@ -415,8 +420,9 @@ async def indices_alumnos(
 
 
 def formula_indice(celdas_suma: list[str]) -> str:
+    """Índice redondeado a una décima, guardado como fracción (9.3 -> 0.93) para verse como 93%."""
     suma = "+".join(celdas_suma)
-    return f"=-INT(0.5-ROUND(({suma})*10,6))/10"
+    return f"=-INT(0.5-ROUND(({suma})*10,6))/100"
 
 
 def formula_categoria(celda_indice: str, categorias: list[dict]) -> str:

@@ -27,6 +27,7 @@ import {
   fetchMiPerfil,
   fetchMisExamenes,
 } from '../../lib/alumnoApi';
+import { aPorcentaje } from '../../lib/categorias';
 import { fetchLigasVisibles } from '../../lib/ligaApi';
 import type { IndiceFiAlumno, MisExamenes } from '../../types/alumno';
 import type { LigaExamenDiagnostico } from '../../types/liga';
@@ -172,9 +173,9 @@ export default function AlumnoHome() {
             ) : indice?.tiene_resultados ? (
               <Stack gap="xs" mt="sm">
                 <Text className={classes.indice}>
-                  {indice.indice.toFixed(1)}
+                  {aPorcentaje(indice.indice)}
                   <Text component="span" className={classes.indiceMax}>
-                    {' '}/ {Number(indice.maximo.toFixed(2))}
+                    {' '}/ {aPorcentaje(indice.maximo)}
                   </Text>
                 </Text>
                 {indice.categoria && (

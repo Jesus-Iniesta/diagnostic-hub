@@ -43,6 +43,8 @@ const COMPONENTES: { key: ComponenteIndice; label: string }[] = [
 
 // Tolerancia para comparar decimales (igual que en el backend).
 const EPS = 1e-6;
+/** El máximo de una categoría no puede pasar de este valor (igual que el backend). */
+const CATEGORIA_MAXIMO_TOPE = 10;
 
 let siguienteId = 1;
 
@@ -100,6 +102,9 @@ function validar(
       agregar(i, 'Escribe el valor mínimo y el máximo.');
     } else if (c.minimo > c.maximo + EPS) {
       agregar(i, 'El valor mínimo es mayor que el máximo.');
+    }
+    if (c.maximo !== '' && c.maximo > CATEGORIA_MAXIMO_TOPE + EPS) {
+      agregar(i, `El valor máximo no puede ser mayor a ${CATEGORIA_MAXIMO_TOPE}.`);
     }
   });
 
@@ -352,6 +357,7 @@ export default function IndiceFiSection() {
                           value={c.maximo}
                           onChange={(v) => setCategoria(c.id, { maximo: v === '' ? '' : Number(v) })}
                           min={0}
+                          max={CATEGORIA_MAXIMO_TOPE}
                           step={0.1}
                           decimalScale={2}
                           disabled={cargando}

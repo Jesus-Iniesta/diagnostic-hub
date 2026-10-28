@@ -21,27 +21,6 @@ LIGHT_ACCENT = colors.HexColor("#E8EAF6")
 BORDER = colors.HexColor("#D8DAE3")
 
 
-def _fmt_calif(valor: float | None, sin_label: str = "Sin datos") -> str:
-    if valor is None:
-        return sin_label
-    return f"{valor:.2f}"
-
-
-def _fmt_trabajo(valor: float | None) -> str:
-    if valor is None or valor <= 0:
-        return "No trabajó"
-    return f"{valor:.2f}"
-
-
-def _fmt_aciertos(valor: int | None) -> str:
-    return "—" if valor is None else f"{valor} / 10"
-
-
-def _fmt_valor(valor: float) -> str:
-    """Valor configurado por el coordinador: 10 -> '10', 2.5 -> '2.5'."""
-    return f"{valor:.2f}".rstrip("0").rstrip(".")
-
-
 def _texto_parrafo(texto: str) -> str:
     """Escapa el texto libre del coordinador para Paragraph y respeta sus saltos de línea."""
     return escape(texto.strip()).replace("\n", "<br/>")
@@ -123,9 +102,6 @@ def generar_pdf_resultado(
     numero_cuenta: str | None,
     ingenieria: str | None,
     periodo: str | None,
-    diagnostico: list[dict] | None,
-    examen_final: list[dict] | None,
-    webassign: list[dict] | None,
     indice: dict,
 ) -> bytes:
     buf = io.BytesIO()
@@ -155,6 +131,10 @@ def generar_pdf_resultado(
     encabezado = ParagraphStyle(
         "Encabezado", parent=normal, fontSize=10, leading=13, alignment=1,
     )
+    calificacion = ParagraphStyle(
+        "Calificacion", parent=normal, fontSize=22, leading=26, textColor=PRIMARY,
+        spaceAfter=2,
+    )
     categoria_style = ParagraphStyle(
         "Categoria", parent=normal, fontSize=11, leading=14, textColor=PRIMARY,
         spaceBefore=10, spaceAfter=4,
@@ -183,44 +163,9 @@ def generar_pdf_resultado(
     if linea2:
         story.append(Paragraph(linea2, encabezado))
 
-    # b) Examen diagnóstico (cuestionarios 1 y 2).
-    story.append(Paragraph("Examen diagnóstico", h2))
-    if diagnostico:
-        rows = [["Materia", "Cuestionario 1", "Cuestionario 2", "Calificación"]]
-        for m in diagnostico:
-            rows.append([
-                m["nombre"],
-                _fmt_aciertos(m["c1"]),
-                _fmt_aciertos(m["c2"]),
-                "—" if m["calificacion"] is None else f"{m['calificacion']:.1f}",
-            ])
-        story.append(_tabla(rows, [6, 3.5, 3.5, 3]))
-    else:
-        story.append(Paragraph("No tienes examen diagnóstico registrado.", normal))
-
-    # c) Examen final.
-    story.append(Paragraph("Examen final", h2))
-    if examen_final:
-        rows = [["Materia", "Calificación"]]
-        for m in examen_final:
-            rows.append([m["nombre"], _fmt_calif(m["puntaje"])])
-        story.append(_tabla(rows, [6, 3]))
-    else:
-        story.append(Paragraph("No tienes examen final registrado.", normal))
-
-    # d) WebAssign.
-    story.append(Paragraph("WebAssign", h2))
-    if webassign:
-        rows = [["Materia", "Trabajo", "Examen"]]
-        for m in webassign:
-            rows.append([m["nombre"], _fmt_trabajo(m["trabajo"]), _fmt_trabajo(m["examen"])])
-        story.append(_tabla(rows, [6, 3, 3]))
-    else:
-        story.append(Paragraph("No trabajaste en WebAssign.", normal))
-
-    # e) Índice FI UAEMex.
+    # b) Índice FI UAEMex: solo la calificación final, sin desglose ni escala.
     story.append(Paragraph("Índice FI UAEMex", h2))
-    story.append(_tabla_desglose_indice(indice))
+    story.append(Paragraph(f"{indice['indice']:.1f}", calificacion))
 
     # f) Categoría y su comentario.
     categoria = indice["categoria"]
@@ -234,27 +179,3 @@ def generar_pdf_resultado(
     return buf.getvalue()
 
 
-def _tabla_desglose_indice(indice: dict) -> Table:
-    """Componente | obtenido | valor; el detalle por materia ya salió en las tablas de arriba."""
-    rows = [["Componente", "Obtenido", "Valor"]]
-    if indice["asistencia"]["usar"]:
-        rows.append(["Asistencia", "Sin registrar", _fmt_valor(indice["asistencia"]["valor"])])
-    for nombre, key in (
-        ("Examen diagnóstico", "diagnostico"),
-        ("WebAssign", "webassign"),
-        ("Examen final", "final"),
-    ):
-        comp = indice[key]
-        rows.append([nombre, f"{comp['total']:.2f}", _fmt_valor(comp["valor"])])
-
-    total = len(rows)
-    rows.append([
-        f"Índice FI UAEMex: {indice['indice']:.1f} / {_fmt_valor(indice['maximo'])}", "", "",
-    ])
-    return _tabla(rows, [6, 3, 3], [
-        ("SPAN", (0, total), (-1, total)),
-        ("ALIGN", (0, total), (-1, total), "LEFT"),
-        ("BACKGROUND", (0, total), (-1, total), LIGHT_ACCENT),
-        ("FONTNAME", (0, total), (-1, total), "Helvetica-Bold"),
-        ("FONTSIZE", (0, total), (-1, total), 10),
-    ])

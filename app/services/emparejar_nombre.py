@@ -27,7 +27,8 @@ IDENTICO = "identico"
 POSIBLE = "posible"
 NINGUNO = "ninguno"
 
-DOMINIO_INSTITUCIONAL = "alumno.uaemex.mx"
+# Correo institucional de la UAEMéx: el de alumno y el de la institución.
+DOMINIOS_INSTITUCIONALES = ("alumno.uaemex.mx", "uaemex.mx")
 
 MOTIVO_NOMBRE_INCOMPLETO = "Nombre parecido en WebAssign"
 MOTIVO_HOMONIMO = "Mismo nombre que otro alumno en WebAssign"
@@ -35,7 +36,7 @@ MOTIVO_CORREO_INSTITUCIONAL = "Su correo institucional corresponde a este nombre
 
 
 def es_institucional(correo: str | None) -> bool:
-    return bool(correo) and correo.endswith("@" + DOMINIO_INSTITUCIONAL)
+    return bool(correo) and correo.endswith(tuple("@" + d for d in DOMINIOS_INSTITUCIONALES))
 
 
 def _palabras(texto: str | None) -> list[str]:

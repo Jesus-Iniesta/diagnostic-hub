@@ -17,6 +17,7 @@ from app.services.alumnos_provisionales import (
     destino_registro,
 )
 from app.services.alumnos_provisionales_service import completar_provisional_con_padron
+from app.services.emparejar_nombre import es_institucional
 from app.services.normalizacion import normalizar_correo, normalizar_nombre
 from app.services.unir_alumnos_service import UnionError, unir_alumnos
 from app.services.upload_diagnostico_service import load_all_alumnos
@@ -147,7 +148,7 @@ class RegistroAlumnoRepository:
                 if c != alumno.usuario.correo_institucional
             ]
             # El personal (el de WebAssign) no es el institucional de la UAEMex.
-            personales = [c for c in correos if not c.endswith("uaemex.mx")]
+            personales = [c for c in correos if not es_institucional(c)]
             correo = (personales or correos or [None])[0]
 
         ingenieria_id = alumno.ingenieria_id

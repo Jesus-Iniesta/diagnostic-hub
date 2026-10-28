@@ -217,7 +217,7 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
     grupo("Diag. C1", "Diag. total", f"Diagnóstico (sobre {v['diagnostico']:g})", INDICE_FILL)
     grupo("WA Álgebra", "WA total", f"WebAssign (sobre {v['webassign']:g})", INDICE_FILL)
     grupo("Final Álgebra", "Final total", f"Final (sobre {v['final']:g})", INDICE_FILL)
-    grupo("Índice FI UAEMex", "Categoría", f"Índice sobre {maximo:g}", INDICE_FILL_RESULTADO)
+    grupo("Índice FI UAEMex", "Categoría", f"Índice sobre {round(maximo * 10, 2):g}%", INDICE_FILL_RESULTADO)
 
     borde = Border(left=CREANI_THIN, right=CREANI_THIN, top=CREANI_THIN, bottom=CREANI_THIN)
 
@@ -264,7 +264,8 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
                 ([ref("Asistencia")] if usar_asistencia else [])
                 + [ref("Diag. total"), ref("WA total"), ref("Final total")]
             ),
-            "Categoría": formula_categoria(ref("Índice FI UAEMex"), config["categorias"]),
+            # El índice está guardado como fracción (0.93): la categoría compara en escala de 10.
+            "Categoría": formula_categoria(f"ROUND({ref('Índice FI UAEMex')}*10,6)", config["categorias"]),
         }
         for nombre, valor in valores.items():
             celda = ws.cell(r, col[nombre])
@@ -272,7 +273,7 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
             estilo(celda, nombre)
             celda.alignment = Alignment(horizontal="center")
             if nombre == "Índice FI UAEMex":
-                celda.number_format = "0.0"
+                celda.number_format = "0%"
             elif nombre != "Categoría":
                 celda.number_format = "0.00"
 

@@ -20,7 +20,12 @@ export function colorCategoria(nombre: string | null, ordenadas: string[]): stri
 }
 
 /** 7 -> "7.0"; el máximo se escribe sin ceros de más: 10 -> "10", 2.5 -> "2.5". */
+/** El índice va de 0 a 10 y se muestra como porcentaje: 3 -> 30%, 10 -> 100%. */
+export function aPorcentaje(valor: number): string {
+  return `${Number((valor * 10).toFixed(1))}%`;
+}
+
 export function fmtIndice(indice: number | null, maximo: number): string {
   if (indice == null) return '—';
-  return `${indice.toFixed(1)} / ${Number(maximo.toFixed(2))}`;
+  return `${aPorcentaje(indice)} / ${aPorcentaje(maximo)}`;
 }

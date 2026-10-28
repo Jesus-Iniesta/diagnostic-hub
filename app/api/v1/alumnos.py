@@ -32,7 +32,6 @@ from app.services.feedback_service import (
 from app.services.indice_fi_service import (
     MATERIAS_DIAGNOSTICO,
     MATERIAS_FINAL,
-    MATERIAS_WEBASSIGN,
     indices_alumnos,
 )
 from app.services.pdf_service import generar_pdf_correos, generar_pdf_resultado
@@ -406,43 +405,8 @@ async def mi_reporte_pdf(
         raise HTTPException(status_code=404, detail="No se encontró tu registro de alumno")
     _exigir_datos_completos(alumno)
 
+    # La carta solo lleva la calificación final del Índice FI (sin desglose por examen).
     indice = await _indice_fi_alumno(db, alumno.id)
-    filas = indice["filas"]
-    cuest, final, wa = filas["cuestionario"], filas["final"], filas["webassign"]
-
-    # Todas las tablas son del mismo periodo que el índice.
-    diagnostico: list[dict] | None = None
-    if cuest:
-        diagnostico = []
-        for key in MATERIAS_DIAGNOSTICO:
-            c1 = getattr(cuest, f"aciertos_c1_{key}")
-            c2 = getattr(cuest, f"aciertos_c2_{key}")
-            # Igual que en Mis resultados: (aciertos c1 + aciertos c2) * 0.5, sobre 10.
-            calificacion = None if c1 is None and c2 is None else ((c1 or 0) + (c2 or 0)) * 0.5
-            diagnostico.append({
-                "nombre": MATERIAS_NOMBRES[key],
-                "c1": c1,
-                "c2": c2,
-                "calificacion": calificacion,
-            })
-
-    examen_final: list[dict] | None = None
-    if final:
-        examen_final = [
-            {"nombre": MATERIAS_NOMBRES[key], "puntaje": getattr(final, f"puntaje_{key}")}
-            for key in MATERIAS_FINAL
-        ]
-
-    webassign: list[dict] | None = None
-    if wa:
-        webassign = [
-            {
-                "nombre": MATERIAS_NOMBRES[key],
-                "trabajo": getattr(wa, f"{key}_trabajo"),
-                "examen": getattr(wa, f"{key}_examen"),
-            }
-            for key in MATERIAS_WEBASSIGN
-        ]
 
     ingenieria = (
         await db.get(Ingenieria, alumno.ingenieria_id) if alumno.ingenieria_id else None
@@ -457,9 +421,6 @@ async def mi_reporte_pdf(
         numero_cuenta=alumno.numero_cuenta,
         ingenieria=ingenieria.nombre if ingenieria else None,
         periodo=indice["periodo"] if indice["tiene_resultados"] else None,
-        diagnostico=diagnostico,
-        examen_final=examen_final,
-        webassign=webassign,
         indice=indice,
     )
 

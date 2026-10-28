@@ -30,6 +30,7 @@ import {
   fetchMiPerfil,
   fetchMiWebAssign,
 } from '../../lib/alumnoApi';
+import { aPorcentaje } from '../../lib/categorias';
 import { dashboardColors } from '../../theme/theme';
 import type {
   CuestionarioAlumnoResponse,
@@ -393,9 +394,9 @@ export default function AlumnoResultados() {
                 <Stack gap={2}>
                   <Text className={classes.scoreLabel}>Tu índice</Text>
                   <Text className={classes.scoreValue}>
-                    {indiceFi.indice.toFixed(1)}
+                    {aPorcentaje(indiceFi.indice)}
                     <Text component="span" className={classes.scoreMax}>
-                      {' '}/ {Number(indiceFi.maximo.toFixed(2))}
+                      {' '}/ {aPorcentaje(indiceFi.maximo)}
                     </Text>
                   </Text>
                 </Stack>
