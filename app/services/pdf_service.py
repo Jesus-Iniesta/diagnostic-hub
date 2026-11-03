@@ -37,9 +37,10 @@ def _fmt_aciertos(valor: int | None) -> str:
     return "—" if valor is None else f"{valor} / 10"
 
 
-def _fmt_valor(valor: float) -> str:
-    """Valor configurado por el coordinador: 10 -> '10', 2.5 -> '2.5'."""
-    return f"{valor:.2f}".rstrip("0").rstrip(".")
+def _fmt_porcentaje(valor: float, maximo: float) -> str:
+    """Parte del máximo del índice: (2.25, 10) -> '22.5%', (3, 10) -> '30%'."""
+    porcentaje = valor / maximo * 100 if maximo else 0.0
+    return f"{porcentaje:.1f}".removesuffix(".0") + "%"
 
 
 def _texto_parrafo(texto: str) -> str:
@@ -211,7 +212,7 @@ def generar_pdf_resultado(
     # d) WebAssign.
     story.append(Paragraph("WebAssign", h2))
     if webassign:
-        rows = [["Materia", "Trabajo", "Examen"]]
+        rows = [["Materia", "Tareas", "Examen"]]
         for m in webassign:
             rows.append([m["nombre"], _fmt_trabajo(m["trabajo"]), _fmt_trabajo(m["examen"])])
         story.append(_tabla(rows, [6, 3, 3]))
@@ -235,21 +236,24 @@ def generar_pdf_resultado(
 
 
 def _tabla_desglose_indice(indice: dict) -> Table:
-    """Componente | obtenido | valor; el detalle por materia ya salió en las tablas de arriba."""
+    """Componente | obtenido | valor, en porcentaje del índice; el detalle por materia
+    ya salió en las tablas de arriba."""
+    maximo = indice["maximo"]
     rows = [["Componente", "Obtenido", "Valor"]]
     if indice["asistencia"]["usar"]:
-        rows.append(["Asistencia", "Sin registrar", _fmt_valor(indice["asistencia"]["valor"])])
+        rows.append(["Asistencia", "Sin registrar", _fmt_porcentaje(indice["asistencia"]["valor"], maximo)])
     for nombre, key in (
         ("Examen diagnóstico", "diagnostico"),
-        ("WebAssign", "webassign"),
+        ("Tareas WebAssign", "webassign_tareas"),
+        ("Exámenes WebAssign", "webassign_examen"),
         ("Examen final", "final"),
     ):
         comp = indice[key]
-        rows.append([nombre, f"{comp['total']:.2f}", _fmt_valor(comp["valor"])])
+        rows.append([nombre, _fmt_porcentaje(comp["total"], maximo), _fmt_porcentaje(comp["valor"], maximo)])
 
     total = len(rows)
     rows.append([
-        f"Índice FI UAEMex: {indice['indice']:.1f} / {_fmt_valor(indice['maximo'])}", "", "",
+        f"Índice FI UAEMex: {_fmt_porcentaje(indice['indice'], maximo)}", "", "",
     ])
     return _tabla(rows, [6, 3, 3], [
         ("SPAN", (0, total), (-1, total)),

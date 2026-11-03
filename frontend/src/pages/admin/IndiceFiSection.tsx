@@ -37,7 +37,8 @@ interface CategoriaForm {
 const COMPONENTES: { key: ComponenteIndice; label: string }[] = [
   { key: 'asistencia', label: 'Asistencia' },
   { key: 'diagnostico', label: 'Examen diagnóstico' },
-  { key: 'webassign', label: 'WebAssign' },
+  { key: 'webassign_tareas', label: 'Tareas WebAssign' },
+  { key: 'webassign_examen', label: 'Exámenes WebAssign' },
   { key: 'final', label: 'Examen final' },
 ];
 
@@ -148,7 +149,8 @@ export default function IndiceFiSection() {
   const [valores, setValores] = useState<Record<ComponenteIndice, Numero>>({
     asistencia: '',
     diagnostico: '',
-    webassign: '',
+    webassign_tareas: '',
+    webassign_examen: '',
     final: '',
   });
   const [categorias, setCategorias] = useState<CategoriaForm[]>([]);
@@ -194,6 +196,8 @@ export default function IndiceFiSection() {
     (a, { key }) => a + (valores[key] === '' ? 0 : (valores[key] as number)),
     0,
   );
+  // Tope de las categorías; sin componentes capturados todavía no hay tope.
+  const topeCategoria = maximo > 0 ? Math.round(maximo * 10000) / 10000 : undefined;
 
   const cambiar = () => setGuardado(false);
 
@@ -291,9 +295,10 @@ export default function IndiceFiSection() {
               onChange={(v) => setValor(key, v)}
               min={0}
               step={0.5}
-              decimalScale={2}
+              // 3 decimales: repartir un valor anterior a la mitad puede dar 1.125.
+              decimalScale={3}
               size="sm"
-              w={130}
+              w={150}
               disabled={cargando || (key === 'asistencia' && !usarAsistencia)}
             />
           ))}
@@ -340,6 +345,8 @@ export default function IndiceFiSection() {
                           value={c.minimo}
                           onChange={(v) => setCategoria(c.id, { minimo: v === '' ? '' : Number(v) })}
                           min={0}
+                          max={topeCategoria}
+                          clampBehavior="strict"
                           step={0.1}
                           decimalScale={2}
                           disabled={cargando}
@@ -352,6 +359,8 @@ export default function IndiceFiSection() {
                           value={c.maximo}
                           onChange={(v) => setCategoria(c.id, { maximo: v === '' ? '' : Number(v) })}
                           min={0}
+                          max={topeCategoria}
+                          clampBehavior="strict"
                           step={0.1}
                           decimalScale={2}
                           disabled={cargando}

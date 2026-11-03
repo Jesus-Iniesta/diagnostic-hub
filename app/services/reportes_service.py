@@ -171,13 +171,14 @@ INDICE_COL_INICIO = 21  # U
 INDICE_HEADERS = [
     "Asistencia",
     "Diag. C1", "Diag. C2", "Diag. total",
-    "WA Álgebra", "WA Trigonometría", "WA Geometría", "WA total",
+    "Tareas WA Álgebra", "Tareas WA Trigonometría", "Tareas WA Geometría", "Tareas WA total",
+    "Examen WA Álgebra", "Examen WA Trigonometría", "Examen WA Geometría", "Examen WA total",
     "Final Álgebra", "Final Trigonometría", "Final Geometría", "Final Cálculo",
     "Final total",
     "Índice FI UAEMex", "Categoría",
 ]
 INDICE_RESULTADO = ("Índice FI UAEMex", "Categoría")
-INDICE_NEGRITAS = {"Diag. total", "WA total", "Final total", *INDICE_RESULTADO}
+INDICE_NEGRITAS = {"Diag. total", "Tareas WA total", "Examen WA total", "Final total", *INDICE_RESULTADO}
 INDICE_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 INDICE_FILL_RESULTADO = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")
 
@@ -215,7 +216,18 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
         INDICE_FILL,
     )
     grupo("Diag. C1", "Diag. total", f"Diagnóstico (sobre {v['diagnostico']:g})", INDICE_FILL)
-    grupo("WA Álgebra", "WA total", f"WebAssign (sobre {v['webassign']:g})", INDICE_FILL)
+    grupo(
+        "Tareas WA Álgebra",
+        "Tareas WA total",
+        f"Tareas WebAssign (sobre {v['webassign_tareas']:g})",
+        INDICE_FILL,
+    )
+    grupo(
+        "Examen WA Álgebra",
+        "Examen WA total",
+        f"Exámenes WebAssign (sobre {v['webassign_examen']:g})",
+        INDICE_FILL,
+    )
     grupo("Final Álgebra", "Final total", f"Final (sobre {v['final']:g})", INDICE_FILL)
     grupo("Índice FI UAEMex", "Categoría", f"Índice sobre {maximo:g}", INDICE_FILL_RESULTADO)
 
@@ -234,7 +246,8 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
 
     for r, f in enumerate(filas, 4):
         diag = f["indice"]["diagnostico"]
-        wa = f["indice"]["webassign"]["materias"]
+        tareas = f["indice"]["webassign_tareas"]["materias"]
+        examenes = f["indice"]["webassign_examen"]["materias"]
         final = f["indice"]["final"]["materias"]
 
         def ref(nombre: str) -> str:
@@ -248,10 +261,20 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
             "Diag. C1": diag["c1"]["total"],
             "Diag. C2": diag["c2"]["total"],
             "Diag. total": f"={ref('Diag. C1')}+{ref('Diag. C2')}",
-            "WA Álgebra": wa["algebra"]["total"],
-            "WA Trigonometría": wa["trigonometria"]["total"],
-            "WA Geometría": wa["geometria"]["total"],
-            "WA total": f"={ref('WA Álgebra')}+{ref('WA Trigonometría')}+{ref('WA Geometría')}",
+            "Tareas WA Álgebra": tareas["algebra"],
+            "Tareas WA Trigonometría": tareas["trigonometria"],
+            "Tareas WA Geometría": tareas["geometria"],
+            "Tareas WA total": (
+                f"={ref('Tareas WA Álgebra')}+{ref('Tareas WA Trigonometría')}"
+                f"+{ref('Tareas WA Geometría')}"
+            ),
+            "Examen WA Álgebra": examenes["algebra"],
+            "Examen WA Trigonometría": examenes["trigonometria"],
+            "Examen WA Geometría": examenes["geometria"],
+            "Examen WA total": (
+                f"={ref('Examen WA Álgebra')}+{ref('Examen WA Trigonometría')}"
+                f"+{ref('Examen WA Geometría')}"
+            ),
             "Final Álgebra": final["algebra"],
             "Final Trigonometría": final["trigonometria"],
             "Final Geometría": final["geometria"],
@@ -262,7 +285,7 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
             ),
             "Índice FI UAEMex": formula_indice(
                 ([ref("Asistencia")] if usar_asistencia else [])
-                + [ref("Diag. total"), ref("WA total"), ref("Final total")]
+                + [ref("Diag. total"), ref("Tareas WA total"), ref("Examen WA total"), ref("Final total")]
             ),
             "Categoría": formula_categoria(ref("Índice FI UAEMex"), config["categorias"]),
         }
@@ -281,7 +304,8 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
     for desde, hasta in (
         ("Asistencia", "Asistencia"),
         ("Diag. C1", "Diag. total"),
-        ("WA Álgebra", "WA total"),
+        ("Tareas WA Álgebra", "Tareas WA total"),
+        ("Examen WA Álgebra", "Examen WA total"),
         ("Final Álgebra", "Final total"),
         ("Índice FI UAEMex", "Categoría"),
     ):

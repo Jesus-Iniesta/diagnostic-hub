@@ -34,7 +34,8 @@ class PeriodoRangoUpdate(BaseModel):
 class IndiceFiValores(BaseModel):
     asistencia: float
     diagnostico: float
-    webassign: float
+    webassign_tareas: float
+    webassign_examen: float
     final: float
 
 
