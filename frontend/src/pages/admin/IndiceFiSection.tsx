@@ -37,7 +37,8 @@ interface CategoriaForm {
 const COMPONENTES: { key: ComponenteIndice; label: string }[] = [
   { key: 'asistencia', label: 'Asistencia' },
   { key: 'diagnostico', label: 'Examen diagnóstico' },
-  { key: 'webassign', label: 'WebAssign' },
+  { key: 'webassign_tareas', label: 'Tareas WebAssign' },
+  { key: 'webassign_examen', label: 'Exámenes WebAssign' },
   { key: 'final', label: 'Examen final' },
 ];
 
@@ -45,6 +46,9 @@ const COMPONENTES: { key: ComponenteIndice; label: string }[] = [
 const EPS = 1e-6;
 /** El máximo de una categoría no puede pasar de este valor (igual que el backend). */
 const CATEGORIA_MAXIMO_TOPE = 10;
+/** Tope de las categorías: 10 y, si ya hay componentes, el máximo del índice; lo que sea menor. */
+const topeCategorias = (maximo: number) =>
+  maximo > 0 ? Math.min(CATEGORIA_MAXIMO_TOPE, Math.round(maximo * 10000) / 10000) : CATEGORIA_MAXIMO_TOPE;
 
 let siguienteId = 1;
 
@@ -62,6 +66,10 @@ function fmt(valor: number): string {
 function fmtValor(valor: number): string {
   return String(Number(valor.toFixed(2)));
 }
+
+/** Los pesos se guardan en escala 0-10 y se muestran en porcentaje (0-100). */
+const aPorcentaje = (valor: number) => Math.round(valor * 10 * 10000) / 10000;
+const aEscalaBase = (porcentaje: number) => Math.round((porcentaje / 10) * 1000000) / 1000000;
 
 /** Componentes que cuentan para el índice (la asistencia solo si se usa). */
 function activos(usarAsistencia: boolean) {
@@ -86,10 +94,16 @@ function validar(
   } else if (nums.some((v) => (v as number) < 0)) {
     generales.push('Los valores de los componentes no pueden ser negativos.');
   }
-  const maximo = generales.length ? 0 : nums.reduce<number>((a, v) => a + (v as number), 0);
-  if (!generales.length && maximo <= 0) {
-    generales.push('La suma de los valores de los componentes debe ser mayor que 0.');
+  // `valores` viene en porcentaje; el máximo del índice (para las categorías) sigue en escala 0-10.
+  const suma = generales.length ? 0 : nums.reduce<number>((a, v) => a + (v as number), 0);
+  if (!generales.length && Math.abs(suma - 100) > EPS) {
+    generales.push(
+      suma > 100
+        ? `La suma de los valores pasa de 100% (va en ${fmtValor(suma)}%).`
+        : `La suma de los valores debe ser exactamente 100% (va en ${fmtValor(suma)}%).`,
+    );
   }
+  const maximo = generales.length ? 0 : aEscalaBase(suma);
 
   if (!categorias.length) {
     generales.push('Agrega al menos una categoría.');
@@ -103,8 +117,9 @@ function validar(
     } else if (c.minimo > c.maximo + EPS) {
       agregar(i, 'El valor mínimo es mayor que el máximo.');
     }
-    if (c.maximo !== '' && c.maximo > CATEGORIA_MAXIMO_TOPE + EPS) {
-      agregar(i, `El valor máximo no puede ser mayor a ${CATEGORIA_MAXIMO_TOPE}.`);
+    const tope = topeCategorias(maximo);
+    if (c.maximo !== '' && c.maximo > tope + EPS) {
+      agregar(i, `El valor máximo no puede ser mayor a ${tope}.`);
     }
   });
 
@@ -153,7 +168,8 @@ export default function IndiceFiSection() {
   const [valores, setValores] = useState<Record<ComponenteIndice, Numero>>({
     asistencia: '',
     diagnostico: '',
-    webassign: '',
+    webassign_tareas: '',
+    webassign_examen: '',
     final: '',
   });
   const [categorias, setCategorias] = useState<CategoriaForm[]>([]);
@@ -174,7 +190,11 @@ export default function IndiceFiSection() {
       .then((data) => {
         if (!mounted) return;
         setConfig(data);
-        setValores(data.valores);
+        setValores(
+          Object.fromEntries(
+            Object.entries(data.valores).map(([k, v]) => [k, aPorcentaje(v)]),
+          ) as Record<ComponenteIndice, Numero>,
+        );
         setCategorias(data.categorias.map(aForm));
         setUsarAsistencia(data.usar_asistencia);
       })
@@ -195,10 +215,13 @@ export default function IndiceFiSection() {
   );
   const hayErrores = generales.length > 0 || porCategoria.size > 0;
 
-  const maximo = activos(usarAsistencia).reduce(
-    (a, { key }) => a + (valores[key] === '' ? 0 : (valores[key] as number)),
-    0,
+  const maximo = aEscalaBase(
+    activos(usarAsistencia).reduce(
+      (a, { key }) => a + (valores[key] === '' ? 0 : (valores[key] as number)),
+      0,
+    ),
   );
+  const topeCategoria = topeCategorias(maximo);
 
   const cambiar = () => setGuardado(false);
 
@@ -233,7 +256,9 @@ export default function IndiceFiSection() {
     try {
       const data = await guardarIndiceFi({
         periodo,
-        valores: valores as Record<ComponenteIndice, number>,
+        valores: Object.fromEntries(
+          Object.entries(valores).map(([k, v]) => [k, aEscalaBase(v as number)]),
+        ) as Record<ComponenteIndice, number>,
         categorias: categorias.map(({ nombre, minimo, maximo: max, comentario }) => ({
           nombre: nombre.trim(),
           minimo: minimo as number,
@@ -295,22 +320,24 @@ export default function IndiceFiSection() {
               value={key === 'asistencia' && !usarAsistencia ? 0 : valores[key]}
               onChange={(v) => setValor(key, v)}
               min={0}
-              step={0.5}
+              max={100}
+              step={5}
+              // 2 decimales: repartir un valor anterior a la mitad puede dar 1.125 (11.25%).
               decimalScale={2}
+              suffix="%"
               size="sm"
-              w={130}
+              w={150}
               disabled={cargando || (key === 'asistencia' && !usarAsistencia)}
             />
           ))}
-          <Text className={classes.indiceMaximo}>Índice sobre {fmtValor(maximo)}</Text>
+          <Text className={classes.indiceMaximo}>Índice sobre 100%</Text>
         </Group>
 
         <Text className={classes.fieldLabel} mt="lg">
           Categorías
         </Text>
         <Text className={classes.fieldHelp}>
-          Cada una empieza 0.1 arriba del máximo de la anterior y entre todas cubren de 0 a{' '}
-          {fmtValor(maximo)}. El comentario aparece en la carta del alumno; da clic para editarlo.
+          Cada una empieza 0.1 arriba del máximo de la anterior y entre todas cubren de 0 a 100%. El comentario aparece en la carta del alumno; da clic para editarlo.
         </Text>
 
         <Table.ScrollContainer minWidth={720} mt="xs">
@@ -345,6 +372,8 @@ export default function IndiceFiSection() {
                           value={c.minimo}
                           onChange={(v) => setCategoria(c.id, { minimo: v === '' ? '' : Number(v) })}
                           min={0}
+                          max={topeCategoria}
+                          clampBehavior="strict"
                           step={0.1}
                           decimalScale={2}
                           disabled={cargando}
@@ -357,7 +386,8 @@ export default function IndiceFiSection() {
                           value={c.maximo}
                           onChange={(v) => setCategoria(c.id, { maximo: v === '' ? '' : Number(v) })}
                           min={0}
-                          max={CATEGORIA_MAXIMO_TOPE}
+                          max={topeCategoria}
+                          clampBehavior="strict"
                           step={0.1}
                           decimalScale={2}
                           disabled={cargando}

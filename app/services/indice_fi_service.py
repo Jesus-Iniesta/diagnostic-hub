@@ -1,8 +1,9 @@
 """Índice FI UAEMex: configuración por periodo, validación y cálculo.
 
-El índice junta cuatro componentes (asistencia, examen diagnóstico, WebAssign y
-examen final). Cada componente se reparte en partes iguales y cada parte se
-calcula con regla de 3: (obtenido / máximo de la parte) * valor de la parte.
+El índice junta cinco componentes (asistencia, examen diagnóstico, tareas de
+WebAssign, exámenes de WebAssign y examen final). Cada componente se reparte en
+partes iguales y cada parte se calcula con regla de 3:
+(obtenido / máximo de la parte) * valor de la parte.
 """
 
 from __future__ import annotations
@@ -22,12 +23,13 @@ from app.repositories.configuracion_repository import ConfiguracionRepository
 
 INDICE_FI_KEY_PREFIX = "indice_fi:"
 
-COMPONENTES = ("asistencia", "diagnostico", "webassign", "final")
+COMPONENTES = ("asistencia", "diagnostico", "webassign_tareas", "webassign_examen", "final")
 
 VALORES_DEFAULT: dict[str, float] = {
     "asistencia": 1.0,
     "diagnostico": 3.0,
-    "webassign": 3.0,
+    "webassign_tareas": 1.5,
+    "webassign_examen": 1.5,
     "final": 4.0,
 }
 
@@ -144,13 +146,15 @@ def validar_config(
         generales.append("Agrega al menos una categoría.")
         return generales, por_categoria
 
+    # Tope de las categorías: 10 y, si ya hay componentes, el máximo del índice; lo que sea menor.
+    tope = min(CATEGORIA_MAXIMO_TOPE, round(maximo, 4)) if maximo > 0 else CATEGORIA_MAXIMO_TOPE
     for i, cat in enumerate(categorias):
         if not (cat.get("nombre") or "").strip():
             agregar(i, "Escribe el nombre de la categoría.")
         if cat["minimo"] > cat["maximo"] + _EPS:
             agregar(i, "El valor mínimo es mayor que el máximo.")
-        if cat["maximo"] > CATEGORIA_MAXIMO_TOPE + _EPS:
-            agregar(i, f"El valor máximo no puede ser mayor a {CATEGORIA_MAXIMO_TOPE:g}.")
+        if cat["maximo"] > tope + _EPS:
+            agregar(i, f"El valor máximo no puede ser mayor a {tope:g}.")
 
     # Las que tienen mínimo > máximo ya llevan su alerta; si entraran a la cadena
     # marcarían huecos y encimes falsos en las demás.
@@ -196,7 +200,14 @@ def validar_config(
 
 
 def _normalizar(raw: dict) -> dict:
-    valores = {c: float(raw.get("valores", {}).get(c, VALORES_DEFAULT[c])) for c in COMPONENTES}
+    guardados = dict(raw.get("valores", {}))
+    # Guardada cuando WebAssign era un solo valor: se reparte a la mitad, y como
+    # tareas y exámenes pesaban igual, el índice de los alumnos no cambia.
+    if "webassign" in guardados:
+        mitad = float(guardados.pop("webassign")) / 2
+        guardados.setdefault("webassign_tareas", mitad)
+        guardados.setdefault("webassign_examen", mitad)
+    valores = {c: float(guardados.get(c, VALORES_DEFAULT[c])) for c in COMPONENTES}
     categorias = [
         {
             "nombre": str(c.get("nombre", "")),
@@ -314,17 +325,15 @@ def calcular_indice(datos: dict, config: dict) -> dict:
         "valor": valores["diagnostico"],
     }
 
-    parte_wa = valores["webassign"] / 6
-    wa_materias = {}
-    for m in MATERIAS_WEBASSIGN:
-        trabajo = _parte(datos.get(f"{m}_trabajo"), MAX_WEBASSIGN, parte_wa)
-        examen = _parte(datos.get(f"{m}_examen"), MAX_WEBASSIGN, parte_wa)
-        wa_materias[m] = {"trabajo": trabajo, "examen": examen, "total": trabajo + examen}
-    webassign = {
-        "materias": wa_materias,
-        "total": sum(x["total"] for x in wa_materias.values()),
-        "valor": valores["webassign"],
-    }
+    def componente_webassign(clave: str, sufijo: str) -> dict:
+        parte = valores[clave] / len(MATERIAS_WEBASSIGN)
+        materias = {
+            m: _parte(datos.get(f"{m}_{sufijo}"), MAX_WEBASSIGN, parte) for m in MATERIAS_WEBASSIGN
+        }
+        return {"materias": materias, "total": sum(materias.values()), "valor": valores[clave]}
+
+    webassign_tareas = componente_webassign("webassign_tareas", "trabajo")
+    webassign_examen = componente_webassign("webassign_examen", "examen")
 
     parte_final = valores["final"] / 4
     final_materias = {
@@ -337,7 +346,13 @@ def calcular_indice(datos: dict, config: dict) -> dict:
     }
 
     asistencia = 0.0
-    suma = asistencia + diagnostico["total"] + webassign["total"] + final["total"]
+    suma = (
+        asistencia
+        + diagnostico["total"]
+        + webassign_tareas["total"]
+        + webassign_examen["total"]
+        + final["total"]
+    )
     indice = redondear_indice(suma)
     return {
         "asistencia": {
@@ -346,7 +361,8 @@ def calcular_indice(datos: dict, config: dict) -> dict:
             "usar": usar_asistencia,
         },
         "diagnostico": diagnostico,
-        "webassign": webassign,
+        "webassign_tareas": webassign_tareas,
+        "webassign_examen": webassign_examen,
         "final": final,
         "indice": indice,
         "maximo": maximo_indice(valores, usar_asistencia),

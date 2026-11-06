@@ -21,6 +21,22 @@ LIGHT_ACCENT = colors.HexColor("#E8EAF6")
 BORDER = colors.HexColor("#D8DAE3")
 
 
+def _fmt_calif(valor: float | None, sin_label: str = "Sin datos") -> str:
+    if valor is None:
+        return sin_label
+    return f"{valor:.2f}"
+
+
+def _fmt_trabajo(valor: float | None) -> str:
+    if valor is None or valor <= 0:
+        return "No trabajó"
+    return f"{valor:.2f}"
+
+
+def _fmt_aciertos(valor: int | None) -> str:
+    return "—" if valor is None else f"{valor} / 10"
+
+
 def _texto_parrafo(texto: str) -> str:
     """Escapa el texto libre del coordinador para Paragraph y respeta sus saltos de línea."""
     return escape(texto.strip()).replace("\n", "<br/>")
@@ -102,6 +118,9 @@ def generar_pdf_resultado(
     numero_cuenta: str | None,
     ingenieria: str | None,
     periodo: str | None,
+    diagnostico: list[dict] | None,
+    examen_final: list[dict] | None,
+    webassign: list[dict] | None,
     indice: dict,
 ) -> bytes:
     buf = io.BytesIO()
@@ -163,7 +182,42 @@ def generar_pdf_resultado(
     if linea2:
         story.append(Paragraph(linea2, encabezado))
 
-    # b) Índice FI UAEMex: solo la calificación final, sin desglose ni escala.
+    # b) Examen diagnóstico (cuestionarios 1 y 2).
+    story.append(Paragraph("Examen diagnóstico", h2))
+    if diagnostico:
+        rows = [["Materia", "Cuestionario 1", "Cuestionario 2", "Calificación"]]
+        for m in diagnostico:
+            rows.append([
+                m["nombre"],
+                _fmt_aciertos(m["c1"]),
+                _fmt_aciertos(m["c2"]),
+                "—" if m["calificacion"] is None else f"{m['calificacion']:.1f}",
+            ])
+        story.append(_tabla(rows, [6, 3.5, 3.5, 3]))
+    else:
+        story.append(Paragraph("No tienes examen diagnóstico registrado.", normal))
+
+    # c) Examen final.
+    story.append(Paragraph("Examen final", h2))
+    if examen_final:
+        rows = [["Materia", "Calificación"]]
+        for m in examen_final:
+            rows.append([m["nombre"], _fmt_calif(m["puntaje"])])
+        story.append(_tabla(rows, [6, 3]))
+    else:
+        story.append(Paragraph("No tienes examen final registrado.", normal))
+
+    # d) WebAssign.
+    story.append(Paragraph("WebAssign", h2))
+    if webassign:
+        rows = [["Materia", "Tareas", "Examen"]]
+        for m in webassign:
+            rows.append([m["nombre"], _fmt_trabajo(m["trabajo"]), _fmt_trabajo(m["examen"])])
+        story.append(_tabla(rows, [6, 3, 3]))
+    else:
+        story.append(Paragraph("No trabajaste en WebAssign.", normal))
+
+    # e) Índice FI UAEMex.
     story.append(Paragraph("Índice FI UAEMex", h2))
     story.append(Paragraph(f"{indice['indice']:.1f}", calificacion))
 
@@ -177,5 +231,3 @@ def generar_pdf_resultado(
 
     doc.build(story)
     return buf.getvalue()
-
-

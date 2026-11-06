@@ -113,7 +113,7 @@ export async function guardarPeriodoRango(payload: {
 }
 /* ---------- Índice FI UAEMex (por periodo) ---------- */
 
-export type ComponenteIndice = 'asistencia' | 'diagnostico' | 'webassign' | 'final';
+export type ComponenteIndice = 'asistencia' | 'diagnostico' | 'webassign_tareas' | 'webassign_examen' | 'final';
 
 export type ValoresIndice = Record<ComponenteIndice, number>;
 
