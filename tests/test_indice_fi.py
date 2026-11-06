@@ -81,8 +81,8 @@ wb = openpyxl.Workbook()
 ws = wb.active
 _write_indice_ws(ws, [{"indice": calcular_indice(COMPLETO, config(webassign_tareas=2.0, webassign_examen=1.0))}], config(webassign_tareas=2.0, webassign_examen=1.0))
 col = {n: INDICE_COL_INICIO + i for i, n in enumerate(INDICE_HEADERS)}
-check("CREANI: encabezado de tareas", ws.cell(2, col["Tareas WA Álgebra"]).value, "Tareas WebAssign (sobre 2)")
-check("CREANI: encabezado de exámenes", ws.cell(2, col["Examen WA Álgebra"]).value, "Exámenes WebAssign (sobre 1)")
+check("CREANI: encabezado de tareas", ws.cell(2, col["Tareas WA Álgebra"]).value, "Tareas WebAssign (sobre 20%)")
+check("CREANI: encabezado de exámenes", ws.cell(2, col["Examen WA Álgebra"]).value, "Exámenes WebAssign (sobre 10%)")
 check("CREANI: tareas de álgebra", round(ws.cell(4, col["Tareas WA Álgebra"]).value, 4), 0.6667)
 formula = ws.cell(4, col["Índice FI UAEMex"]).value
 letra = lambda n: openpyxl.utils.get_column_letter(col[n])

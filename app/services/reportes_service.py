@@ -192,6 +192,10 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
     usar_asistencia = config["usar_asistencia"]
     maximo = maximo_indice(v, usar_asistencia)
 
+    def pct(valor: float) -> str:
+        """Peso guardado en escala 0-10 -> porcentaje para el encabezado: 1.5 -> '15%'."""
+        return f"{round(valor * 10, 2):g}%"
+
     def grupo(desde: str, hasta: str, texto: str, fill) -> None:
         if desde == hasta:
             celda = ws[f"{letra[desde]}2"]
@@ -212,24 +216,24 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
     grupo(
         "Asistencia",
         "Asistencia",
-        f"Sobre {v['asistencia']:g}" if usar_asistencia else "No se usa",
+        f"Sobre {pct(v['asistencia'])}" if usar_asistencia else "No se usa",
         INDICE_FILL,
     )
-    grupo("Diag. C1", "Diag. total", f"Diagnóstico (sobre {v['diagnostico']:g})", INDICE_FILL)
+    grupo("Diag. C1", "Diag. total", f"Diagnóstico (sobre {pct(v['diagnostico'])})", INDICE_FILL)
     grupo(
         "Tareas WA Álgebra",
         "Tareas WA total",
-        f"Tareas WebAssign (sobre {v['webassign_tareas']:g})",
+        f"Tareas WebAssign (sobre {pct(v['webassign_tareas'])})",
         INDICE_FILL,
     )
     grupo(
         "Examen WA Álgebra",
         "Examen WA total",
-        f"Exámenes WebAssign (sobre {v['webassign_examen']:g})",
+        f"Exámenes WebAssign (sobre {pct(v['webassign_examen'])})",
         INDICE_FILL,
     )
-    grupo("Final Álgebra", "Final total", f"Final (sobre {v['final']:g})", INDICE_FILL)
-    grupo("Índice FI UAEMex", "Categoría", f"Índice sobre {maximo:g}", INDICE_FILL_RESULTADO)
+    grupo("Final Álgebra", "Final total", f"Final (sobre {pct(v['final'])})", INDICE_FILL)
+    grupo("Índice FI UAEMex", "Categoría", f"Índice sobre {pct(maximo)}", INDICE_FILL_RESULTADO)
 
     borde = Border(left=CREANI_THIN, right=CREANI_THIN, top=CREANI_THIN, bottom=CREANI_THIN)
 
