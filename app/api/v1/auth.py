@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
-from app.core import audit, rate_limit
+from app.core import audit, rate_limit, token_blocklist
 from app.core.password_policy import validar_password
 from app.core.config import settings
 from app.core.security import (
@@ -166,9 +166,20 @@ async def logout(
 ) -> None:
     token = request.cookies.get(settings.jwt_cookie_name)
     if token:
+        _revocar_token(token)
         await _registrar_logout(token, rate_limit.ip_cliente(request), db)
     response.delete_cookie(settings.jwt_cookie_name, path="/")
     return None
+
+
+def _revocar_token(token: str) -> None:
+    """Invalida el token para que no se pueda reutilizar tras cerrar sesión."""
+    try:
+        payload = decode_token(token)
+    except Exception:
+        return  # inválido o ya caducado: no hay nada que revocar
+    if payload.get("jti"):
+        token_blocklist.revocar(payload["jti"], payload["exp"])
 
 
 async def _registrar_logout(token: str, ip: str, db: AsyncSession) -> None:

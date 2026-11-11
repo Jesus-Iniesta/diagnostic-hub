@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core import token_blocklist
 from app.core.config import settings
 from app.api.deps import get_db
 from app.models.role import Role
@@ -60,7 +62,7 @@ def create_access_token(sub: str, minutes: int | None = None) -> str:
         minutes=minutes or settings.access_token_expire_minutes
     )
     return jwt.encode(
-        {"sub": sub, "exp": expire},
+        {"sub": sub, "exp": expire, "jti": uuid.uuid4().hex},
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )
@@ -79,6 +81,9 @@ async def get_current_user(
         sub: Optional[str] = payload.get("sub")
 
         if not sub:
+            raise credentials_exc
+        # Token cerrado con logout: ya no sirve aunque no haya caducado.
+        if token_blocklist.esta_revocado(payload.get("jti")):
             raise credentials_exc
 
         user_id = int(sub)
