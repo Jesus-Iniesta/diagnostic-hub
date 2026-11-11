@@ -17,6 +17,8 @@ import classes from './LoginForm.module.css';
 
 export type LoginMode = 'alumno' | 'profesor';
 
+const MENSAJE_ALUMNO_INCORRECTO = 'Número de cuenta o datos incorrectos';
+
 interface LoginFormProps {
   mode?: LoginMode;
 }
@@ -26,8 +28,9 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
   const navigate = useNavigate();
   const esAlumno = mode === 'alumno';
   const [error, setError] = useState<string | null>(null);
-  // El número de cuenta no existe: se le invita a registrarse.
-  const [cuentaNoEncontrada, setCuentaNoEncontrada] = useState(false);
+  // Tras un intento fallido del alumno se le ofrece registrarse, sin decir si
+  // la cuenta existe o no.
+  const [ofrecerRegistro, setOfrecerRegistro] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const form = useForm({
@@ -47,7 +50,7 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
 
   const handleSubmit = form.onSubmit(async ({ username, password, numeroCuenta }) => {
     setError(null);
-    setCuentaNoEncontrada(false);
+    setOfrecerRegistro(false);
     setSubmitting(true);
     try {
       const user = await login(async () => {
@@ -59,8 +62,9 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
       });
       navigate(roleHome(user.role.name), { replace: true });
     } catch (err) {
-      if (esAlumno && err instanceof ApiError && err.status === 404) {
-        setCuentaNoEncontrada(true);
+      if (esAlumno && err instanceof ApiError && (err.status === 404 || err.status === 401)) {
+        setError(MENSAJE_ALUMNO_INCORRECTO);
+        setOfrecerRegistro(true);
         return;
       }
       setError(err instanceof Error ? err.message : 'Credenciales inválidas');
@@ -117,11 +121,9 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
         </Alert>
       )}
 
-      {cuentaNoEncontrada && (
+      {ofrecerRegistro && (
         <Alert color="orange" p="sm">
-          <Text size="sm">
-            No encontramos tu número de cuenta. Si es tu primera vez, regístrate aquí.
-          </Text>
+          <Text size="sm">Si es tu primera vez en el sistema, regístrate aquí.</Text>
           <Button component={Link} to="/registro" color="orange" size="sm" mt="sm">
             ¿Es tu primera vez en el sistema?
           </Button>
