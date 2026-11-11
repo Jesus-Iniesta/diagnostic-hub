@@ -1,13 +1,15 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
-from app.core import rate_limit
+from app.core import audit, rate_limit
 from app.core.password_policy import validar_password
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
+    decode_token,
     get_current_user,
     hash_password,
     invalid_credentials,
@@ -51,7 +53,7 @@ async def _token_por_numero_cuenta(
     numero: str,
     response: Response | None = None,
     avisar_no_encontrada: bool = False,
-) -> SessionResponse:
+) -> User:
     alumno = await repo.get_alumno_por_numero_cuenta(numero)
     if not alumno or not alumno.usuario:
         # En la pantalla del alumno se le invita a registrarse (404); el
@@ -71,7 +73,16 @@ async def _token_por_numero_cuenta(
     token = create_access_token(sub=str(user.id))
     if response is not None:
         _set_auth_cookie(response, token)
-    return SessionResponse()
+    return user
+
+
+def _verificar_intento(ip: str, usuario: str) -> None:
+    """Aplica el límite de intentos y deja constancia en el log si bloquea."""
+    try:
+        rate_limit.verificar_intento(ip, usuario)
+    except HTTPException:
+        audit.registrar_acceso("login", "bloqueado", None, usuario, ip)
+        raise
 
 
 @router.post("/token", response_model=SessionResponse, summary="Login por correo/RFC o número de cuenta")
@@ -81,20 +92,23 @@ async def login_token(
     db: AsyncSession = Depends(get_db),
     response: Response = Response(),
 ) -> SessionResponse:
-    rate_limit.verificar_intento(rate_limit.ip_cliente(request), form_data.username)
+    ip = rate_limit.ip_cliente(request)
+    _verificar_intento(ip, form_data.username)
     try:
-        resultado = await _login_token(form_data, db, response)
+        user = await _login_token(form_data, db, response)
     except HTTPException as exc:
         if exc.status_code in (401, 404):
             rate_limit.registrar_fallo(form_data.username)
+            audit.registrar_acceso("login", "fallo", None, form_data.username, ip)
         raise
     rate_limit.registrar_exito(form_data.username)
-    return resultado
+    audit.registrar_acceso("login", "exito", user.role.name, form_data.username, ip)
+    return SessionResponse()
 
 
 async def _login_token(
     form_data: TokenLoginForm, db: AsyncSession, response: Response
-) -> SessionResponse:
+) -> User:
     repo = UserRepository(db)
 
     user = await repo.get_user_for_login(form_data.username)
@@ -110,7 +124,7 @@ async def _login_token(
 
         token = create_access_token(sub=str(user.id))
         _set_auth_cookie(response, token)
-        return SessionResponse()
+        return user
 
     return await _token_por_numero_cuenta(repo, form_data.username, response)
 
@@ -122,18 +136,21 @@ async def login_numero_cuenta(
     db: AsyncSession = Depends(get_db),
     response: Response = Response(),
 ) -> SessionResponse:
-    rate_limit.verificar_intento(rate_limit.ip_cliente(request), payload.numero_cuenta)
+    ip = rate_limit.ip_cliente(request)
+    _verificar_intento(ip, payload.numero_cuenta)
     repo = UserRepository(db)
     try:
-        resultado = await _token_por_numero_cuenta(
+        user = await _token_por_numero_cuenta(
             repo, payload.numero_cuenta, response, avisar_no_encontrada=True
         )
     except HTTPException as exc:
         if exc.status_code in (401, 404):
             rate_limit.registrar_fallo(payload.numero_cuenta)
+            audit.registrar_acceso("login", "fallo", "alumno", payload.numero_cuenta, ip)
         raise
     rate_limit.registrar_exito(payload.numero_cuenta)
-    return resultado
+    audit.registrar_acceso("login", "exito", user.role.name, payload.numero_cuenta, ip)
+    return SessionResponse()
 
 
 @router.get("/me", response_model=UserRead, summary="Usuario autenticado actual")
@@ -142,9 +159,28 @@ async def read_current_user(current_user: User = Depends(get_current_user)) -> U
 
 
 @router.post("/logout", status_code=204, summary="Cerrar sesión (borra la cookie)")
-async def logout(response: Response) -> None:
+async def logout(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    token = request.cookies.get(settings.jwt_cookie_name)
+    if token:
+        await _registrar_logout(token, rate_limit.ip_cliente(request), db)
     response.delete_cookie(settings.jwt_cookie_name, path="/")
     return None
+
+
+async def _registrar_logout(token: str, ip: str, db: AsyncSession) -> None:
+    """Deja el logout en el log; si el token no sirve, no pasa nada (igual se borra la cookie)."""
+    try:
+        user = await db.get(User, int(decode_token(token)["sub"]), options=[selectinload(User.role)])
+    except Exception:
+        return
+    if user is not None:
+        audit.registrar_acceso(
+            "logout", "exito", user.role.name, user.correo_personal or user.correo_institucional or str(user.id), ip
+        )
 
 class CambiarPasswordPayload(BaseModel):
     actual: str
