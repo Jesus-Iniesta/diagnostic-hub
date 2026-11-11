@@ -45,21 +45,14 @@ def _set_auth_cookie(response: Response, token: str) -> None:
     )
 
 
-CUENTA_NO_ENCONTRADA = "No encontramos tu número de cuenta."
-
-
 async def _token_por_numero_cuenta(
     repo: UserRepository,
     numero: str,
     response: Response | None = None,
-    avisar_no_encontrada: bool = False,
 ) -> User:
     alumno = await repo.get_alumno_por_numero_cuenta(numero)
     if not alumno or not alumno.usuario:
-        # En la pantalla del alumno se le invita a registrarse (404); el
-        # endpoint OAuth2 genérico sigue respondiendo credenciales inválidas.
-        if avisar_no_encontrada:
-            raise HTTPException(status_code=404, detail=CUENTA_NO_ENCONTRADA)
+        # Misma respuesta que cualquier otro fallo: no revela si la cuenta existe.
         raise invalid_credentials()
 
     user = alumno.usuario
@@ -97,7 +90,7 @@ async def login_token(
     try:
         user = await _login_token(form_data, db, response)
     except HTTPException as exc:
-        if exc.status_code in (401, 404):
+        if exc.status_code == 401:
             rate_limit.registrar_fallo(form_data.username)
             audit.registrar_acceso("login", "fallo", None, form_data.username, ip)
         raise
@@ -141,10 +134,10 @@ async def login_numero_cuenta(
     repo = UserRepository(db)
     try:
         user = await _token_por_numero_cuenta(
-            repo, payload.numero_cuenta, response, avisar_no_encontrada=True
+            repo, payload.numero_cuenta, response
         )
     except HTTPException as exc:
-        if exc.status_code in (401, 404):
+        if exc.status_code == 401:
             rate_limit.registrar_fallo(payload.numero_cuenta)
             audit.registrar_acceso("login", "fallo", "alumno", payload.numero_cuenta, ip)
         raise

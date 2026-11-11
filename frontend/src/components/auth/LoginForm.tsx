@@ -62,7 +62,7 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
       });
       navigate(roleHome(user.role.name), { replace: true });
     } catch (err) {
-      if (esAlumno && err instanceof ApiError && (err.status === 404 || err.status === 401)) {
+      if (esAlumno && err instanceof ApiError && err.status === 401) {
         setError(MENSAJE_ALUMNO_INCORRECTO);
         setOfrecerRegistro(true);
         return;
