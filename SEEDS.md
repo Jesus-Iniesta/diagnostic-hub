@@ -39,6 +39,10 @@ No uses solamente `uvicorn app.main:app`, porque omite las migraciones y los see
 
 ## Usuarios de prueba
 
+Solo se crean con `ENVIRONMENT=development`. Con `ENVIRONMENT=production` (o sin
+definir la variable) el seed de usuarios no crea ninguna cuenta de demostración;
+si ya existen, no las modifica y avisa en el log para que las desactives.
+
 | Perfil | Usuario | Contraseña |
 | --- | --- | --- |
 | Administrador | `admin@integrativa.test` | `Admin123!` |

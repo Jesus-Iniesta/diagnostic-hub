@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 
+import logging
+
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.base import Base
+from app.core.config import settings
 from app.core.database import async_session, engine
 from app.core.security import hash_password
 from app.models.alumno import Alumno
@@ -26,6 +29,9 @@ from app.seeds.data.permissions import PERMISSIONS
 from app.seeds.data.respuestas_diagnostico import DEFAULT_RESPUESTAS
 from app.seeds.data.roles import ROLES
 from app.seeds.data.users import USERS
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -97,8 +103,28 @@ async def run_seed_roles() -> int:
 
 
 async def run_seed_users() -> int:
+    """Crea las cuentas de demostración, solo con ENVIRONMENT=development.
+
+    En producción no crea ninguna; las que ya existan no se tocan, pero se avisa
+    en el log para que el administrador las desactive o les cambie la contraseña.
+    """
     async with async_session() as db:
         created = 0
+        if not settings.es_desarrollo:
+            correos = [u["correo_personal"] for u in USERS]
+            existentes = (
+                await db.scalars(select(User.correo_personal).where(User.correo_personal.in_(correos)))
+            ).all()
+            if existentes:
+                logger.warning(
+                    "ENVIRONMENT=%s: se omiten las cuentas de demostración, pero ya existen: %s. "
+                    "Desactívalas o cámbiales la contraseña.",
+                    settings.environment,
+                    ", ".join(existentes),
+                )
+            else:
+                logger.info("ENVIRONMENT=%s: no se crean cuentas de demostración.", settings.environment)
+            return 0
         async with atomic_session(db):
             for data in USERS:
                 exists = await db.scalar(

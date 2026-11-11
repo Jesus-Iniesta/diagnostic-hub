@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     app_name: str = "TutoNet"
     app_version: str = "1.0.0"
     debug: bool = False
+    # Solo "development" crea las cuentas de demostración; cualquier otro valor
+    # (o no definirla) se trata como producción.
+    environment: str = "production"
 
     database_url: str = Field(
         default="",
@@ -46,6 +49,10 @@ class Settings(BaseSettings):
     jwt_cookie_name: str = "tutonet_token"
     jwt_cookie_secure: bool = True
     jwt_cookie_samesite: Literal["lax", "strict", "none"] = "none"
+
+    @property
+    def es_desarrollo(self) -> bool:
+        return self.environment.strip().lower() == "development"
 
     @property
     def jwt_cookie_max_age(self) -> int:
