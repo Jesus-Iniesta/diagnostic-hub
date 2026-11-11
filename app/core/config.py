@@ -46,6 +46,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
+    # Intentos de login por IP por minuto (RATE_LIMIT_LOGIN_PER_IP).
+    rate_limit_login_per_ip: int = Field(default=10, ge=1)
+
     jwt_cookie_name: str = "tutonet_token"
     jwt_cookie_secure: bool = True
     jwt_cookie_samesite: Literal["lax", "strict", "none"] = "none"

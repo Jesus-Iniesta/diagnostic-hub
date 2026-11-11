@@ -1,6 +1,7 @@
 """Límite de intentos de login, en memoria (sin Redis).
 
-- Por IP: máximo `MAX_POR_IP` intentos por ventana de `VENTANA_IP` segundos.
+- Por IP: máximo `RATE_LIMIT_LOGIN_PER_IP` (default 10) intentos por ventana de
+  `VENTANA_IP` segundos.
 - Por usuario: tras `MAX_FALLOS` fallos consecutivos la cuenta se bloquea
   `BLOQUEO` segundos.
 
@@ -17,7 +18,8 @@ from collections import deque
 
 from fastapi import HTTPException, Request, status
 
-MAX_POR_IP = 10
+from app.core.config import settings
+
 VENTANA_IP = 60
 MAX_FALLOS = 5
 BLOQUEO = 15 * 60
@@ -67,7 +69,7 @@ def verificar_intento(ip: str, usuario: str) -> None:
     cola = _intentos_ip.setdefault(ip, deque())
     while cola and cola[0] <= ahora - VENTANA_IP:
         cola.popleft()
-    if len(cola) >= MAX_POR_IP:
+    if len(cola) >= settings.rate_limit_login_per_ip:
         raise _demasiados()
     cola.append(ahora)
 

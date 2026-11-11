@@ -14,6 +14,7 @@ def _limpio():
 
 
 def test_ip_limitada_a_10_por_minuto():
+    assert rl.settings.rate_limit_login_per_ip == 10
     for i in range(10):
         rl.verificar_intento("1.1.1.1", f"u{i}")
     with pytest.raises(HTTPException) as exc:
@@ -48,3 +49,11 @@ def test_mismo_mensaje_exista_o_no_el_usuario():
             rl.verificar_intento("1.1.1.1", u)
         mensajes.add((exc.value.status_code, exc.value.detail))
     assert len(mensajes) == 1
+
+
+def test_limite_por_ip_configurable(monkeypatch):
+    monkeypatch.setattr(rl.settings, "rate_limit_login_per_ip", 3)
+    for i in range(3):
+        rl.verificar_intento("1.1.1.1", f"u{i}")
+    with pytest.raises(HTTPException):
+        rl.verificar_intento("1.1.1.1", "otro")
