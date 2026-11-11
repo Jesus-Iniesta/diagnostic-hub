@@ -34,7 +34,7 @@ def _fmt_trabajo(valor: float | None) -> str:
 
 
 def _fmt_aciertos(valor: int | None) -> str:
-    return "—" if valor is None else f"{valor} / 10"
+    return "—" if valor is None else f"{valor:.1f}"
 
 
 def _texto_parrafo(texto: str) -> str:
@@ -216,6 +216,15 @@ def generar_pdf_resultado(
         story.append(_tabla(rows, [6, 3, 3]))
     else:
         story.append(Paragraph("No trabajaste en WebAssign.", normal))
+
+    # Asistencia: solo sale si el administrador la tiene activa. Aún no se
+    # registra en el sistema, así que mientras valga 0 se muestra "—".
+    asistencia = indice.get("asistencia") or {}
+    if asistencia.get("usar"):
+        story.append(Paragraph("Asistencia", h2))
+        total = asistencia.get("total") or 0
+        rows = [["Concepto", "Calificación"], ["Asistencia", f"{total:.1f}" if total > 0 else "—"]]
+        story.append(_tabla(rows, [6, 3]))
 
     # e) Índice FI UAEMex.
     story.append(Paragraph("Índice FI UAEMex", h2))
