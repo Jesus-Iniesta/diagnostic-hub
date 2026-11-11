@@ -15,8 +15,8 @@ export default function Footer() {
 
         <Group gap="xs" wrap="wrap">
           <Text size="sm">¿Dudas o problemas para acceder?</Text>
-          <Anchor href="#" className={classes.contact}>
-            Contacto
+          <Anchor href="mailto:tutoria_fi@uaemex.mx" className={classes.contact}>
+            tutoria_fi@uaemex.mx
           </Anchor>
         </Group>
       </Container>

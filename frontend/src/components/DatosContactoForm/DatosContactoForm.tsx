@@ -86,6 +86,7 @@ export default function DatosContactoForm({ onSaved }: DatosContactoFormProps) {
 
   const handleSubmit = form.onSubmit(async (values) => {
     setError(null);
+    setSaved(false);
     setSaving(true);
     try {
       const payload = buildPayload(values, missingFields);
@@ -138,6 +139,11 @@ export default function DatosContactoForm({ onSaved }: DatosContactoFormProps) {
             <Title order={3} className={classes.title}>Datos de contacto</Title>
             <Text className={classes.subtitle}>Tu información está completa.</Text>
           </div>
+          {saved && (
+            <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
+              Tus datos se guardaron correctamente.
+            </Alert>
+          )}
           <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
             Todos tus datos de contacto están registrados. No hay campos pendientes.
           </Alert>
@@ -179,12 +185,6 @@ export default function DatosContactoForm({ onSaved }: DatosContactoFormProps) {
 
         <form onSubmit={handleSubmit} className={classes.form}>
           <Stack gap="lg">
-            {saved && (
-              <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
-                Tus datos se guardaron correctamente.
-              </Alert>
-            )}
-
             {Object.entries(groupedFields).map(([category, fields], groupIndex) => (
               <div key={category}>
                 {groupIndex > 0 && <Divider color="#F0F1F5" />}
@@ -197,6 +197,12 @@ export default function DatosContactoForm({ onSaved }: DatosContactoFormProps) {
 
             {error && (
               <Alert color="red" variant="light" radius="md">{error}</Alert>
+            )}
+
+            {saved && !error && (
+              <Alert color="green" variant="light" radius="md" icon={<IconCircleCheck size={18} />}>
+                Tus datos se guardaron correctamente.
+              </Alert>
             )}
 
             <Button
