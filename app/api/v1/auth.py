@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
+from app.core import rate_limit
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -74,9 +75,24 @@ async def _token_por_numero_cuenta(
 
 @router.post("/token", response_model=SessionResponse, summary="Login por correo/RFC o número de cuenta")
 async def login_token(
+    request: Request,
     form_data: TokenLoginForm = Depends(),
     db: AsyncSession = Depends(get_db),
     response: Response = Response(),
+) -> SessionResponse:
+    rate_limit.verificar_intento(rate_limit.ip_cliente(request), form_data.username)
+    try:
+        resultado = await _login_token(form_data, db, response)
+    except HTTPException as exc:
+        if exc.status_code in (401, 404):
+            rate_limit.registrar_fallo(form_data.username)
+        raise
+    rate_limit.registrar_exito(form_data.username)
+    return resultado
+
+
+async def _login_token(
+    form_data: TokenLoginForm, db: AsyncSession, response: Response
 ) -> SessionResponse:
     repo = UserRepository(db)
 
@@ -100,14 +116,23 @@ async def login_token(
 
 @router.post("/numero-cuenta", response_model=SessionResponse, summary="Login del alumno por número de cuenta")
 async def login_numero_cuenta(
+    request: Request,
     payload: NumeroCuentaLogin,
     db: AsyncSession = Depends(get_db),
     response: Response = Response(),
 ) -> SessionResponse:
+    rate_limit.verificar_intento(rate_limit.ip_cliente(request), payload.numero_cuenta)
     repo = UserRepository(db)
-    return await _token_por_numero_cuenta(
-        repo, payload.numero_cuenta, response, avisar_no_encontrada=True
-    )
+    try:
+        resultado = await _token_por_numero_cuenta(
+            repo, payload.numero_cuenta, response, avisar_no_encontrada=True
+        )
+    except HTTPException as exc:
+        if exc.status_code in (401, 404):
+            rate_limit.registrar_fallo(payload.numero_cuenta)
+        raise
+    rate_limit.registrar_exito(payload.numero_cuenta)
+    return resultado
 
 
 @router.get("/me", response_model=UserRead, summary="Usuario autenticado actual")
