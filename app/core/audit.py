@@ -16,7 +16,7 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-EVENTOS = ("login", "logout")
+EVENTOS = ("login", "logout", "mfa")
 RESULTADOS = ("exito", "fallo", "bloqueado")
 
 

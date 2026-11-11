@@ -23,6 +23,7 @@ import AlumnoLayout from './pages/alumno/AlumnoLayout';
 import AlumnoLigasExamenes from './pages/alumno/AlumnoLigasExamenes';
 import AlumnoResultados from './pages/alumno/AlumnoResultados';
 import LoginPage from './pages/LoginPage';
+import MfaPage from './pages/MfaPage';
 import RegistroAlumnoPage from './pages/RegistroAlumnoPage';
 import ProfesorGrupo from './pages/profesor/ProfesorGrupo';
 import ProfesorHome from './pages/profesor/ProfesorHome';
@@ -52,6 +53,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/mfa" element={<MfaPage />} />
       <Route path="/registro" element={<RegistroAlumnoPage />} />
       <Route path="/" element={<RootIndex />} />
       <Route

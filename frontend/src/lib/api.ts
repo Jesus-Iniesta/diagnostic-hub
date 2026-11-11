@@ -1,4 +1,10 @@
-import { AUTH_LOGOUT_URL, AUTH_ME_URL, AUTH_NUMERO_CUENTA_URL, AUTH_TOKEN_URL } from '../config';
+import {
+  API_BASE_URL,
+  AUTH_LOGOUT_URL,
+  AUTH_ME_URL,
+  AUTH_NUMERO_CUENTA_URL,
+  AUTH_TOKEN_URL,
+} from '../config';
 import type { User } from '../types';
 
 export class ApiError extends Error {
@@ -48,9 +54,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   return handle<T>(response);
 }
 
-export async function loginWithPassword(username: string, password: string): Promise<void> {
+export async function loginWithPassword(
+  username: string,
+  password: string,
+): Promise<{ mfa_requerido: boolean }> {
   const body = new URLSearchParams({ username, password });
-  await apiFetch<void>(AUTH_TOKEN_URL, {
+  return apiFetch<{ mfa_requerido: boolean }>(AUTH_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -71,4 +80,22 @@ export async function fetchMe(): Promise<User> {
 
 export async function logout(): Promise<void> {
   await apiFetch<void>(AUTH_LOGOUT_URL, { method: 'POST' });
+}
+
+
+export interface MfaSetup {
+  secreto: string;
+  otpauth_url: string;
+}
+
+export async function mfaSetup(): Promise<MfaSetup> {
+  return apiFetch<MfaSetup>(`${API_BASE_URL}/auth/mfa/setup`);
+}
+
+export async function mfaVerificar(codigo: string): Promise<void> {
+  await apiFetch<unknown>(`${API_BASE_URL}/auth/mfa/verificar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ codigo }),
+  });
 }

@@ -25,6 +25,11 @@ export default function ProtectedRoute({ roles, children }: ProtectedRouteProps)
     return <Navigate to="/login" replace />;
   }
 
+  // Administrador con MFA: primero debe dar su código.
+  if (user.mfa_pendiente) {
+    return <Navigate to="/mfa" replace />;
+  }
+
   if (roles && !roles.includes(user.role.name)) {
     return <Navigate to={roleHome(user.role.name)} replace />;
   }

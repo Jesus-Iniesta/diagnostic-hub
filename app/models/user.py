@@ -43,6 +43,9 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(
         String(255), nullable=True)
 
+    # Secreto TOTP del administrador; vacío mientras no configure MFA.
+    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     rfc: Mapped[str | None] = mapped_column(
         String(20), nullable=True, unique=True, index=True
         )
@@ -70,6 +73,10 @@ class User(Base):
         DateTime,
         nullable=True
         )
+
+    @property
+    def mfa_configurado(self) -> bool:
+        return bool(self.mfa_secret)
 
     # Relationships
     role_id: Mapped[int] = mapped_column(

@@ -1,3 +1,4 @@
+import pyotp
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,11 +14,17 @@ from app.core.security import (
     get_current_user,
     hash_password,
     invalid_credentials,
+    mfa_pendiente,
     verify_password,
 )
 from app.models.user import AuthMethod, User
 from app.repositories.user_repository import UserRepository
-from app.schemas.auth import NumeroCuentaLogin, SessionResponse
+from app.schemas.auth import (
+    MfaSetupResponse,
+    MfaVerificarPayload,
+    NumeroCuentaLogin,
+    SessionResponse,
+)
 from app.schemas.user import UserRead
 
 router = APIRouter()
@@ -69,6 +76,10 @@ async def _token_por_numero_cuenta(
     return user
 
 
+def _es_admin(user: User) -> bool:
+    return bool(user.role) and user.role.name == "administrador"
+
+
 def _verificar_intento(ip: str, usuario: str) -> None:
     """Aplica el límite de intentos y deja constancia en el log si bloquea."""
     try:
@@ -96,7 +107,7 @@ async def login_token(
         raise
     rate_limit.registrar_exito(form_data.username)
     audit.registrar_acceso("login", "exito", user.role.name, form_data.username, ip)
-    return SessionResponse()
+    return SessionResponse(mfa_requerido=_es_admin(user) and bool(user.mfa_secret))
 
 
 async def _login_token(
@@ -115,7 +126,9 @@ async def _login_token(
         if not user.activo:
             raise invalid_credentials()
 
-        token = create_access_token(sub=str(user.id))
+        # Administrador con MFA: la sesión nace sin verificar hasta que dé su código.
+        con_mfa = _es_admin(user) and bool(user.mfa_secret)
+        token = create_access_token(sub=str(user.id), mfa_verificado=False if con_mfa else None)
         _set_auth_cookie(response, token)
         return user
 
@@ -146,9 +159,78 @@ async def login_numero_cuenta(
     return SessionResponse()
 
 
-@router.get("/me", response_model=UserRead, summary="Usuario autenticado actual")
-async def read_current_user(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+class MeRead(UserRead):
+    # Administrador con MFA que todavía no verifica su código en esta sesión.
+    mfa_pendiente: bool = False
+
+
+@router.get("/me", response_model=MeRead, summary="Usuario autenticado actual")
+async def read_current_user(
+    request: Request, current_user: User = Depends(get_current_user)
+) -> MeRead:
+    me = MeRead.model_validate(current_user)
+    me.mfa_pendiente = mfa_pendiente(current_user, request)
+    return me
+
+
+def _exigir_admin(user: User) -> None:
+    if not _es_admin(user):
+        raise HTTPException(status_code=403, detail="Solo los administradores usan MFA")
+
+
+@router.get("/mfa/setup", response_model=MfaSetupResponse, summary="Generar el secreto TOTP del administrador")
+async def mfa_setup(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MfaSetupResponse:
+    _exigir_admin(current_user)
+    if current_user.mfa_secret:
+        raise HTTPException(status_code=400, detail="MFA ya está configurado")
+    secreto = pyotp.random_base32()
+    current_user.mfa_secret = secreto
+    await db.commit()
+    return MfaSetupResponse(secreto=secreto, otpauth_url=_otpauth_url(current_user, secreto))
+
+
+def _otpauth_url(user: User, secreto: str) -> str:
+    # otpauth://totp/TutoNet:{email}?secret={secret}&issuer=TutoNet
+    cuenta = user.correo_personal or user.correo_institucional or str(user.id)
+    return pyotp.TOTP(secreto).provisioning_uri(name=cuenta, issuer_name="TutoNet")
+
+
+@router.post("/mfa/verificar", response_model=SessionResponse, summary="Verificar el código TOTP y marcar la sesión como verificada")
+async def mfa_verificar(
+    payload: MfaVerificarPayload,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> SessionResponse:
+    _exigir_admin(current_user)
+    if not current_user.mfa_secret:
+        raise HTTPException(status_code=400, detail="MFA no está configurado")
+    ip = rate_limit.ip_cliente(request)
+    llave = f"mfa:{current_user.id}"
+    usuario = current_user.correo_personal or str(current_user.id)
+    try:
+        rate_limit.verificar_intento(ip, llave)
+    except HTTPException:
+        audit.registrar_acceso("mfa", "bloqueado", current_user.role.name, usuario, ip)
+        raise
+    codigo = "".join(payload.codigo.split())
+    if not pyotp.TOTP(current_user.mfa_secret).verify(codigo, valid_window=1):
+        rate_limit.registrar_fallo(llave)
+        audit.registrar_acceso("mfa", "fallo", current_user.role.name, usuario, ip)
+        raise HTTPException(status_code=401, detail="Código incorrecto")
+    rate_limit.registrar_exito(llave)
+    audit.registrar_acceso("mfa", "exito", current_user.role.name, usuario, ip)
+    # Sesión nueva ya verificada; la anterior deja de servir.
+    token_anterior = request.cookies.get(settings.jwt_cookie_name)
+    if token_anterior:
+        _revocar_token(token_anterior)
+    _set_auth_cookie(
+        response, create_access_token(sub=str(current_user.id), mfa_verificado=True)
+    )
+    return SessionResponse()
 
 
 @router.post("/logout", status_code=204, summary="Cerrar sesión (borra la cookie)")

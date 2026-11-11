@@ -40,6 +40,8 @@ class UserRead(UserBase):
     id: int
     activo: bool
     last_login: datetime | None = None
+    # Solo indica si ya configuró MFA; el secreto nunca sale del servidor.
+    mfa_configurado: bool = False
     created_at: datetime
     updated_at: datetime
     role_id: int

@@ -26,6 +26,10 @@ export interface User {
   last_login: string | null;
   role_id: number;
   role: Role;
+  /** El administrador ya configuró MFA. */
+  mfa_configurado?: boolean;
+  /** Administrador con MFA que aún no verifica su código en esta sesión. */
+  mfa_pendiente?: boolean;
 }
 
 export interface Token {

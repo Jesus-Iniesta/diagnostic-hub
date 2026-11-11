@@ -60,7 +60,7 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
           await loginWithPassword(username, password);
         }
       });
-      navigate(roleHome(user.role.name), { replace: true });
+      navigate(user.mfa_pendiente ? '/mfa' : roleHome(user.role.name), { replace: true });
     } catch (err) {
       if (esAlumno && err instanceof ApiError && err.status === 401) {
         setError(MENSAJE_ALUMNO_INCORRECTO);

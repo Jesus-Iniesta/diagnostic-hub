@@ -57,12 +57,18 @@ def decode_token(token: str) -> dict:
     return payload
 
 
-def create_access_token(sub: str, minutes: int | None = None) -> str:
+def create_access_token(
+    sub: str, minutes: int | None = None, mfa_verificado: bool | None = None
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=minutes or settings.access_token_expire_minutes
     )
+    claims = {"sub": sub, "exp": expire, "jti": uuid.uuid4().hex}
+    if mfa_verificado is not None:
+        # Solo los administradores con MFA llevan esta marca.
+        claims["mfa_verificado"] = mfa_verificado
     return jwt.encode(
-        {"sub": sub, "exp": expire, "jti": uuid.uuid4().hex},
+        claims,
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )
@@ -87,6 +93,7 @@ async def get_current_user(
             raise credentials_exc
 
         user_id = int(sub)
+        request.state.mfa_verificado = payload.get("mfa_verificado") is True
     except ExpiredSignatureError:
         raise raise_expired_token()
     except InvalidTokenError:
@@ -115,17 +122,39 @@ def verify_password(plain: str, hashed: str) -> bool:
     return password_hash.verify(plain, hashed)
 
 
+def mfa_pendiente(user: User, request: Request) -> bool:
+    """Administrador con MFA configurado cuya sesión aún no verificó su código."""
+    return (
+        user.role.name == "administrador"
+        and bool(user.mfa_secret)
+        and getattr(request.state, "mfa_verificado", False) is not True
+    )
+
+
+def _exigir_mfa(user: User, request: Request) -> None:
+    if mfa_pendiente(user, request):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere verificación MFA"
+        )
+
+
 def require_role(role_name: str):
-    def role_dependency(current_user: User = Depends(get_current_user)) -> User:
+    def role_dependency(
+        request: Request, current_user: User = Depends(get_current_user)
+    ) -> User:
         if current_user.role.name != role_name:
             raise raise_forbidden()
+        _exigir_mfa(current_user, request)
         return current_user
 
     return role_dependency
 
 
 def require_permission(permission: str):
-    def permission_dependency(current_user: User = Depends(get_current_user)) -> User:
+    def permission_dependency(
+        request: Request, current_user: User = Depends(get_current_user)
+    ) -> User:
+        _exigir_mfa(current_user, request)
         for p in current_user.role.permissions:
             if p.name == permission:
                 return current_user
