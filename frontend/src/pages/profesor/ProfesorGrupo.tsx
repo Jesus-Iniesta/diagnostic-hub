@@ -11,6 +11,7 @@ import {
   Table,
   Text,
   TextInput,
+  Tooltip,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
@@ -24,7 +25,7 @@ import {
 import { useEffect, useState } from 'react';
 
 import IndiceAlumno from '../../components/IndiceAlumno/IndiceAlumno';
-import { colorCategoria } from '../../lib/categorias';
+import { aPorcentaje, colorCategoria } from '../../lib/categorias';
 import {
   fetchMisGrupos,
   crearGrupo,
@@ -38,6 +39,16 @@ import {
 import { getCurrentPeriodo } from '../../lib/periodo';
 import type { Grupo, GrupoAlumno, CargaAlumnosResponse } from '../../types/profesor';
 import classes from './ProfesorGrupo.module.css';
+
+/** Valor de una celda; si falta, muestra "—" y al pasar el cursor explica qué falta. */
+function Valor({ valor, falta }: { valor: string | null; falta: string }) {
+  if (valor != null) return <>{valor}</>;
+  return (
+    <Tooltip label={falta} withArrow>
+      <span style={{ cursor: 'help' }}>—</span>
+    </Tooltip>
+  );
+}
 
 interface Confirmacion {
   titulo: string;
@@ -390,13 +401,17 @@ export default function ProfesorGrupo() {
               Este grupo aún no tiene alumnos. Carga la lista de alumnos o agrégalos uno por uno.
             </Text>
           ) : (
-            <Table.ScrollContainer minWidth={760}>
-              <Table striped highlightOnHover>
+            <Table.ScrollContainer minWidth={1100}>
+              <Table striped highlightOnHover w="100%">
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Nombre</Table.Th>
                     <Table.Th>No. de cuenta</Table.Th>
                     <Table.Th>Ingeniería</Table.Th>
+                    <Table.Th>Examen diagnóstico</Table.Th>
+                    <Table.Th>WebAssign (tareas)</Table.Th>
+                    <Table.Th>WebAssign (examen)</Table.Th>
+                    <Table.Th>Asistencia</Table.Th>
                     <Table.Th>Examen final</Table.Th>
                     <Table.Th>Índice FI UAEMex</Table.Th>
                     <Table.Th>Categoría</Table.Th>
@@ -406,7 +421,7 @@ export default function ProfesorGrupo() {
                 <Table.Tbody>
                   {alumnos.map((a) => (
                     <Table.Tr key={a.alumno_id}>
-                      <Table.Td>{a.nombre}</Table.Td>
+                      <Table.Td className={classes.nombre}>{a.nombre}</Table.Td>
                       <Table.Td>{a.numero_cuenta}</Table.Td>
                       <Table.Td>
                         {a.ingenieria_clave ? (
@@ -414,14 +429,45 @@ export default function ProfesorGrupo() {
                             {a.ingenieria_clave}
                           </Badge>
                         ) : (
-                          '—'
+                          <Valor valor={null} falta="Sin ingeniería asignada" />
                         )}
                       </Table.Td>
                       <Table.Td>
-                        {a.examen_final != null ? a.examen_final.toFixed(2) : '—'}
+                        <Valor
+                          valor={a.diagnostico != null ? aPorcentaje(a.diagnostico) : null}
+                          falta="No presentó el examen diagnóstico"
+                        />
                       </Table.Td>
                       <Table.Td>
-                        <IndiceAlumno indice={a.indice} maximo={a.maximo} faltantes={a.examenes_faltantes} />
+                        <Valor
+                          valor={a.webassign_tareas != null ? aPorcentaje(a.webassign_tareas) : null}
+                          falta="No tiene tareas de WebAssign"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <Valor
+                          valor={a.webassign_examen != null ? aPorcentaje(a.webassign_examen) : null}
+                          falta="No presentó el examen de WebAssign"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <Valor
+                          valor={a.asistencia != null ? aPorcentaje(a.asistencia) : null}
+                          falta="La asistencia no está registrada"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <Valor
+                          valor={a.examen_final != null ? a.examen_final.toFixed(2) : null}
+                          falta="No presentó el examen final"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        {a.indice != null ? (
+                          <IndiceAlumno indice={a.indice} maximo={a.maximo} faltantes={[]} />
+                        ) : (
+                          <Valor valor={null} falta="Aún no tiene resultados" />
+                        )}
                       </Table.Td>
                       <Table.Td>
                         {a.categoria ? (
@@ -433,7 +479,7 @@ export default function ProfesorGrupo() {
                             {a.categoria}
                           </Badge>
                         ) : (
-                          '—'
+                          <Valor valor={null} falta="Aún no tiene categoría" />
                         )}
                       </Table.Td>
                       <Table.Td>

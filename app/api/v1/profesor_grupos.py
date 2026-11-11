@@ -186,6 +186,13 @@ async def alumnos_grupo(
             maximo=indice["maximo"],
             categoria=indice["categoria"]["nombre"] if evaluado and indice["categoria"] else None,
             examen_final=final.promedio_diagnostico if final else None,
+            diagnostico=indice["diagnostico"]["total"] if indice["filas"]["cuestionario"] else None,
+            webassign_tareas=(
+                indice["webassign_tareas"]["total"] if indice["filas"]["webassign"] else None
+            ),
+            webassign_examen=(
+                indice["webassign_examen"]["total"] if indice["filas"]["webassign"] else None
+            ),
             examenes_faltantes=[
                 nombre
                 for clave, nombre in EXAMENES

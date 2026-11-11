@@ -39,6 +39,13 @@ class GrupoAlumnoResponse(BaseModel):
     categoria: str | None = None
     # Promedio del examen final (0-10).
     examen_final: float | None = None
+    # Aportación de cada componente al índice (como en el CREANI); None si no
+    # presentó ese examen.
+    diagnostico: float | None = None
+    webassign_tareas: float | None = None
+    webassign_examen: float | None = None
+    # La asistencia aún no se registra en el sistema: siempre None.
+    asistencia: float | None = None
     # Exámenes del periodo del índice que aún no tiene (p. ej. "WebAssign").
     examenes_faltantes: list[str] = []
 

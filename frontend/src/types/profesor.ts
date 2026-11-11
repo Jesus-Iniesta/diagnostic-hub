@@ -26,6 +26,12 @@ export interface GrupoAlumno {
   maximo: number;
   categoria: string | null;
   examen_final: number | null;
+  /** Aportación al índice (como en el CREANI); null si no presentó el examen. */
+  diagnostico: number | null;
+  webassign_tareas: number | null;
+  webassign_examen: number | null;
+  /** Aportación de la asistencia; null si no está registrada. */
+  asistencia: number | null;
   /** Exámenes que aún no tiene (p. ej. "WebAssign"). */
   examenes_faltantes: string[];
 }
