@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { cambiarMiPassword } from '../../lib/usersApi';
 import classes from './AdminCargaAlumnos.module.css';
 
-const LARGO_MINIMO = 8;
+const LARGO_MINIMO = 12;
 
 export default function AdminSeguridad() {
   const [guardando, setGuardando] = useState(false);

@@ -31,7 +31,7 @@ const ROLE_OPTIONS = [
 // Roles que se pueden asignar desde aquí (los alumnos están en "Alumnos").
 const ROLES_PERSONAL = ROLE_OPTIONS.filter((r) => r.value);
 
-const LARGO_MINIMO_PASSWORD = 8;
+const LARGO_MINIMO_PASSWORD = 12;
 
 interface UsuarioModalProps {
   /** null = cerrado; 'nuevo' = crear; un usuario = editar. */

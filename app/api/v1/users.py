@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
+from app.core.password_policy import validar_password
 from app.core.security import hash_password, require_permission
 from app.models.grupo import Grupo
 from app.models.grupo_alumno import grupo_alumno
@@ -18,8 +19,6 @@ router = APIRouter()
 
 # Personal que se administra desde "Usuarios"; los alumnos están en "Alumnos".
 ROLES_PERSONAL = ("administrador", "profesor", "acreditador")
-LARGO_MINIMO_PASSWORD = 8
-
 
 class UsuarioPersonalCreate(BaseModel):
     nombre: str = Field(min_length=1)
@@ -28,7 +27,9 @@ class UsuarioPersonalCreate(BaseModel):
     correo_personal: str = Field(min_length=3)
     rfc: str | None = None
     rol: str
-    password: str = Field(min_length=LARGO_MINIMO_PASSWORD)
+    password: str
+
+    _validar_password = field_validator("password")(validar_password)
 
 
 class UsuarioPersonalUpdate(BaseModel):
@@ -40,7 +41,12 @@ class UsuarioPersonalUpdate(BaseModel):
     rol: str | None = None
     activo: bool | None = None
     # Si viene, se cambia la contraseña.
-    password: str | None = Field(default=None, min_length=LARGO_MINIMO_PASSWORD)
+    password: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def _validar_password(cls, valor: str | None) -> str | None:
+        return None if valor is None else validar_password(valor)
 
 
 class GrupoDeProfesor(BaseModel):

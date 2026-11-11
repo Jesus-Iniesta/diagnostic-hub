@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.core import rate_limit
+from app.core.password_policy import validar_password
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -147,7 +148,9 @@ async def logout(response: Response) -> None:
 
 class CambiarPasswordPayload(BaseModel):
     actual: str
-    nueva: str = Field(min_length=8)
+    nueva: str
+
+    _validar_nueva = field_validator("nueva")(validar_password)
 
 
 @router.post("/cambiar-password", status_code=204, summary="Cambiar mi contraseña")
