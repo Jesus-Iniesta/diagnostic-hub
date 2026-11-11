@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 
+from app.api.upload_utils import error_interno, leer_archivo
 from app.api.deps import DbSession
 from app.core.security import require_permission
 from app.models.user import User
@@ -86,13 +87,13 @@ async def upload_diagnostico(
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext not in ("xlsx", "xls"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos .xlsx o .xls")
-    content = await file.read()
+    content = await leer_archivo(file)
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
     try:
         resultado = await procesar_examen_diagnostico(db, content, materia, periodo)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error al procesar: {exc}")
+        raise error_interno(exc)
     return resultado
 
 
@@ -142,7 +143,7 @@ async def corregir_matching(
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext not in ("xlsx", "xls"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos .xlsx o .xls")
-    content = await file.read()
+    content = await leer_archivo(file)
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
 
@@ -155,7 +156,7 @@ async def corregir_matching(
             correcciones=[c.model_dump() for c in payload.correcciones],
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error al corregir: {exc}")
+        raise error_interno(exc)
     return resultado
 
 

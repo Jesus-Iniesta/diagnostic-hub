@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
+from app.api.upload_utils import error_interno, leer_archivo
 from app.api.deps import DbSession
 from app.core.security import require_permission
 from app.models.user import User
@@ -42,13 +43,13 @@ async def upload_cuestionario(
 ):
     _validar_cuestionario(cuestionario)
     _validar_archivo_ext(file)
-    content = await file.read()
+    content = await leer_archivo(file)
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
     try:
         return await procesar_cuestionario(db, content, cuestionario, periodo)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error al procesar: {exc}")
+        raise error_interno(exc)
 
 
 @router.post(
@@ -67,7 +68,7 @@ async def corregir_matching(
 
     _validar_cuestionario(cuestionario)
     _validar_archivo_ext(file)
-    content = await file.read()
+    content = await leer_archivo(file)
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
 
@@ -89,4 +90,4 @@ async def corregir_matching(
             correcciones=correcciones,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error al corregir: {exc}")
+        raise error_interno(exc)

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
+from app.api.upload_utils import error_interno, leer_archivo
 from app.api.deps import DbSession
 from app.core.security import require_permission
 from app.models.user import User
@@ -99,7 +100,7 @@ async def post_archivo(
     nombre = file.filename or ""
     if nombre.rsplit(".", 1)[-1].lower() not in ("xlsx", "xls"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos .xlsx o .xls")
-    contenido = await file.read()
+    contenido = await leer_archivo(file)
     if not contenido:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
     try:
@@ -119,7 +120,7 @@ async def post_procesar(
     except (CargaPeriodoError, ArchivoExcelError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error al procesar: {exc}")
+        raise error_interno(exc)
 
 
 @router.post(

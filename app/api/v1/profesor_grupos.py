@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.upload_utils import leer_archivo
 from app.api.deps import get_db
 from app.core.security import get_current_user, require_permission
 from app.models.grupo import Grupo
@@ -384,7 +385,7 @@ async def cargar_alumnos_excel(
             detail="El nombre del archivo debe comenzar con LN o LIN (ej. LINC05-CALCULO III-02 1)",
         )
 
-    contents = await file.read()
+    contents = await leer_archivo(file)
     alumnos_data, errores = parse_profesor_excel(contents, file.filename)
     periodo = await _periodo_grupo(db, grupo_id)
 

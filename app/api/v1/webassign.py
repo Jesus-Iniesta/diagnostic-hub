@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 
+from app.api.upload_utils import leer_archivo
 from app.api.deps import DbSession
 from app.core.security import require_permission
 from app.models.user import User
@@ -34,7 +35,7 @@ async def upload_webassign(
             status_code=400, detail="Solo se aceptan archivos .xls o .xlsx"
         )
 
-    content = await file.read()
+    content = await leer_archivo(file)
     try:
         result = await procesar_webassign(db, content, carrera.upper(), periodo)
     except ArchivoExcelError as exc:

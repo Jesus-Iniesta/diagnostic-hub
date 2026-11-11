@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from app.api.upload_utils import error_interno, leer_archivo
 from app.api.deps import DbSession
 from app.core.security import require_permission
 from app.models.user import User
@@ -60,17 +61,14 @@ async def upload_alumnos(
             detail="Solo se permiten archivos .xlsx o .xls",
         )
 
-    content = await file.read()
+    content = await leer_archivo(file)
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
 
     try:
         resultado: ResultadoCarga = await procesar_excel(db, content)
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al procesar el archivo: {exc}",
-        )
+        raise error_interno(exc)
 
     return _build_response(resultado)
 
@@ -93,10 +91,7 @@ async def corregir_filas(
             db, [f.model_dump() for f in payload.filas]
         )
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al procesar correcciones: {exc}",
-        )
+        raise error_interno(exc)
 
     return _build_response(resultado)
 
@@ -120,7 +115,7 @@ async def upload_catalogo(
             detail="Solo se permiten archivos .xlsx o .xls",
         )
 
-    content = await file.read()
+    content = await leer_archivo(file)
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="El archivo está vacío")
 
@@ -130,10 +125,7 @@ async def upload_catalogo(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         await db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al procesar el archivo: {exc}",
-        )
+        raise error_interno(exc)
 
     await db.commit()
     return resultado
