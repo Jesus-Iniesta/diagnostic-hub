@@ -20,11 +20,13 @@ import {
   IconArrowsJoin,
   IconCircleCheck,
   IconClipboardList,
+  IconDownload,
   IconFileSpreadsheet,
   IconInfoCircle,
   IconPlayerPlay,
   IconSearch,
   IconUpload,
+  IconUserCheck,
   IconWorld,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -36,6 +38,7 @@ import { usePeriodo } from '../../contexts/PeriodoContext';
 import type { AlumnoAdmin, ParejaDuplicada } from '../../lib/alumnosAdminApi';
 import {
   corregirArchivo,
+  descargarPlantillaAsistencia,
   guardarArchivo,
   juntarRepetidos,
   listarArchivos,
@@ -46,7 +49,7 @@ import {
   type ResumenArchivo,
   type RevisionPeriodo,
 } from '../../lib/cargaPeriodoApi';
-import { fetchPeriodoRango, type PeriodoRango } from '../../lib/configuracionApi';
+import { fetchIndiceFi, fetchPeriodoRango, type PeriodoRango } from '../../lib/configuracionApi';
 import {
   exportarResultados,
   getRespuestaKeyStatus,
@@ -64,7 +67,7 @@ interface Examen {
 }
 
 interface PasoCarga {
-  id: 'cuestionario' | 'diagnostico' | 'webassign';
+  id: 'cuestionario' | 'diagnostico' | 'webassign' | 'asistencia';
   numero: number;
   titulo: string;
   descripcion: string;
@@ -105,6 +108,15 @@ const PASOS_CARGA: PasoCarga[] = [
     icono: IconWorld,
     examenes: ['ICI', 'ICO', 'IEL', 'IIA', 'IME', 'ISES'].map((c) => ({ id: `webassign_${c}`, label: c })),
   },
+  {
+    id: 'asistencia',
+    numero: 4,
+    titulo: 'Asistencia',
+    descripcion:
+      'Un Excel con una fila por alumno y las columnas Nombre y Asistencias. Quien más asistió es el 100%. Solo cuenta en el índice si la asistencia está activada en Configuración.',
+    icono: IconUserCheck,
+    examenes: [{ id: 'asistencia', label: 'Asistencia' }],
+  },
 ];
 
 const ETIQUETA_COMPLETA: Record<string, string> = {
@@ -114,11 +126,12 @@ const ETIQUETA_COMPLETA: Record<string, string> = {
   final_trigonometria: 'Final Trigonometría',
   final_geometria: 'Final Geometría',
   final_calculo: 'Final Cálculo',
+  asistencia: 'Asistencia',
   ...Object.fromEntries(['ICI', 'ICO', 'IEL', 'IIA', 'IME', 'ISES'].map((c) => [`webassign_${c}`, `WebAssign ${c}`])),
 };
 const TODOS_LOS_EXAMENES = PASOS_CARGA.flatMap((p) => p.examenes.map((e) => e.id));
 
-const TABS = ['cuestionario', 'diagnostico', 'webassign', 'procesar'] as const;
+const TABS = ['cuestionario', 'diagnostico', 'webassign', 'asistencia', 'procesar'] as const;
 type TabId = (typeof TABS)[number];
 
 function isTabId(value: string | null): value is TabId {
@@ -246,6 +259,31 @@ function RanuraArchivo({ examen, archivo, subiendo, deshabilitado, onArchivo }: 
         </Text>
       )}
     </div>
+  );
+}
+
+// ── Plantilla del Excel de asistencia (paso 4) ───────────────────
+
+function PlantillaAsistencia({ onError }: { onError: (mensaje: string) => void }) {
+  const descargar = async () => {
+    try {
+      const url = URL.createObjectURL(await descargarPlantillaAsistencia());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'plantilla_asistencia.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      onError(errorTexto(err, 'No se pudo descargar la plantilla'));
+    }
+  };
+
+  return (
+    <Group>
+      <Button size="compact-sm" variant="light" leftSection={<IconDownload size={14} />} onClick={descargar}>
+        Descargar plantilla (Nombre, Asistencias)
+      </Button>
+    </Group>
   );
 }
 
@@ -613,8 +651,16 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
     setAviso(null);
   }, [periodo]);
 
-  const guardados = TODOS_LOS_EXAMENES.filter((e) => archivos[e]);
-  const faltan = TODOS_LOS_EXAMENES.filter((e) => !archivos[e]);
+  // La asistencia solo se espera si el índice la usa (o si ya hay un archivo subido).
+  const [usarAsistencia, setUsarAsistencia] = useState(false);
+  useEffect(() => {
+    fetchIndiceFi(periodo)
+      .then((config) => setUsarAsistencia(config.usar_asistencia))
+      .catch(() => setUsarAsistencia(false));
+  }, [periodo]);
+  const examenes = TODOS_LOS_EXAMENES.filter((e) => e !== 'asistencia' || usarAsistencia || archivos[e]);
+  const guardados = examenes.filter((e) => archivos[e]);
+  const faltan = examenes.filter((e) => !archivos[e]);
 
   const cargarRevision = useCallback(async () => {
     try {
@@ -705,10 +751,10 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
     <Stack gap="lg">
       <div>
         <Text fw={600} size="sm" mb="xs">
-          Archivos del periodo ({guardados.length} de {TODOS_LOS_EXAMENES.length})
+          Archivos del periodo ({guardados.length} de {examenes.length})
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing={6}>
-          {TODOS_LOS_EXAMENES.map((e) => (
+          {examenes.map((e) => (
             <Group key={e} gap={6} wrap="nowrap">
               {archivos[e] ? (
                 <Text size="sm" c="green.8" fw={600}>
@@ -1121,7 +1167,7 @@ export default function AdminCargaExamenes() {
             value="procesar"
             leftSection={procesado ? <IconCircleCheck size={16} color="var(--mantine-color-green-6)" /> : <IconPlayerPlay size={16} />}
           >
-            4. Procesar todo
+            5. Procesar todo
           </Tabs.Tab>
         </Tabs.List>
 
@@ -1145,6 +1191,7 @@ export default function AdminCargaExamenes() {
                 </Group>
 
                 {paso.id === 'diagnostico' && <RespuestasFinal periodo={periodo} />}
+                {paso.id === 'asistencia' && <PlantillaAsistencia onError={setError} />}
 
                 <SimpleGrid cols={{ base: 1, sm: 2, md: paso.examenes.length > 4 ? 3 : paso.examenes.length }} spacing="sm">
                   {paso.examenes.map((examen) => (
@@ -1174,10 +1221,10 @@ export default function AdminCargaExamenes() {
             <Stack gap="lg">
               <div>
                 <Title order={3} className={classes.title}>
-                  Paso 4 · Procesar todo
+                  Paso 5 · Procesar todo
                 </Title>
                 <Text className={classes.subtitle}>
-                  Procesa los archivos guardados en orden (cuestionarios → finales → WebAssign) y da una segunda vuelta
+                  Procesa los archivos guardados en orden (cuestionarios → finales → WebAssign → asistencia) y da una segunda vuelta
                   para juntar a los alumnos que se registraron dos veces. Los alumnos que no existen se registran solos.
                 </Text>
               </div>

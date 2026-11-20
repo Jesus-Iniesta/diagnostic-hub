@@ -34,6 +34,7 @@ EXAMENES: list[tuple[str, str]] = [
     ("cuestionario_2", "Cuestionario 2"),
     *((f"final_{m}", f"Final {nombre}") for m, nombre in MATERIAS_FINAL.items()),
     *((f"webassign_{c}", f"WebAssign {c}") for c in CARRERAS),
+    ("asistencia", "Asistencia"),
 ]
 ETIQUETAS = dict(EXAMENES)
 ORDEN = {examen: i for i, (examen, _) in enumerate(EXAMENES)}
@@ -114,6 +115,7 @@ async def _archivo(db: AsyncSession, periodo: str, examen: str) -> ArchivoPeriod
 
 async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
     """Procesa un archivo guardado igual que en su pestaña y resume el resultado."""
+    from app.services.upload_asistencia_service import procesar_asistencia
     from app.services.upload_cuestionario_service import procesar_cuestionario
     from app.services.upload_diagnostico_service import procesar_examen_diagnostico
     from app.services.upload_webassign_service import procesar_webassign
@@ -128,6 +130,8 @@ async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
         r = await procesar_cuestionario(db, contenido, int(clave), periodo)
     elif tipo == "final":
         r = await procesar_examen_diagnostico(db, contenido, clave, periodo)
+    elif tipo == "asistencia":
+        r = await procesar_asistencia(db, contenido, periodo)
     else:
         r = await procesar_webassign(db, contenido, clave, periodo)
 
@@ -157,6 +161,7 @@ async def corregir_archivo(
     db: AsyncSession, periodo: str, examen: str, correcciones: list[dict]
 ) -> dict:
     """Asigna a mano filas del archivo guardado (igual que "Corregir" en las cargas)."""
+    from app.services.upload_asistencia_service import corregir_matching_asistencia
     from app.services.upload_cuestionario_service import corregir_matching_cuestionario
     from app.services.upload_diagnostico_service import corregir_matching_diagnostico
 
@@ -168,6 +173,8 @@ async def corregir_archivo(
     contenido = (await _archivo(db, periodo, examen)).contenido
     if tipo == "cuestionario":
         r = await corregir_matching_cuestionario(db, contenido, int(clave), periodo, correcciones)
+    elif tipo == "asistencia":
+        r = await corregir_matching_asistencia(db, contenido, periodo, correcciones)
     else:
         r = await corregir_matching_diagnostico(db, clave, periodo, contenido, correcciones)
     return {
@@ -193,11 +200,16 @@ async def estado_periodo(db: AsyncSession, periodo: str) -> dict:
     from app.repositories.configuracion_repository import ConfiguracionRepository
     from app.services.alumnos_admin_service import contar_por_revisar
 
+    from app.services.indice_fi_service import obtener_config
+
     periodo = _periodo(periodo)
     rows = (
         await db.execute(select(ArchivoPeriodo).where(ArchivoPeriodo.periodo == periodo))
     ).scalars().all()
     archivos = sorted((_info(a) for a in rows), key=lambda a: ORDEN.get(a["examen"], 99))
+    # La asistencia solo cuenta como archivo esperado si el índice la usa.
+    usar_asistencia = (await obtener_config(db, periodo.upper()))["usar_asistencia"]
+    esperados = [a for a in archivos if usar_asistencia or a["examen"] != "asistencia"]
     procesado_en = max((a.procesado_en for a in rows if a.procesado_en), default=None)
     creani = await ConfiguracionRepository(db).get(CLAVE_CREANI.format(periodo))
     por_revisar = await contar_por_revisar(db, periodo)
@@ -205,8 +217,8 @@ async def estado_periodo(db: AsyncSession, periodo: str) -> dict:
     return {
         "periodo": periodo,
         "archivos": archivos,
-        "total_examenes": len(EXAMENES),
-        "subidos": len(rows),
+        "total_examenes": len(EXAMENES) - (0 if usar_asistencia else 1),
+        "subidos": len(esperados),
         # Todos los archivos guardados se procesaron después de subirse.
         "procesado": bool(rows) and all(_procesado(a) for a in rows),
         "procesado_en": procesado_en.isoformat() if procesado_en else None,
@@ -226,6 +238,8 @@ def _identificadores_archivo(examen: str, contenido: bytes) -> list[tuple[list, 
 
     tipo, _, clave = examen.partition("_")
     filas: list[tuple[list, list, list]] = []
+    if tipo == "asistencia":
+        return filas
     if tipo == "cuestionario":
         headers, rows = cuest._leer_workbook(contenido)
         cols = cuest.detectar_columnas_cuestionario(headers)

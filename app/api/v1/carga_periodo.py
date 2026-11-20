@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel
 
 from app.api.upload_utils import error_interno, leer_archivo
@@ -16,6 +16,7 @@ from app.services.carga_periodo_service import (
 )
 from app.services.alumnos_admin_service import revision_periodo
 from app.services.excel_utils import ArchivoExcelError
+from app.services.upload_asistencia_service import plantilla_asistencia
 
 router = APIRouter()
 
@@ -75,6 +76,17 @@ async def post_corregir(
         )
     except (CargaPeriodoError, ArchivoExcelError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/plantilla-asistencia", summary="Plantilla .xlsx de asistencia (Nombre, Asistencias)")
+async def get_plantilla_asistencia(
+    _current_user: User = Depends(require_permission("cargar_diagnostico")),
+):
+    return Response(
+        plantilla_asistencia(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="plantilla_asistencia.xlsx"'},
+    )
 
 
 @router.get("/archivos", summary="Archivos guardados del periodo")

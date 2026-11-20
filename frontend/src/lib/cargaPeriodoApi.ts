@@ -126,3 +126,9 @@ export function corregirArchivo(
     body: JSON.stringify({ periodo, examen, correcciones }),
   });
 }
+
+export async function descargarPlantillaAsistencia(): Promise<Blob> {
+  const res = await fetch(`${URL_BASE}/plantilla-asistencia`, { credentials: 'include' });
+  if (!res.ok) throw new Error('No se pudo descargar la plantilla');
+  return res.blob();
+}

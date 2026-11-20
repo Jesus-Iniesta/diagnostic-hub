@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.alumno import Alumno
 from app.models.ingenieria import Ingenieria
+from app.models.resultado_asistencia import ResultadoAsistencia
 from app.models.resultado_cuestionario_diagnostico import (
     ResultadoCuestionarioDiagnostico,
 )
@@ -259,9 +260,10 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
 
         # Los subtotales van con todos sus decimales (se muestran con 2); los
         # totales, el índice y la categoría son fórmulas para que se recalculen
-        # cuando el coordinador escriba la asistencia.
+        # si el coordinador cambia la asistencia.
+        asistencia = f["indice"]["asistencia"]
         valores = {
-            "Asistencia": None,
+            "Asistencia": asistencia["total"] if asistencia["usar"] else None,
             "Diag. C1": diag["c1"]["total"],
             "Diag. C2": diag["c2"]["total"],
             "Diag. total": f"={ref('Diag. C1')}+{ref('Diag. C2')}",
@@ -425,6 +427,7 @@ async def _load_data(
             ResultadoDiagnostico,
             ResultadoWebAssign,
             ResultadoCuestionarioDiagnostico,
+            ResultadoAsistencia,
         )
         .join(User, Alumno.usuario_id == User.id)
         .outerjoin(Ingenieria, Alumno.ingenieria_id == Ingenieria.id)
@@ -443,6 +446,11 @@ async def _load_data(
             (ResultadoCuestionarioDiagnostico.alumno_id == Alumno.id)
             & (ResultadoCuestionarioDiagnostico.periodo == periodo),
         )
+        .outerjoin(
+            ResultadoAsistencia,
+            (ResultadoAsistencia.alumno_id == Alumno.id)
+            & (ResultadoAsistencia.periodo == periodo),
+        )
         .options(selectinload(Alumno.ingenieria))
     )
 
@@ -459,7 +467,7 @@ async def _load_data(
 
     data = []
     seen = set()
-    for alumno, user, ingenieria, diag, wa, cdiag in rows:
+    for alumno, user, ingenieria, diag, wa, cdiag, asis in rows:
         if alumno.id in seen:
             continue
         seen.add(alumno.id)
@@ -490,6 +498,7 @@ async def _load_data(
             "trigonometria_examen": wa.trigonometria_examen if wa else None,
             "geometria_trabajo": wa.geometria_trabajo if wa else None,
             "geometria_examen": wa.geometria_examen if wa else None,
+            "asistencia": asis.porcentaje if asis else None,
             "carrera_wa": wa.carrera if wa else "",
             "tiene_wa": wa is not None,
             "tiene_cuestionario": cdiag is not None,

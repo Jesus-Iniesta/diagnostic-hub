@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.configuracion import Configuracion
+from app.models.resultado_asistencia import ResultadoAsistencia
 from app.models.resultado_cuestionario_diagnostico import ResultadoCuestionarioDiagnostico
 from app.models.resultado_diagnostico import ResultadoDiagnostico
 from app.models.resultado_webassign import ResultadoWebAssign
@@ -35,6 +36,9 @@ VALORES_DEFAULT: dict[str, float] = {
 
 # Por ahora la asistencia no se usa: vale 0 y no cuenta para el máximo.
 USAR_ASISTENCIA_DEFAULT = False
+
+# La asistencia se guarda como porcentaje.
+MAX_ASISTENCIA = 100.0
 
 # El máximo de una categoría no puede pasar de este valor.
 CATEGORIA_MAXIMO_TOPE = 10.0
@@ -303,10 +307,9 @@ def calcular_indice(datos: dict, config: dict) -> dict:
     """Desglose del índice de un alumno.
 
     `datos` usa las llaves de reportes_service._load_data: aciertos_c1_<materia>,
-    aciertos_c2_<materia>, <materia>_trabajo, <materia>_examen y puntaje_<materia>.
-    Lo que no hizo cuenta 0. La asistencia no se registra en el sistema (la llena
-    el coordinador en el CREANI), así que aquí siempre vale 0; si no se usa,
-    tampoco cuenta para el máximo.
+    aciertos_c2_<materia>, <materia>_trabajo, <materia>_examen, puntaje_<materia>
+    y asistencia (porcentaje 0-100). Lo que no hizo cuenta 0. La asistencia solo
+    cuenta si se usa; si no, vale 0 y tampoco cuenta para el máximo.
     """
     valores = config["valores"]
     usar_asistencia = config["usar_asistencia"]
@@ -345,7 +348,9 @@ def calcular_indice(datos: dict, config: dict) -> dict:
         "valor": valores["final"],
     }
 
-    asistencia = 0.0
+    asistencia = (
+        _parte(datos.get("asistencia"), MAX_ASISTENCIA, valores["asistencia"]) if usar_asistencia else 0.0
+    )
     suma = (
         asistencia
         + diagnostico["total"]
@@ -412,6 +417,13 @@ async def indices_alumnos(
             for fila in rows.scalars().all():
                 por_alumno[fila.alumno_id].setdefault(fila.periodo, {}).setdefault(nombre, fila)
 
+    asistencias: dict[tuple[int, str], float] = {}
+    if ids:
+        rows = await db.execute(
+            select(ResultadoAsistencia).where(ResultadoAsistencia.alumno_id.in_(ids))
+        )
+        asistencias = {(r.alumno_id, r.periodo): r.porcentaje for r in rows.scalars().all()}
+
     configs: dict[str, dict] = {}
     resultado: dict[int, dict] = {}
     for alumno_id, por_periodo in por_alumno.items():
@@ -424,7 +436,10 @@ async def indices_alumnos(
         if del_alumno not in configs:
             configs[del_alumno] = await obtener_config(db, del_alumno)
         resultado[alumno_id] = {
-            **calcular_indice(_datos_de_filas(filas), configs[del_alumno]),
+            **calcular_indice(
+                {**_datos_de_filas(filas), "asistencia": asistencias.get((alumno_id, del_alumno))},
+                configs[del_alumno],
+            ),
             "periodo": del_alumno,
             "tiene_resultados": bool(encontradas),
             "filas": filas,
