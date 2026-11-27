@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   Group,
+  List,
   Loader,
   Select,
   SimpleGrid,
@@ -10,7 +11,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconAlertCircle, IconDownload } from '@tabler/icons-react';
+import { IconAlertCircle, IconDownload, IconEye } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
 
 import CategoriasBarra from '../../components/CategoriasBarra/CategoriasBarra';
@@ -22,9 +23,39 @@ import {
 } from '../../lib/reportesApi';
 import type { ResumenCreani, ResumenGrupoCreani } from '../../lib/reportesApi';
 import classes from './AcreditadorHome.module.css';
+import IndiceFiExplicacion from './IndiceFiExplicacion';
 
 function notaPendientes(n: number): string {
   return n === 1 ? '1 alumno tiene exámenes pendientes.' : `${n} alumnos tienen exámenes pendientes.`;
+}
+
+/** Qué puede hacer el acreditador en el sistema (solo consulta). */
+function NotaAcreditador() {
+  return (
+    <Alert
+      variant="light"
+      color="indigo"
+      radius="lg"
+      icon={<IconEye size={20} />}
+      title="Qué puedes hacer como acreditador"
+      className={classes.nota}
+    >
+      <List size="sm" spacing={4}>
+        <List.Item>Elegir el periodo y consultar sus resultados, en total y por carrera.</List.Item>
+        <List.Item>
+          Ver cuántos alumnos hay, su Índice FI promedio, cuántos quedaron en cada categoría y
+          cuántos presentaron cada examen.
+        </List.Item>
+        <List.Item>
+          Descargar el reporte en Excel de todas las carreras o de una sola.
+        </List.Item>
+      </List>
+      <Text size="sm" mt="xs">
+        Tu acceso es de solo consulta: no puedes modificar resultados, alumnos ni la configuración
+        del índice.
+      </Text>
+    </Alert>
+  );
 }
 
 /** Alumnos, Índice FI promedio, barra de categorías y, en chico, quién hizo cada examen. */
@@ -141,6 +172,8 @@ export default function AcreditadorHome() {
         />
       </Group>
 
+      <NotaAcreditador />
+
       {error && (
         <Alert color="red" icon={<IconAlertCircle size={18} />} withCloseButton onClose={() => setError(null)}>
           {error}
@@ -161,7 +194,13 @@ export default function AcreditadorHome() {
 
       {resumen && !cargando && (
         <>
-          <Card withBorder p="lg" radius="lg">
+          <IndiceFiExplicacion
+            indice={resumen.indice}
+            maximo={resumen.maximo}
+            periodo={resumen.periodo}
+          />
+
+          <Card p="lg" radius="lg" className={`${classes.card} ${classes.cardTotal}`}>
             <Group justify="space-between" align="flex-start" wrap="wrap" mb="sm">
               <Title order={4}>Todas las carreras</Title>
               <Button
@@ -169,7 +208,7 @@ export default function AcreditadorHome() {
                 onClick={() => handleDescargar()}
                 loading={descargando === 'todo'}
               >
-                Descargar Excel completo
+                Descargar Excel de todas las carreras
               </Button>
             </Group>
             <Datos datos={resumen.total} maximo={resumen.maximo} />
@@ -177,7 +216,7 @@ export default function AcreditadorHome() {
 
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
             {resumen.carreras.map((c) => (
-              <Card key={c.clave || 'sin'} withBorder p="lg" radius="lg" className={classes.carrera}>
+              <Card key={c.clave || 'sin'} p="lg" radius="lg" className={`${classes.card} ${classes.carrera}`}>
                 <div>
                   <Text fw={700} size="lg">{c.clave || 'Sin ingeniería'}</Text>
                   <Text size="xs" c="dimmed" lineClamp={1} title={c.nombre}>
@@ -194,8 +233,9 @@ export default function AcreditadorHome() {
                     leftSection={<IconDownload size={15} />}
                     onClick={() => handleDescargar(c.clave)}
                     loading={descargando === c.clave}
+                    title={`Descargar el reporte en Excel de ${c.nombre}`}
                   >
-                    Descargar Excel
+                    Descargar Excel de {c.clave}
                   </Button>
                 ) : (
                   <Text size="xs" c="dimmed" ta="center">Incluidos en el Excel completo</Text>

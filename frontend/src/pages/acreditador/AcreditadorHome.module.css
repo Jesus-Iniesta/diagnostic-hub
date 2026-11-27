@@ -1,3 +1,38 @@
+/* Tarjetas con borde y sombra marcados para que resalten sobre el fondo gris. */
+.card {
+  background: #ffffff;
+  border: 1px solid #dfe3ea;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 12px rgba(16, 24, 40, 0.08);
+}
+
+/* El total de todas las carreras se distingue de las tarjetas por carrera. */
+.cardTotal {
+  border-top: 4px solid var(--mantine-color-indigo-6);
+}
+
+.nota {
+  border: 1px solid var(--mantine-color-indigo-2);
+}
+
+/* Renglones de la explicación del índice. */
+.fila {
+  padding: 4px 0;
+  border-bottom: 1px dashed #e4e7ec;
+}
+
+.filaTotal {
+  padding-top: 6px;
+  color: #17153b;
+}
+
+.punto {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* Todas las tarjetas del mismo alto, con el botón abajo. */
 .carrera {
   display: flex;
@@ -11,7 +46,7 @@
 }
 
 .label {
-  color: #98a2b3;
+  color: #667085;
   font-size: 12px;
   font-weight: 600;
 }

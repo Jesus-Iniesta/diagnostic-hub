@@ -34,6 +34,14 @@ VALORES_DEFAULT: dict[str, float] = {
     "final": 4.0,
 }
 
+NOMBRES_COMPONENTES: dict[str, str] = {
+    "asistencia": "Asistencia",
+    "diagnostico": "Examen diagnóstico",
+    "webassign_tareas": "Tareas WebAssign",
+    "webassign_examen": "Exámenes WebAssign",
+    "final": "Examen final",
+}
+
 # Por ahora la asistencia no se usa: vale 0 y no cuenta para el máximo.
 USAR_ASISTENCIA_DEFAULT = False
 
@@ -116,6 +124,20 @@ def componentes_activos(usar_asistencia: bool) -> tuple[str, ...]:
 
 def maximo_indice(valores: dict[str, float], usar_asistencia: bool) -> float:
     return round(sum(valores[c] for c in componentes_activos(usar_asistencia)), 4)
+
+
+def explicacion_indice(config: dict) -> dict:
+    """Cómo se forma el índice del periodo: qué vale cada componente y el rango de cada categoría."""
+    return {
+        "componentes": [
+            {"nombre": NOMBRES_COMPONENTES[c], "valor": config["valores"][c]}
+            for c in componentes_activos(config["usar_asistencia"])
+        ],
+        "categorias": [
+            {"nombre": c["nombre"], "minimo": c["minimo"], "maximo": c["maximo"]}
+            for c in sorted(config["categorias"], key=lambda c: c["minimo"], reverse=True)
+        ],
+    }
 
 
 def fmt_num(valor: float) -> str:

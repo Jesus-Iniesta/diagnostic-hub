@@ -25,9 +25,18 @@ export interface ResumenCarrera extends ResumenGrupoCreani {
   nombre: string;
 }
 
+/** Cómo se forma el Índice FI del periodo (lo configura el coordinador). */
+export interface ExplicacionIndice {
+  /** Componentes que suman al índice, con lo que vale cada uno (escala 0-10). */
+  componentes: { nombre: string; valor: number }[];
+  /** Rangos de cada categoría, de la más alta a la más baja (escala 0-10). */
+  categorias: { nombre: string; minimo: number; maximo: number }[];
+}
+
 export interface ResumenCreani {
   periodo: string;
   maximo: number;
+  indice: ExplicacionIndice;
   posibles_duplicados: number;
   total: ResumenGrupoCreani;
   carreras: ResumenCarrera[];

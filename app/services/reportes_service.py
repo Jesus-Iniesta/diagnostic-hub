@@ -18,6 +18,7 @@ from app.models.resultado_webassign import ResultadoWebAssign
 from app.models.user import User
 from app.services.indice_fi_service import (
     calcular_indice,
+    explicacion_indice,
     formula_categoria,
     formula_indice,
     maximo_indice,
@@ -750,6 +751,7 @@ async def resumen_creani(db: AsyncSession, periodo: str) -> dict:
     return {
         "periodo": periodo,
         "maximo": maximo_indice(config["valores"], config["usar_asistencia"]),
+        "indice": explicacion_indice(config),
         "posibles_duplicados": (await contar_por_revisar(db, periodo))["posibles_duplicados"],
         "total": _resumen_grupo(data, config),
         "carreras": carreras,
