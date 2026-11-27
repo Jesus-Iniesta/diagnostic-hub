@@ -9,7 +9,7 @@ from itertools import combinations
 
 import openpyxl
 from openpyxl.styles import Font
-from sqlalchemy import func, or_, select
+from sqlalchemy import Integer, cast, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -122,6 +122,23 @@ def _con_relaciones(query):
 
 FILTROS = ("todos", "por_revisar", "provisionales", "sin_cuenta")
 
+# Exámenes que forman el Índice FI: diagnóstico (cuestionarios), final y WebAssign.
+MODELOS_EXAMEN = (ResultadoCuestionarioDiagnostico, ResultadoDiagnostico, ResultadoWebAssign)
+TOTAL_EXAMENES = len(MODELOS_EXAMEN)
+
+
+def _cantidad_examenes(periodo: str | None):
+    """Expresión SQL: de cuántos de los exámenes del índice tiene resultado el
+    alumno (en el periodo, si se indica)."""
+    def tiene(modelo):
+        conds = [modelo.alumno_id == Alumno.id]
+        if periodo is not None:
+            conds.append(modelo.periodo == periodo)
+        return cast(exists().where(*conds), Integer)
+
+    diagnostico, final, webassign = (tiene(m) for m in MODELOS_EXAMEN)
+    return diagnostico + final + webassign
+
 
 async def listar_alumnos(
     db: AsyncSession,
@@ -129,11 +146,15 @@ async def listar_alumnos(
     busqueda: str | None,
     periodo: str | None,
     filtro: str = "todos",
+    examenes: int | None = None,
     limit: int,
     offset: int,
 ) -> dict:
     """Lista de alumnos. Con periodo: los que ingresaron en él o tienen algún
-    resultado en él, y las marcas de exámenes son de ese periodo."""
+    resultado en él, y las marcas de exámenes son de ese periodo.
+
+    `examenes` deja solo a los que tienen esa cantidad de los exámenes del
+    índice (TOTAL_EXAMENES = todos)."""
     periodo = (periodo or "").strip() or None
     conds = []
     if periodo is not None or filtro == "por_revisar":
@@ -148,6 +169,8 @@ async def listar_alumnos(
         conds.append(Alumno.es_provisional.is_(True))
     elif filtro == "sin_cuenta":
         conds.append(Alumno.numero_cuenta.is_(None))
+    if examenes is not None:
+        conds.append(_cantidad_examenes(periodo) == examenes)
     if busqueda and busqueda.strip():
         term = f"%{busqueda.strip()}%"
         nombre_completo = func.concat_ws(

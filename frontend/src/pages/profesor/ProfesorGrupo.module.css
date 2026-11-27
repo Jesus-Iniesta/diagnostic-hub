@@ -147,6 +147,13 @@
   width: 100%;
 }
 
+/* Nombre de la materia completo: baja de renglón en vez de cortarse. */
+.materia {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 140px;
+}
+
 .nombre {
   white-space: nowrap;
 }

@@ -332,6 +332,15 @@ function ListaDuplicados({ periodo, busqueda, version, onUnir }: ListaDuplicados
 
 // ── Página ───────────────────────────────────────────────────────
 
+/** Filtro por cuántos de los 3 exámenes del Índice FI tiene el alumno. */
+const OPCIONES_EXAMENES = [
+  { value: '', label: 'Cualquier cantidad' },
+  { value: '3', label: 'Todos (3 de 3)' },
+  { value: '2', label: '2 de 3' },
+  { value: '1', label: '1 de 3' },
+  { value: '0', label: 'Ninguno' },
+];
+
 export default function AdminListaAlumnos() {
   const { periodo } = usePeriodo();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -340,6 +349,8 @@ export default function AdminListaAlumnos() {
   const filtro: FiltroPagina =
     filtroParam === 'por_revisar' ? 'duplicados' : esFiltro(filtroParam) ? filtroParam : 'todos';
   const [soloPeriodo, setSoloPeriodo] = useState(true);
+  // Cantidad de exámenes del índice ('' = cualquiera).
+  const [examenes, setExamenes] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const busquedaDebounced = useDebounced(busqueda);
   const [page, setPage] = useState(1);
@@ -370,6 +381,7 @@ export default function AdminListaAlumnos() {
         busqueda: busquedaDebounced.trim() || undefined,
         periodo: soloPeriodo ? periodo : undefined,
         filtro,
+        examenes: examenes === '' ? undefined : Number(examenes),
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       });
@@ -383,7 +395,7 @@ export default function AdminListaAlumnos() {
     } finally {
       if (consulta === ultimaConsulta.current) setLoading(false);
     }
-  }, [busquedaDebounced, periodo, soloPeriodo, filtro, page]);
+  }, [busquedaDebounced, periodo, soloPeriodo, filtro, examenes, page]);
 
   useEffect(() => {
     cargar();
@@ -391,7 +403,7 @@ export default function AdminListaAlumnos() {
 
   useEffect(() => {
     setPage(1);
-  }, [busquedaDebounced, periodo, soloPeriodo, filtro]);
+  }, [busquedaDebounced, periodo, soloPeriodo, filtro, examenes]);
 
   const cambiarFiltro = (v: string) => {
     setSearchParams(
@@ -429,6 +441,17 @@ export default function AdminListaAlumnos() {
               onChange={(e) => setBusqueda(e.currentTarget.value)}
               style={{ flex: 1, minWidth: 220 }}
             />
+            {filtro !== 'duplicados' && (
+              <Select
+                label="Exámenes"
+                description="Diagnóstico, final y WebAssign"
+                data={OPCIONES_EXAMENES}
+                value={examenes}
+                onChange={(v) => setExamenes(v ?? '')}
+                allowDeselect={false}
+                w={220}
+              />
+            )}
             <Switch
               label={`Solo ${periodo}`}
               description="Ingresaron o tienen exámenes en el periodo"

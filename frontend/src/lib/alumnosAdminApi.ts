@@ -33,6 +33,8 @@ export function listarAlumnosAdmin(params: {
   busqueda?: string;
   periodo?: string;
   filtro?: FiltroAlumnos;
+  /** Cuántos exámenes del índice tiene (diagnóstico, final y WebAssign); 3 = todos. */
+  examenes?: number;
   limit?: number;
   offset?: number;
 }): Promise<AlumnosAdminPage> {
@@ -40,6 +42,7 @@ export function listarAlumnosAdmin(params: {
   if (params.busqueda) qs.set('busqueda', params.busqueda);
   if (params.periodo) qs.set('periodo', params.periodo);
   if (params.filtro && params.filtro !== 'todos') qs.set('filtro', params.filtro);
+  if (params.examenes !== undefined) qs.set('examenes', String(params.examenes));
   if (params.limit) qs.set('limit', String(params.limit));
   if (params.offset) qs.set('offset', String(params.offset));
   return apiFetch<AlumnosAdminPage>(`${URL_BASE}?${qs.toString()}`);

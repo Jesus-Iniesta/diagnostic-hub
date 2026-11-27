@@ -306,82 +306,87 @@ export default function ProfesorGrupo() {
       )}
 
       {grupos.length > 0 && (
-        <Card className={classes.card} padding="lg" radius="lg" mt="lg">
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Grupo</Table.Th>
-                <Table.Th>Materia</Table.Th>
-                <Table.Th>Periodo</Table.Th>
-                <Table.Th>Alumnos</Table.Th>
-                <Table.Th>Archivo</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {grupos.map((g) => (
-                <Table.Tr
-                  key={g.id}
-                  style={{
-                    cursor: 'pointer',
-                    background:
-                      grupoSeleccionado?.id === g.id ? '#f5f6ff' : undefined,
-                  }}
-                  onClick={() => seleccionarGrupo(g)}
-                >
-                  <Table.Td>
-                    <Text fw={600}>{g.nombre}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge variant="light" color="indigo" tt="none">
-                      {g.materia_nombre || g.materia_clave}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>{g.periodo}</Table.Td>
-                  <Table.Td>{g.total_alumnos}</Table.Td>
-                  <Table.Td>
-                    {g.nombre_archivo ? (
-                      <Badge variant="light" color="green" tt="none" leftSection={<IconFileSpreadsheet size={12} />}>
-                        {g.nombre_archivo}
-                      </Badge>
-                    ) : (
-                      <Text size="sm" c="dimmed">—</Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={4} wrap="nowrap" justify="flex-end">
-                      <ActionIcon
-                        color="indigo"
-                        variant="subtle"
-                        aria-label={`Descargar PDF del grupo ${g.nombre}`}
-                        title="Descargar PDF del grupo"
-                        loading={descargando === g.id}
-                        disabled={g.total_alumnos === 0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void descargarPdf(g.id);
-                        }}
-                      >
-                        <IconDownload size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        color="red"
-                        variant="subtle"
-                        aria-label={`Eliminar el grupo ${g.nombre}`}
-                        title="Eliminar grupo"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          pedirEliminarGrupo(g);
-                        }}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
+        <Card className={`${classes.card} ${classes.cardAncha}`} padding="lg" radius="lg" mt="lg">
+          <Table.ScrollContainer minWidth={760}>
+            <Table striped highlightOnHover verticalSpacing="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Grupo</Table.Th>
+                  <Table.Th>Materia</Table.Th>
+                  <Table.Th>Periodo</Table.Th>
+                  <Table.Th>Alumnos</Table.Th>
+                  <Table.Th>Archivo</Table.Th>
+                  <Table.Th />
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {grupos.map((g) => (
+                  <Table.Tr
+                    key={g.id}
+                    style={{
+                      cursor: 'pointer',
+                      background:
+                        grupoSeleccionado?.id === g.id ? '#f5f6ff' : undefined,
+                    }}
+                    onClick={() => seleccionarGrupo(g)}
+                  >
+                    <Table.Td>
+                      <Text fw={600}>{g.nombre}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {/* Texto y no Badge: el Badge corta los nombres largos. */}
+                      <Text size="sm" fw={600} c="indigo.7" className={classes.materia}>
+                        {g.materia_nombre || g.materia_clave}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>{g.periodo}</Table.Td>
+                    <Table.Td>{g.total_alumnos}</Table.Td>
+                    <Table.Td>
+                      {g.nombre_archivo ? (
+                        <Badge variant="light" color="green" tt="none" leftSection={<IconFileSpreadsheet size={12} />}>
+                          {g.nombre_archivo}
+                        </Badge>
+                      ) : (
+                        <Text size="sm" c="dimmed">—</Text>
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs" wrap="nowrap" justify="flex-end">
+                        <Button
+                          size="sm"
+                          color="indigo"
+                          radius="md"
+                          leftSection={<IconDownload size={16} aria-hidden="true" />}
+                          aria-label={`Descargar PDF del grupo ${g.nombre}`}
+                          title={g.total_alumnos === 0 ? 'El grupo aún no tiene alumnos' : 'Lista del grupo con su Índice FI'}
+                          loading={descargando === g.id}
+                          disabled={g.total_alumnos === 0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void descargarPdf(g.id);
+                          }}
+                        >
+                          Descargar PDF
+                        </Button>
+                        <ActionIcon
+                          color="red"
+                          variant="subtle"
+                          aria-label={`Eliminar el grupo ${g.nombre}`}
+                          title="Eliminar grupo"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            pedirEliminarGrupo(g);
+                          }}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
           {errorPdf && (
             <Text size="sm" c="red" mt="sm" role="alert">
               {errorPdf}
