@@ -10,7 +10,9 @@ class PosibleDuplicado(Base):
     """Dos alumnos que pueden ser la misma persona.
 
     Pasa al registrarse, cuando no coincide ningún dato pero el nombre es igual
-    al de un provisional, y al cargar WebAssign, cuando el alumno no se
+    al de un provisional; al editar el perfil, cuando un dato nuevo es de otro
+    alumno y no se pueden juntar (o el nombre nuevo es el de un provisional); y
+    al cargar WebAssign, cuando el alumno no se
     encontró por correo pero su nombre (incompleto) o su correo institucional
     se parecen a los de otro alumno (ver emparejar_nombre.py). Salen en
     "Posibles duplicados" (lista de alumnos y "Por revisar") y en el Excel

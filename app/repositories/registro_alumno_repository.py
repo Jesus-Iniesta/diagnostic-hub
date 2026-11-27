@@ -86,6 +86,16 @@ class RegistroAlumnoRepository:
         correos = (await self.db.execute(stmt)).scalars()
         return any(normalizar_correo(c) == objetivo for c in correos)
 
+    async def _existe_correo_institucional(
+        self, correo: str, exclude_user_id: int | None = None
+    ) -> bool:
+        objetivo = normalizar_correo(correo) or correo
+        stmt = select(User.correo_institucional).where(User.correo_institucional.isnot(None))
+        if exclude_user_id is not None:
+            stmt = stmt.where(User.id != exclude_user_id)
+        correos = (await self.db.execute(stmt)).scalars()
+        return any(normalizar_correo(c) == objetivo for c in correos)
+
     async def _get_ingenieria(self, ingenieria_id: int) -> Ingenieria:
         ingenieria = await self.db.get(Ingenieria, ingenieria_id)
         if not ingenieria or not ingenieria.activo:
@@ -338,6 +348,82 @@ class RegistroAlumnoRepository:
             alumno_details=alumno_details,
         )
 
+    async def _ya_marcado(self, a: int, b: int) -> bool:
+        """Si la pareja ya está en posibles duplicados (aunque esté descartada)."""
+        return (
+            await self.db.scalar(
+                select(PosibleDuplicado.id).where(
+                    ((PosibleDuplicado.alumno_id == a) & (PosibleDuplicado.otro_id == b))
+                    | ((PosibleDuplicado.alumno_id == b) & (PosibleDuplicado.otro_id == a))
+                )
+            )
+        ) is not None
+
+    async def _marcar(self, alumno_id: int, otro_id: int, motivo: str) -> None:
+        if not await self._ya_marcado(alumno_id, otro_id):
+            self._posible_duplicado(alumno_id, otro_id, motivo)
+
+    @staticmethod
+    def _actual(alumno: Alumno, campo: str):
+        valor = getattr(alumno.usuario if campo in USER_FIELDS else alumno, campo)
+        return normalizar_correo(valor) or valor if campo.startswith("correo") else valor
+
+    async def _emparejar_al_editar(self, alumno: Alumno, payload: dict) -> None:
+        """Lo mismo que al registrarse, pero desde el perfil.
+
+        Si un dato nuevo (cuenta, folio o correo) es de un alumno provisional
+        (creado desde los exámenes), es la misma persona: se junta con este
+        alumno (pasan sus resultados). Si es de un alumno ya registrado o no se
+        pueden juntar, se marca para que lo revise el administrador y no se
+        guarda. Si cambia el nombre y es igual al de un provisional, se marca.
+        """
+        email_map, cuenta_map, folio_map, alumno_details = await load_all_alumnos(self.db)
+        provisionales = {aid for aid, d in alumno_details.items() if d.get("provisional")}
+
+        mapas = (
+            ("numero_cuenta", cuenta_map, "El número de cuenta ya está registrado"),
+            ("numero_folio", folio_map, "El número de folio ya está registrado"),
+            ("correo_personal", email_map, "El correo personal ya está registrado"),
+            ("correo_institucional", email_map, "El correo institucional ya está registrado"),
+        )
+        duenos: dict[int, str] = {}  # alumno dueño del dato -> mensaje de error
+        for campo, mapa, mensaje in mapas:
+            valor = payload.get(campo)
+            if valor is None or valor == self._actual(alumno, campo):
+                continue  # Solo los datos que cambian.
+            clave = normalizar_correo(valor) if campo.startswith("correo") else valor
+            dueno = mapa.get(clave)
+            if dueno is not None and dueno != alumno.id:
+                duenos.setdefault(dueno, mensaje)
+
+        registrados = [d for d in duenos if d not in provisionales]
+        if registrados:
+            for d in registrados:
+                await self._marcar(alumno.id, d, "Sus datos de contacto coinciden con los de otro alumno")
+            await self.db.commit()
+            raise HTTPException(status_code=409, detail=duenos[registrados[0]])
+
+        for d in duenos:
+            try:
+                await unir_alumnos(self.db, alumno.id, d)
+            except UnionError:
+                await self._marcar(alumno.id, d, "Sus datos de contacto coinciden con un alumno provisional")
+                await self.db.commit()
+                raise HTTPException(status_code=409, detail=duenos[d])
+
+        # Ningún dato coincidió, pero cambió el nombre y es igual al de un
+        # provisional: puede ser la misma persona (al alumno no se le dice nada).
+        usuario = alumno.usuario
+        campos_nombre = ("nombre", "apellido_paterno", "apellido_materno")
+        antes = normalizar_nombre(" ".join(p for p in (getattr(usuario, c) for c in campos_nombre) if p))
+        partes = [payload.get(c, getattr(usuario, c)) for c in campos_nombre]
+        nombre = normalizar_nombre(" ".join(p for p in partes if p))
+        if duenos or not nombre or nombre == antes:
+            return
+        for aid in provisionales - {alumno.id}:
+            if normalizar_nombre(alumno_details[aid].get("nombre")) == nombre:
+                await self._marcar(alumno.id, aid, "Mismo nombre que un alumno provisional")
+
     async def update(
         self, alumno: Alumno, data: RegistroAlumnoUpdate
     ) -> Alumno:
@@ -348,6 +434,10 @@ class RegistroAlumnoRepository:
 
         if "ingenieria_id" in payload and payload["ingenieria_id"] is not None:
             await self._get_ingenieria(payload["ingenieria_id"])
+
+        # Antes de revisar si los datos ya existen: si son de un provisional,
+        # se junta con él y dejan de estar ocupados.
+        await self._emparejar_al_editar(alumno, payload)
 
         if "numero_cuenta" in payload and payload["numero_cuenta"] is not None:
             if await self._existe_numero_cuenta(
@@ -369,6 +459,16 @@ class RegistroAlumnoRepository:
             ):
                 raise HTTPException(
                     status_code=409, detail="El correo personal ya está registrado"
+                )
+        if payload.get("correo_institucional") not in (
+            None,
+            self._actual(alumno, "correo_institucional"),
+        ):
+            if await self._existe_correo_institucional(
+                payload["correo_institucional"], exclude_user_id=alumno.usuario_id
+            ):
+                raise HTTPException(
+                    status_code=409, detail="El correo institucional ya está registrado"
                 )
 
         for key, value in payload.items():
