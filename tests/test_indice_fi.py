@@ -89,6 +89,20 @@ letra = lambda n: openpyxl.utils.get_column_letter(col[n])
 check("CREANI: el índice suma ambos totales",
       f"{letra('Tareas WA total')}4" in formula and f"{letra('Examen WA total')}4" in formula, True)
 
+# --- CREANI: columna de asistencia (siempre en su lugar; indicador de color) ---
+for usar, texto, color, valor in ((False, "Apagada en Configuración", "00F4CCCC", 0), (True, "Sobre 10%", "00D9F2D0", 0.8)):
+    cfg = {**config(), "usar_asistencia": usar}
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    _write_indice_ws(ws, [{"indice": calcular_indice({**COMPLETO, "asistencia": 80.0}, cfg)}], cfg)
+    c = col["Asistencia"]
+    estado = "encendida" if usar else "apagada"
+    check(f"CREANI asistencia {estado}: encabezado", ws.cell(2, c).value, texto)
+    check(f"CREANI asistencia {estado}: color", (ws.cell(2, c).fill.start_color.rgb, ws.cell(4, c).fill.start_color.rgb), (color, color))
+    check(f"CREANI asistencia {estado}: valor", round(ws.cell(4, c).value, 4), valor)
+    check(f"CREANI asistencia {estado}: suma al índice",
+          f"{openpyxl.utils.get_column_letter(c)}4" in ws.cell(4, col["Índice FI UAEMex"]).value, usar)
+
 # --- Tope de categorías: 10 y el máximo del índice, lo que sea menor ---
 valores_8 = {**VALORES_DEFAULT, "final": 2.0}  # índice máximo 8
 _, por_categoria = validar_config(valores_8, [{"nombre": "A", "minimo": 0, "maximo": 9}], False)

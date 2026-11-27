@@ -310,7 +310,7 @@ export default function IndiceFiSection() {
             }}
             disabled={cargando}
             className={classes.switchAsistencia}
-            title="Apagado: la asistencia vale 0 y no cuenta para el máximo. En el CREANI la columna sale vacía."
+            title="Apagado: la asistencia no cuenta para el índice. En el CREANI su columna aparece como apagada."
           />
           {COMPONENTES.map(({ key, label }) => (
             <NumberInput

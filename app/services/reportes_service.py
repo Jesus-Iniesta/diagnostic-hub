@@ -183,6 +183,10 @@ INDICE_RESULTADO = ("Índice FI UAEMex", "Categoría")
 INDICE_NEGRITAS = {"Diag. total", "Tareas WA total", "Examen WA total", "Final total", *INDICE_RESULTADO}
 INDICE_FILL = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 INDICE_FILL_RESULTADO = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid")
+# Indicador de la columna de asistencia: verde si cuenta para el índice, rojo si está apagada.
+ASISTENCIA_FILL_ENCENDIDA = PatternFill(start_color="D9F2D0", end_color="D9F2D0", fill_type="solid")
+ASISTENCIA_FILL_APAGADA = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
+ASISTENCIA_FONT_APAGADA = Font(name="Aptos Narrow", size=11, bold=True, color="C00000")
 
 
 def _write_indice_ws(ws, filas: list[dict], config: dict):
@@ -214,13 +218,17 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
         "ÍNDICES FI UAEMEX",
         INDICE_FILL_RESULTADO,
     ).font = CREANI_FONT_BOLD
-    # La columna sale siempre (vacía) para usarla a futuro; si no se usa, no suma.
+    # La columna sale siempre en el mismo lugar (para no mover las demás). Si
+    # está apagada va en ceros y en rojo, y no suma al índice; encendida, en verde.
+    fill_asistencia = ASISTENCIA_FILL_ENCENDIDA if usar_asistencia else ASISTENCIA_FILL_APAGADA
     grupo(
         "Asistencia",
         "Asistencia",
-        f"Sobre {pct(v['asistencia'])}" if usar_asistencia else "No se usa",
-        INDICE_FILL,
+        f"Sobre {pct(v['asistencia'])}" if usar_asistencia else "Apagada en Configuración",
+        fill_asistencia,
     )
+    if not usar_asistencia:
+        ws[f"{letra['Asistencia']}2"].font = ASISTENCIA_FONT_APAGADA
     grupo("Diag. C1", "Diag. total", f"Diagnóstico (sobre {pct(v['diagnostico'])})", INDICE_FILL)
     grupo(
         "Tareas WA Álgebra",
@@ -241,7 +249,10 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
 
     def estilo(celda, nombre: str) -> None:
         celda.font = CREANI_FONT_BOLD if nombre in INDICE_NEGRITAS else CREANI_FONT
-        celda.fill = INDICE_FILL_RESULTADO if nombre in INDICE_RESULTADO else INDICE_FILL
+        if nombre == "Asistencia":
+            celda.fill = fill_asistencia
+        else:
+            celda.fill = INDICE_FILL_RESULTADO if nombre in INDICE_RESULTADO else INDICE_FILL
         celda.border = borde
 
     for nombre, c in col.items():
@@ -264,7 +275,7 @@ def _write_indice_ws(ws, filas: list[dict], config: dict):
         # si el coordinador cambia la asistencia.
         asistencia = f["indice"]["asistencia"]
         valores = {
-            "Asistencia": asistencia["total"] if asistencia["usar"] else None,
+            "Asistencia": asistencia["total"] if asistencia["usar"] else 0,
             "Diag. C1": diag["c1"]["total"],
             "Diag. C2": diag["c2"]["total"],
             "Diag. total": f"={ref('Diag. C1')}+{ref('Diag. C2')}",
