@@ -9,7 +9,7 @@ from app.models.ingenieria import Ingenieria
 from app.models.resultado_webassign import ResultadoWebAssign
 from app.models.role import Role
 from app.models.user import AuthMethod, User
-from app.schemas.registro_alumno import RegistroAlumnoCreate, RegistroAlumnoUpdate
+from app.schemas.registro_alumno import RegistroAlumnoBase, RegistroAlumnoUpdate
 from app.models.posible_duplicado import PosibleDuplicado
 from app.services.alumnos_provisionales import (
     COMPLETAR,
@@ -168,7 +168,14 @@ class RegistroAlumnoRepository:
             "ingenieria_id": ingenieria_id,
         }
 
-    async def create(self, data: RegistroAlumnoCreate) -> Alumno:
+    async def create(
+        self,
+        data: RegistroAlumnoBase,
+        *,
+        mensaje_ya_registrado: str = MENSAJE_YA_REGISTRADO,
+    ) -> Alumno:
+        """Registra al alumno (o completa su registro provisional). El mensaje
+        de "ya existe" cambia según quién registra: el alumno o el administrador."""
         await self._get_ingenieria(data.ingenieria_id)
         correo_personal = normalizar_correo(data.correo_personal) or data.correo_personal
         correo_inst = (
@@ -190,7 +197,7 @@ class RegistroAlumnoRepository:
         )
 
         if destino == YA_REGISTRADO:
-            raise HTTPException(status_code=409, detail=MENSAJE_YA_REGISTRADO)
+            raise HTTPException(status_code=409, detail=mensaje_ya_registrado)
 
         if destino == COMPLETAR:
             # Ya presentó exámenes sin estar registrado: existe como alumno
@@ -224,7 +231,7 @@ class RegistroAlumnoRepository:
         if await self._existe_numero_cuenta(data.numero_cuenta) or (
             data.numero_folio and await self._existe_numero_folio(data.numero_folio)
         ):
-            raise HTTPException(status_code=409, detail=MENSAJE_YA_REGISTRADO)
+            raise HTTPException(status_code=409, detail=mensaje_ya_registrado)
         if await self._existe_correo(correo_personal):
             raise HTTPException(
                 status_code=409, detail="El correo personal ya está registrado"
@@ -291,7 +298,7 @@ class RegistroAlumnoRepository:
 
     async def _completar_provisional(
         self,
-        data: RegistroAlumnoCreate,
+        data: RegistroAlumnoBase,
         correo_personal: str,
         correo_inst: str | None,
         alumno_id: int,

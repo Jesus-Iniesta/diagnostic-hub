@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from app.api.deps import DbSession
 from app.core.security import require_permission
 from app.models.user import User
+from app.repositories.registro_alumno_repository import RegistroAlumnoRepository
+from app.schemas.registro_alumno import AltaAlumnoAdmin
 from app.services.alumnos_admin_service import (
     FILTROS,
     TOTAL_EXAMENES,
@@ -14,6 +16,7 @@ from app.services.alumnos_admin_service import (
     obtener_alumno,
     posibles_duplicados,
 )
+from app.services.resumen_alumno_service import resultados_alumno
 from app.services.unir_alumnos_service import UnionError, unir_alumnos
 
 router = APIRouter()
@@ -64,6 +67,24 @@ async def get_alumnos(
     )
 
 
+MENSAJE_ALUMNO_EXISTENTE = "Ya existe un alumno con ese número de cuenta, folio o correo."
+
+
+@router.post("", status_code=201, summary="Agregar un alumno (administrador)")
+async def post_alumno(
+    payload: AltaAlumnoAdmin,
+    db: DbSession,
+    _current_user: User = Depends(require_permission("administrar_sistema")),
+):
+    """Mismo proceso que el registro del alumno: si ya existía como provisional
+    (presentó exámenes sin registrarse) se completa ese registro y conserva sus
+    resultados. El alumno entra después con su número de cuenta."""
+    alumno = await RegistroAlumnoRepository(db).create(
+        payload, mensaje_ya_registrado=MENSAJE_ALUMNO_EXISTENTE
+    )
+    return await obtener_alumno(db, alumno.id)
+
+
 @router.get("/duplicados", summary="Parejas de posibles duplicados, lado a lado")
 async def get_duplicados(
     db: DbSession,
@@ -89,6 +110,20 @@ async def post_descartar_duplicado(
         raise HTTPException(status_code=400, detail=str(exc))
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/{alumno_id}/resumen", summary="Datos del alumno y sus resultados de un periodo")
+async def get_resumen_alumno(
+    alumno_id: int,
+    db: DbSession,
+    periodo: str | None = Query(default=None, description="Sin periodo: el más reciente con resultados"),
+    _current_user: User = Depends(require_permission("administrar_sistema")),
+):
+    alumno = await obtener_alumno(db, alumno_id)
+    if alumno is None:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+    periodo = (periodo or "").strip() or None
+    return {"alumno": alumno, **await resultados_alumno(db, alumno_id, periodo)}
 
 
 @router.patch("/{alumno_id}", summary="Editar cuenta, folio e ingeniería de un alumno")

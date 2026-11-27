@@ -16,7 +16,15 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowsJoin, IconInfoCircle, IconPencil, IconSearch, IconUserX } from '@tabler/icons-react';
+import {
+  IconArrowsJoin,
+  IconEye,
+  IconInfoCircle,
+  IconPencil,
+  IconSearch,
+  IconUserPlus,
+  IconUserX,
+} from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -33,6 +41,8 @@ import {
   type ParejaDuplicada,
 } from '../../lib/alumnosAdminApi';
 import { getProgramas, type Ingenieria } from '../../lib/dashboardApi';
+import AgregarAlumnoModal from './AgregarAlumnoModal';
+import ResumenAlumnoModal from './ResumenAlumnoModal';
 import classes from './AdminCargaAlumnos.module.css';
 
 const PAGE_SIZE = 20;
@@ -361,6 +371,8 @@ export default function AdminListaAlumnos() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [ingenierias, setIngenierias] = useState<Ingenieria[]>([]);
   const [editando, setEditando] = useState<AlumnoAdmin | null>(null);
+  const [agregando, setAgregando] = useState(false);
+  const [viendo, setViendo] = useState<AlumnoAdmin | null>(null);
   const [uniendo, setUniendo] = useState<AlumnoAdmin | null>(null);
   const [parejaUnir, setParejaUnir] = useState<ParejaDuplicada | null>(null);
   const [versionDuplicados, setVersionDuplicados] = useState(0);
@@ -421,14 +433,19 @@ export default function AdminListaAlumnos() {
 
   return (
     <>
-      <div className={classes.welcome}>
-        <Text component="h1" className={classes.welcomeTitle}>
-          Alumnos · {periodo}
-        </Text>
-        <Text className={classes.welcomeSubtitle}>
-          Corrige la cuenta, el folio o la ingeniería de un alumno, o une dos registros que son la misma persona.
-        </Text>
-      </div>
+      <Group justify="space-between" align="flex-end" wrap="wrap" className={classes.welcome}>
+        <div>
+          <Text component="h1" className={classes.welcomeTitle}>
+            Alumnos · {periodo}
+          </Text>
+          <Text className={classes.welcomeSubtitle}>
+            Agrega un alumno, corrige su cuenta, folio o ingeniería, o une dos registros que son la misma persona.
+          </Text>
+        </div>
+        <Button leftSection={<IconUserPlus size={18} />} onClick={() => setAgregando(true)}>
+          Agregar alumno
+        </Button>
+      </Group>
 
       <Card className={classes.card} padding="xl" radius="lg" mt="lg">
         <Stack gap="md">
@@ -537,6 +554,15 @@ export default function AdminListaAlumnos() {
                         <Group gap={4} wrap="nowrap">
                           <Button
                             size="compact-xs"
+                            variant="light"
+                            color="teal"
+                            leftSection={<IconEye size={14} />}
+                            onClick={() => setViendo(a)}
+                          >
+                            Ver
+                          </Button>
+                          <Button
+                            size="compact-xs"
                             variant="subtle"
                             leftSection={<IconPencil size={14} />}
                             onClick={() => setEditando(a)}
@@ -576,6 +602,24 @@ export default function AdminListaAlumnos() {
           )}
         </Stack>
       </Card>
+
+      <ResumenAlumnoModal
+        alumno={viendo}
+        periodo={soloPeriodo ? periodo : undefined}
+        onClose={() => setViendo(null)}
+      />
+
+      <AgregarAlumnoModal
+        opened={agregando}
+        periodo={periodo}
+        ingenierias={ingenierias}
+        onClose={() => setAgregando(false)}
+        onAgregado={(nuevo) => {
+          setAgregando(false);
+          setAviso(`Se agregó a ${nuevo.nombre}.`);
+          void cargar();
+        }}
+      />
 
       <EditarModal
         alumno={editando}

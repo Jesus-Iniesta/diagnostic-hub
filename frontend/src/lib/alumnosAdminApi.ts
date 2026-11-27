@@ -60,6 +60,71 @@ export function listarDuplicados(periodo?: string): Promise<ParejaDuplicada[]> {
   return apiFetch<ParejaDuplicada[]>(`${URL_BASE}/duplicados${qs}`);
 }
 
+/** Lo que aporta un examen al Índice FI (escala 0-10). */
+export interface ComponenteIndice {
+  nombre: string;
+  obtenido: number;
+  valor: number;
+  presentado: boolean;
+}
+
+/** Calificaciones de un examen tal como vienen (sin ponderar); null si no lo presentó. */
+export interface CalificacionesAlumno {
+  diagnostico: {
+    maximo: number;
+    materias: { materia: string; c1: number | null; c2: number | null }[];
+  } | null;
+  webassign: {
+    maximo: number;
+    carrera: string;
+    materias: { materia: string; tareas: number | null; examen: number | null }[];
+  } | null;
+  final: {
+    maximo: number;
+    promedio: number | null;
+    materias: { materia: string; calificacion: number | null }[];
+  } | null;
+}
+
+export interface ResumenAlumnoAdmin {
+  alumno: AlumnoAdmin;
+  periodo: string;
+  tiene_resultados: boolean;
+  indice: number | null;
+  maximo: number;
+  categoria: string | null;
+  componentes: ComponenteIndice[];
+  calificaciones: CalificacionesAlumno;
+}
+
+/** Datos y resultados del alumno; sin periodo, los del más reciente con resultados. */
+export function obtenerResumenAlumno(id: number, periodo?: string): Promise<ResumenAlumnoAdmin> {
+  const qs = periodo ? `?periodo=${encodeURIComponent(periodo)}` : '';
+  return apiFetch<ResumenAlumnoAdmin>(`${URL_BASE}/${id}/resumen${qs}`);
+}
+
+/** Datos del alta de un alumno por el administrador. */
+export interface NuevoAlumno {
+  nombre: string;
+  apellido_paterno: string;
+  apellido_materno: string;
+  sin_apellido_materno: boolean;
+  correo_personal: string;
+  correo_institucional: string | null;
+  numero_cuenta: string | null;
+  numero_folio: string | null;
+  ingenieria_id: number;
+  periodo_ingreso: string;
+}
+
+export function agregarAlumno(datos: NuevoAlumno): Promise<AlumnoAdmin> {
+  return apiFetch<AlumnoAdmin>(URL_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(datos),
+  });
+}
+
 /** Indica que la pareja no es la misma persona: deja de salir en posibles duplicados. */
 export function descartarDuplicado(alumnoId: number, otroId: number): Promise<void> {
   return apiFetch<void>(`${URL_BASE}/duplicados/descartar`, {

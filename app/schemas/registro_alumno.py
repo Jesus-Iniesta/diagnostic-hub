@@ -61,6 +61,17 @@ class RegistroAlumnoCreate(RegistroAlumnoBase):
     pass
 
 
+class AltaAlumnoAdmin(RegistroAlumnoBase):
+    """Alta desde el panel del administrador. Las preguntas del formulario
+    (internet, computadora, foráneo, vulnerabilidad) las contesta el alumno
+    cuando entra; aquí son opcionales."""
+
+    tiene_internet: bool | None = None
+    tiene_computadora: bool | None = None
+    es_foraneo: bool | None = None
+    vulnerabilidad_economica: bool | None = None
+
+
 class RegistroAlumnoUpdate(BaseModel):
     # --- Datos personales (User) ---
     nombre: str | None = Field(default=None, min_length=1)
