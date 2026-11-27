@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
 from app.core import audit, rate_limit, token_blocklist
+from app.core.portales import portal_incorrecto, rol_permitido, validar_portal
 from app.core.password_policy import validar_password
 from app.core.config import settings
 from app.core.security import (
@@ -35,9 +36,12 @@ class TokenLoginForm:
         self,
         username: str = Form(),
         password: str = Form(default=""),
+        # Pantalla de inicio de sesión desde la que se entra (ver app.core.portales).
+        portal: str | None = Form(default=None),
     ):
         self.username = username
         self.password = password
+        self.portal = validar_portal(portal)
 
 
 def _set_auth_cookie(response: Response, token: str) -> None:
@@ -52,11 +56,7 @@ def _set_auth_cookie(response: Response, token: str) -> None:
     )
 
 
-async def _token_por_numero_cuenta(
-    repo: UserRepository,
-    numero: str,
-    response: Response | None = None,
-) -> User:
+async def _alumno_por_numero_cuenta(repo: UserRepository, numero: str) -> User:
     alumno = await repo.get_alumno_por_numero_cuenta(numero)
     if not alumno or not alumno.usuario:
         # Misma respuesta que cualquier otro fallo: no revela si la cuenta existe.
@@ -69,11 +69,15 @@ async def _token_por_numero_cuenta(
         raise invalid_credentials()
     if user.auth_method != AuthMethod.NUMERO_CUENTA:
         raise invalid_credentials()
-
-    token = create_access_token(sub=str(user.id))
-    if response is not None:
-        _set_auth_cookie(response, token)
     return user
+
+
+def _iniciar_sesion(user: User, response: Response) -> None:
+    """Crea el token y lo deja en la cookie. Administrador con MFA: la sesión
+    nace sin verificar hasta que dé su código."""
+    con_mfa = _es_admin(user) and bool(user.mfa_secret)
+    token = create_access_token(sub=str(user.id), mfa_verificado=False if con_mfa else None)
+    _set_auth_cookie(response, token)
 
 
 def _es_admin(user: User) -> bool:
@@ -99,22 +103,30 @@ async def login_token(
     ip = rate_limit.ip_cliente(request)
     _verificar_intento(ip, form_data.username)
     try:
-        user = await _login_token(form_data, db, response)
+        user = await _autenticar(form_data, UserRepository(db))
     except HTTPException as exc:
         if exc.status_code == 401:
             rate_limit.registrar_fallo(form_data.username)
             audit.registrar_acceso("login", "fallo", None, form_data.username, ip)
         raise
+
+    # La sesión solo se crea si el rol corresponde a la pantalla de inicio de sesión.
+    rol = user.role.name if user.role else None
+    if not rol_permitido(form_data.portal, rol):
+        audit.registrar_acceso("login", "portal_incorrecto", rol, form_data.username, ip)
+        if user.auth_method == AuthMethod.NUMERO_CUENTA:
+            # Sin contraseña de por medio no se confirma que el número de cuenta existe.
+            raise invalid_credentials()
+        raise portal_incorrecto(rol)
+
+    _iniciar_sesion(user, response)
     rate_limit.registrar_exito(form_data.username)
     audit.registrar_acceso("login", "exito", user.role.name, form_data.username, ip)
     return SessionResponse(mfa_requerido=_es_admin(user) and bool(user.mfa_secret))
 
 
-async def _login_token(
-    form_data: TokenLoginForm, db: AsyncSession, response: Response
-) -> User:
-    repo = UserRepository(db)
-
+async def _autenticar(form_data: TokenLoginForm, repo: UserRepository) -> User:
+    """Valida las credenciales sin crear la sesión."""
     user = await repo.get_user_for_login(form_data.username)
     if user is not None:
         if user.auth_method == AuthMethod.NUMERO_CUENTA:
@@ -125,14 +137,9 @@ async def _login_token(
             raise invalid_credentials()
         if not user.activo:
             raise invalid_credentials()
-
-        # Administrador con MFA: la sesión nace sin verificar hasta que dé su código.
-        con_mfa = _es_admin(user) and bool(user.mfa_secret)
-        token = create_access_token(sub=str(user.id), mfa_verificado=False if con_mfa else None)
-        _set_auth_cookie(response, token)
         return user
 
-    return await _token_por_numero_cuenta(repo, form_data.username, response)
+    return await _alumno_por_numero_cuenta(repo, form_data.username)
 
 
 @router.post("/numero-cuenta", response_model=SessionResponse, summary="Login del alumno por número de cuenta")
@@ -146,14 +153,13 @@ async def login_numero_cuenta(
     _verificar_intento(ip, payload.numero_cuenta)
     repo = UserRepository(db)
     try:
-        user = await _token_por_numero_cuenta(
-            repo, payload.numero_cuenta, response
-        )
+        user = await _alumno_por_numero_cuenta(repo, payload.numero_cuenta)
     except HTTPException as exc:
         if exc.status_code == 401:
             rate_limit.registrar_fallo(payload.numero_cuenta)
             audit.registrar_acceso("login", "fallo", "alumno", payload.numero_cuenta, ip)
         raise
+    _iniciar_sesion(user, response)
     rate_limit.registrar_exito(payload.numero_cuenta)
     audit.registrar_acceso("login", "exito", user.role.name, payload.numero_cuenta, ip)
     return SessionResponse()

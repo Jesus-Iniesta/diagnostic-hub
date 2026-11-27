@@ -22,7 +22,7 @@ export default function MfaPage() {
   });
 
   if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/" replace />;
   if (!user.mfa_pendiente) return <Navigate to={roleHome(user.role.name)} replace />;
 
   const handleSubmit = form.onSubmit(async ({ codigo }) => {
@@ -76,7 +76,7 @@ export default function MfaPage() {
             component="button"
             type="button"
             className={classes.back}
-            onClick={() => void logout().then(() => navigate('/login'))}
+            onClick={() => void logout().then(() => navigate('/', { replace: true }))}
           >
             Cancelar y salir
           </Anchor>

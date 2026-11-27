@@ -21,8 +21,9 @@ export default function ProtectedRoute({ roles, children }: ProtectedRouteProps)
     );
   }
 
+  // Sin sesión (o al cerrarla) se vuelve al inicio, donde se elige el tipo de acceso.
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   // Administrador con MFA: primero debe dar su código.

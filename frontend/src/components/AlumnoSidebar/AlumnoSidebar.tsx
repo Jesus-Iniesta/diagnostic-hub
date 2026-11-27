@@ -46,7 +46,7 @@ export default function AlumnoSidebar({
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login?modo=alumno', { replace: true });
+    navigate('/', { replace: true });
   };
 
   return (

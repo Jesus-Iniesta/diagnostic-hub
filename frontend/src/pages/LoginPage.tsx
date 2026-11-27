@@ -2,13 +2,13 @@ import { Anchor, Divider, Text, Title } from '@mantine/core';
 import { IconArrowLeft, IconBuildingBank } from '@tabler/icons-react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 
-import LoginForm, { type LoginMode } from '../components/auth/LoginForm';
+import LoginForm from '../components/auth/LoginForm';
 import { useAuth } from '../contexts/AuthContext';
-import { roleHome } from '../lib/roles';
+import { roleHome, type Portal } from '../lib/roles';
 import classes from './LoginPage.module.css';
 
-function loginModeFromParams(value: string | null): LoginMode {
-  if (value === 'alumno') return 'alumno';
+function portalFromParams(value: string | null): Portal {
+  if (value === 'alumno' || value === 'institucional') return value;
   return 'profesor';
 }
 
@@ -17,32 +17,28 @@ type TitleConfig = {
   subtitle: string;
 };
 
-function titleConfigFromParams(value: string | null): TitleConfig {
-  if (value === 'alumno') {
-    return {
-      title: 'Acceso de alumnos',
-      subtitle: 'Ingresa con tu número de cuenta',
-    };
-  }
-  if (value === 'institucional') {
-    return {
-      title: 'Acceso institucional',
-      subtitle: 'Ingresa con tu cuenta institucional',
-    };
-  }
-  return {
+const TITULOS: Record<Portal, TitleConfig> = {
+  alumno: {
+    title: 'Acceso de alumnos',
+    subtitle: 'Ingresa con tu número de cuenta',
+  },
+  institucional: {
+    title: 'Acceso institucional',
+    subtitle: 'Ingresa con tu cuenta institucional',
+  },
+  profesor: {
     title: 'Acceso de profesor',
     subtitle: 'Ingresa con tu correo institucional y contraseña',
-  };
-}
+  },
+};
 
 export default function LoginPage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const rawModo = searchParams.get('modo') ?? searchParams.get('role');
-  const mode: LoginMode = loginModeFromParams(rawModo);
-  const config = titleConfigFromParams(rawModo);
+  const portal = portalFromParams(rawModo);
+  const config = TITULOS[portal];
 
   if (!loading && user) {
     return <Navigate to={roleHome(user.role.name)} replace />;
@@ -63,7 +59,7 @@ export default function LoginPage() {
         </Title>
         <Text className={classes.subtitle}>{config.subtitle}</Text>
 
-        <LoginForm key={rawModo ?? 'profesor'} mode={mode} />
+        <LoginForm key={portal} portal={portal} />
 
         <Divider className={classes.divider} />
         <div className={classes.backRow}>

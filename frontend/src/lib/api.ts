@@ -6,6 +6,7 @@ import {
   AUTH_TOKEN_URL,
 } from '../config';
 import type { User } from '../types';
+import type { Portal } from './roles';
 
 export class ApiError extends Error {
   status: number;
@@ -57,8 +58,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 export async function loginWithPassword(
   username: string,
   password: string,
+  portal: Portal,
 ): Promise<{ mfa_requerido: boolean }> {
-  const body = new URLSearchParams({ username, password });
+  const body = new URLSearchParams({ username, password, portal });
   return apiFetch<{ mfa_requerido: boolean }>(AUTH_TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

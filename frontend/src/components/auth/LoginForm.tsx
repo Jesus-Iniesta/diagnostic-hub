@@ -12,21 +12,20 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { ApiError, loginWithNumeroCuenta, loginWithPassword } from '../../lib/api';
-import { roleHome } from '../../lib/roles';
+import { roleHome, type Portal } from '../../lib/roles';
 import classes from './LoginForm.module.css';
-
-export type LoginMode = 'alumno' | 'profesor';
 
 const MENSAJE_ALUMNO_INCORRECTO = 'Número de cuenta o datos incorrectos';
 
 interface LoginFormProps {
-  mode?: LoginMode;
+  /** Pantalla desde la que se entra: el backend rechaza los roles que no le tocan. */
+  portal: Portal;
 }
 
-export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
+export default function LoginForm({ portal }: LoginFormProps) {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const esAlumno = mode === 'alumno';
+  const esAlumno = portal === 'alumno';
   const [error, setError] = useState<string | null>(null);
   // Tras un intento fallido del alumno se le ofrece registrarse, sin decir si
   // la cuenta existe o no.
@@ -57,7 +56,7 @@ export default function LoginForm({ mode = 'profesor' }: LoginFormProps) {
         if (esAlumno) {
           await loginWithNumeroCuenta(numeroCuenta);
         } else {
-          await loginWithPassword(username, password);
+          await loginWithPassword(username, password, portal);
         }
       });
       navigate(user.mfa_pendiente ? '/mfa' : roleHome(user.role.name), { replace: true });
