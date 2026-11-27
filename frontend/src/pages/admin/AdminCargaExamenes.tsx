@@ -624,10 +624,12 @@ function Dos({ a, b }: { a: ReactNode; b: ReactNode }) {
 interface ProcesarTodoProps {
   periodo: string;
   archivos: Record<string, ArchivoGuardado>;
+  /** Apagada en Configuración: el archivo de asistencia se ignora. */
+  usarAsistencia: boolean;
   onProcesado: () => void;
 }
 
-function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
+function ProcesarTodo({ periodo, archivos, usarAsistencia, onProcesado }: ProcesarTodoProps) {
   const [procesando, setProcesando] = useState(false);
   const [progreso, setProgreso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -651,14 +653,8 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
     setAviso(null);
   }, [periodo]);
 
-  // La asistencia solo se espera si el índice la usa (o si ya hay un archivo subido).
-  const [usarAsistencia, setUsarAsistencia] = useState(false);
-  useEffect(() => {
-    fetchIndiceFi(periodo)
-      .then((config) => setUsarAsistencia(config.usar_asistencia))
-      .catch(() => setUsarAsistencia(false));
-  }, [periodo]);
-  const examenes = TODOS_LOS_EXAMENES.filter((e) => e !== 'asistencia' || usarAsistencia || archivos[e]);
+  // La asistencia solo se espera y se procesa si el índice la usa.
+  const examenes = TODOS_LOS_EXAMENES.filter((e) => e !== 'asistencia' || usarAsistencia);
   const guardados = examenes.filter((e) => archivos[e]);
   const faltan = examenes.filter((e) => !archivos[e]);
 
@@ -784,7 +780,7 @@ function ProcesarTodo({ periodo, archivos, onProcesado }: ProcesarTodoProps) {
       )}
       {guardados.length === 0 && (
         <Alert color="gray" variant="light" radius="md" icon={<IconInfoCircle size={18} />}>
-          Aún no hay archivos guardados en {periodo}. Súbelos en los pasos 1 a 3.
+          Aún no hay archivos guardados en {periodo}. Súbelos en los pasos 1 a {usarAsistencia ? 4 : 3}.
         </Alert>
       )}
 
@@ -1066,7 +1062,29 @@ export default function AdminCargaExamenes() {
   const { periodo } = usePeriodo();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const activeTab: TabId = isTabId(tabParam) ? tabParam : 'cuestionario';
+
+  // Apagada en Configuración, la pestaña de asistencia no se muestra (null = aún cargando).
+  const [usarAsistencia, setUsarAsistencia] = useState<boolean | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    setUsarAsistencia(null);
+    fetchIndiceFi(periodo)
+      .then((config) => {
+        if (mounted) setUsarAsistencia(config.usar_asistencia);
+      })
+      .catch(() => {
+        if (mounted) setUsarAsistencia(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [periodo]);
+  const pasos = PASOS_CARGA.filter((p) => p.id !== 'asistencia' || usarAsistencia === true);
+  const tabs: TabId[] = [...pasos.map((p) => p.id), 'procesar'];
+  const pasoProcesar = pasos.length + 1;
+
+  const activeTab: TabId =
+    !isTabId(tabParam) || (tabParam === 'asistencia' && usarAsistencia === false) ? 'cuestionario' : tabParam;
 
   const [archivos, setArchivos] = useState<Record<string, ArchivoGuardado>>({});
   const [cargando, setCargando] = useState(false);
@@ -1131,7 +1149,7 @@ export default function AdminCargaExamenes() {
 
   const guardadosDe = (paso: PasoCarga) => paso.examenes.filter((e) => archivos[e.id]).length;
   const completo = (paso: PasoCarga) => guardadosDe(paso) === paso.examenes.length;
-  const lista = Object.values(archivos);
+  const lista = Object.values(archivos).filter((a) => a.examen !== 'asistencia' || usarAsistencia === true);
   const procesado = lista.length > 0 && lista.every((a) => a.procesado);
 
   return (
@@ -1154,7 +1172,7 @@ export default function AdminCargaExamenes() {
 
       <Tabs value={activeTab} onChange={irA} mt="lg">
         <Tabs.List>
-          {PASOS_CARGA.map((paso) => (
+          {pasos.map((paso) => (
             <Tabs.Tab
               key={paso.id}
               value={paso.id}
@@ -1167,11 +1185,11 @@ export default function AdminCargaExamenes() {
             value="procesar"
             leftSection={procesado ? <IconCircleCheck size={16} color="var(--mantine-color-green-6)" /> : <IconPlayerPlay size={16} />}
           >
-            5. Procesar todo
+            {pasoProcesar}. Procesar todo
           </Tabs.Tab>
         </Tabs.List>
 
-        {PASOS_CARGA.map((paso, i) => (
+        {pasos.map((paso, i) => (
           <Tabs.Panel key={paso.id} value={paso.id} pt="md">
             <Card className={classes.card} padding="xl" radius="lg">
               <Stack gap="lg">
@@ -1207,7 +1225,7 @@ export default function AdminCargaExamenes() {
                 </SimpleGrid>
 
                 <Group justify="flex-end">
-                  <Button rightSection={<IconArrowRight size={16} />} onClick={() => irA(TABS[i + 1])}>
+                  <Button rightSection={<IconArrowRight size={16} />} onClick={() => irA(tabs[i + 1])}>
                     Siguiente paso
                   </Button>
                 </Group>
@@ -1221,14 +1239,19 @@ export default function AdminCargaExamenes() {
             <Stack gap="lg">
               <div>
                 <Title order={3} className={classes.title}>
-                  Paso 5 · Procesar todo
+                  Paso {pasoProcesar} · Procesar todo
                 </Title>
                 <Text className={classes.subtitle}>
-                  Procesa los archivos guardados en orden (cuestionarios → finales → WebAssign → asistencia) y da una segunda vuelta
+                  Procesa los archivos guardados en orden (cuestionarios → finales → WebAssign{usarAsistencia ? ' → asistencia' : ''}) y da una segunda vuelta
                   para juntar a los alumnos que se registraron dos veces. Los alumnos que no existen se registran solos.
                 </Text>
               </div>
-              <ProcesarTodo periodo={periodo} archivos={archivos} onProcesado={cargarArchivos} />
+              <ProcesarTodo
+                periodo={periodo}
+                archivos={archivos}
+                usarAsistencia={usarAsistencia === true}
+                onProcesado={cargarArchivos}
+              />
             </Stack>
           </Card>
         </Tabs.Panel>

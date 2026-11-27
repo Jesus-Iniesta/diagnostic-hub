@@ -120,12 +120,17 @@ async def procesar_archivo(db: AsyncSession, periodo: str, examen: str) -> dict:
     from app.services.upload_diagnostico_service import procesar_examen_diagnostico
     from app.services.upload_webassign_service import procesar_webassign
 
+    from app.services.indice_fi_service import obtener_config
+
     periodo = _periodo(periodo)
     validar_examen(examen)
+    tipo, _, clave = examen.partition("_")
+    # Con la asistencia apagada su archivo se ignora (no se procesa).
+    if tipo == "asistencia" and not (await obtener_config(db, periodo.upper()))["usar_asistencia"]:
+        raise CargaPeriodoError("La asistencia está apagada en Configuración; actívala para procesar su archivo.")
     archivo = await _archivo(db, periodo, examen)
     archivo_id, contenido = archivo.id, archivo.contenido
 
-    tipo, _, clave = examen.partition("_")
     if tipo == "cuestionario":
         r = await procesar_cuestionario(db, contenido, int(clave), periodo)
     elif tipo == "final":
@@ -210,6 +215,8 @@ async def estado_periodo(db: AsyncSession, periodo: str) -> dict:
     # La asistencia solo cuenta como archivo esperado si el índice la usa.
     usar_asistencia = (await obtener_config(db, periodo.upper()))["usar_asistencia"]
     esperados = [a for a in archivos if usar_asistencia or a["examen"] != "asistencia"]
+    # Apagada, la asistencia se ignora también al ver si ya se procesó todo.
+    rows = [a for a in rows if usar_asistencia or a.examen != "asistencia"]
     procesado_en = max((a.procesado_en for a in rows if a.procesado_en), default=None)
     creani = await ConfiguracionRepository(db).get(CLAVE_CREANI.format(periodo))
     por_revisar = await contar_por_revisar(db, periodo)
