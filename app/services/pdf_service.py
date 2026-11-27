@@ -217,8 +217,8 @@ def generar_pdf_resultado(
     else:
         story.append(Paragraph("No trabajaste en WebAssign.", normal))
 
-    # Asistencia: solo sale si el administrador la tiene activa. Aún no se
-    # registra en el sistema, así que mientras valga 0 se muestra "—".
+    # Asistencia: solo sale si el administrador la tiene activa en Configuración.
+    # Viene del archivo de asistencia de Carga de exámenes; sin datos se muestra "—".
     asistencia = indice.get("asistencia") or {}
     if asistencia.get("usar"):
         story.append(Paragraph("Asistencia", h2))
