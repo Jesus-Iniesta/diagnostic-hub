@@ -16,6 +16,7 @@ import {
 import {
   IconAlertTriangle,
   IconCheck,
+  IconDownload,
   IconFileSpreadsheet,
   IconPlus,
   IconTrash,
@@ -25,6 +26,7 @@ import {
 import { useEffect, useState } from 'react';
 
 import IndiceAlumno from '../../components/IndiceAlumno/IndiceAlumno';
+import { useDescargaGrupoPdf } from '../../hooks/useDescargaGrupoPdf';
 import { aPorcentaje, colorCategoria } from '../../lib/categorias';
 import {
   fetchMisGrupos,
@@ -85,6 +87,7 @@ export default function ProfesorGrupo() {
   const [confirmando, setConfirmando] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  const { descargar: descargarPdf, descargando, error: errorPdf } = useDescargaGrupoPdf();
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
@@ -346,23 +349,44 @@ export default function ProfesorGrupo() {
                     )}
                   </Table.Td>
                   <Table.Td>
-                    <ActionIcon
-                      color="red"
-                      variant="subtle"
-                      aria-label={`Eliminar el grupo ${g.nombre}`}
-                      title="Eliminar grupo"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        pedirEliminarGrupo(g);
-                      }}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
+                    <Group gap={4} wrap="nowrap" justify="flex-end">
+                      <ActionIcon
+                        color="indigo"
+                        variant="subtle"
+                        aria-label={`Descargar PDF del grupo ${g.nombre}`}
+                        title="Descargar PDF del grupo"
+                        loading={descargando === g.id}
+                        disabled={g.total_alumnos === 0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void descargarPdf(g.id);
+                        }}
+                      >
+                        <IconDownload size={16} />
+                      </ActionIcon>
+                      <ActionIcon
+                        color="red"
+                        variant="subtle"
+                        aria-label={`Eliminar el grupo ${g.nombre}`}
+                        title="Eliminar grupo"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          pedirEliminarGrupo(g);
+                        }}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
+          {errorPdf && (
+            <Text size="sm" c="red" mt="sm" role="alert">
+              {errorPdf}
+            </Text>
+          )}
         </Card>
       )}
 

@@ -34,6 +34,17 @@ def orden_por_apellidos(alumno: Alumno) -> tuple[str, str, str]:
     )
 
 
+def ordenar_grupos(grupos: list[Grupo]) -> list[Grupo]:
+    """Periodo más reciente primero y, dentro de cada periodo, por nombre (A-Z)."""
+    por_nombre = sorted(grupos, key=lambda g: sin_acentos(g.nombre).casefold())
+    # sorted es estable: al ordenar por periodo se conserva el orden por nombre.
+    return sorted(
+        por_nombre,
+        key=lambda g: normalizar_periodo(g.periodo) or g.periodo or "",
+        reverse=True,
+    )
+
+
 def _orden_reciente(resultado: ResultadoDiagnostico) -> tuple:
     """Orden para elegir el examen final más reciente: por periodo (2026B >
     2026A > 2025B) y, si empatan o no tienen formato, por última actualización."""
@@ -59,7 +70,7 @@ class GrupoRepository:
         if periodo:
             stmt = stmt.where(Grupo.periodo == periodo)
         result = await self.db.execute(stmt)
-        return list(result.scalars().all())
+        return ordenar_grupos(list(result.scalars().all()))
 
     async def get(self, grupo_id: int) -> Grupo | None:
         result = await self.db.execute(

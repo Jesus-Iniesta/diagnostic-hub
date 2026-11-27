@@ -21,7 +21,8 @@ import { useNavigate } from 'react-router-dom';
 
 import StatCard from '../../components/StatCard/StatCard';
 import { fmtIndice } from '../../lib/categorias';
-import { descargarGrupoPdf, fetchResumenProfesor } from '../../lib/profesorApi';
+import { useDescargaGrupoPdf } from '../../hooks/useDescargaGrupoPdf';
+import { fetchResumenProfesor } from '../../lib/profesorApi';
 import { dashboardColors } from '../../theme/theme';
 import type { ResumenProfesor } from '../../types/profesor';
 import classes from './ProfesorHome.module.css';
@@ -30,8 +31,7 @@ export default function ProfesorHome() {
   const navigate = useNavigate();
   const [resumen, setResumen] = useState<ResumenProfesor | null>(null);
   const [loading, setLoading] = useState(true);
-  const [descargando, setDescargando] = useState<number | null>(null);
-  const [errorPdf, setErrorPdf] = useState<string | null>(null);
+  const { descargar: descargarPdf, descargando, error: errorPdf } = useDescargaGrupoPdf();
 
   useEffect(() => {
     let mounted = true;
@@ -49,18 +49,6 @@ export default function ProfesorHome() {
   }, []);
 
   const grupos = resumen?.grupos ?? [];
-
-  const descargarPdf = async (grupoId: number) => {
-    setDescargando(grupoId);
-    setErrorPdf(null);
-    try {
-      await descargarGrupoPdf(grupoId);
-    } catch (e) {
-      setErrorPdf(e instanceof Error ? e.message : 'No se pudo generar el PDF del grupo');
-    } finally {
-      setDescargando(null);
-    }
-  };
 
   return (
     <>

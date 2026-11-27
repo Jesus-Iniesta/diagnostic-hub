@@ -394,7 +394,7 @@ async def resumen_profesor(
                     [indices[a] for a in alumnos_por_grupo[g.id]]
                 ),
             }
-            for g in sorted(grupos, key=lambda g: (g.periodo, g.nombre), reverse=True)
+            for g in grupos
         ],
     )
 
