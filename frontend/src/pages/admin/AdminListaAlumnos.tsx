@@ -16,7 +16,7 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core';
-import { IconArrowsJoin, IconInfoCircle, IconPencil, IconSearch } from '@tabler/icons-react';
+import { IconArrowsJoin, IconInfoCircle, IconPencil, IconSearch, IconUserX } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -25,6 +25,7 @@ import { usePeriodo } from '../../contexts/PeriodoContext';
 import {
   editarDatosAlumno,
   listarAlumnosAdmin,
+  descartarDuplicado,
   listarDuplicados,
   type AlumnoAdmin,
   type FiltroAlumnos,
@@ -225,6 +226,22 @@ function ListaDuplicados({ periodo, busqueda, version, onUnir }: ListaDuplicados
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  // Clave de la pareja que se está descartando.
+  const [descartando, setDescartando] = useState<string | null>(null);
+
+  const descartar = async (p: ParejaDuplicada) => {
+    const clave = `${p.alumno.id}-${p.otro.id}`;
+    setDescartando(clave);
+    setError(null);
+    try {
+      await descartarDuplicado(p.alumno.id, p.otro.id);
+      setParejas((actuales) => actuales.filter((q) => q !== p));
+    } catch (err) {
+      setError(errorTexto(err, 'No se pudo descartar la pareja'));
+    } finally {
+      setDescartando(null);
+    }
+  };
 
   useEffect(() => {
     let vigente = true;
@@ -274,9 +291,21 @@ function ListaDuplicados({ periodo, busqueda, version, onUnir }: ListaDuplicados
             <Badge variant="light" color="yellow">
               {p.motivo}
             </Badge>
-            <Button size="xs" color="grape" leftSection={<IconArrowsJoin size={14} />} onClick={() => onUnir(p)}>
-              Unir
-            </Button>
+            <Group gap="xs">
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconUserX size={14} />}
+                loading={descartando === `${p.alumno.id}-${p.otro.id}`}
+                onClick={() => void descartar(p)}
+                title="Se llaman parecido pero son personas distintas: la pareja deja de salir aquí"
+              >
+                No son la misma persona
+              </Button>
+              <Button size="xs" color="grape" leftSection={<IconArrowsJoin size={14} />} onClick={() => onUnir(p)}>
+                Unir
+              </Button>
+            </Group>
           </Group>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <FichaAlumno alumno={p.alumno} />
@@ -412,7 +441,7 @@ export default function AdminListaAlumnos() {
           <SegmentedControl data={FILTROS} value={filtro} onChange={cambiarFiltro} style={{ alignSelf: 'flex-start' }} />
           {filtro === 'duplicados' && (
             <Text size="xs" c="dimmed">
-              Alumnos que pueden estar registrados dos veces, lado a lado. Si son la misma persona, presiona "Unir".
+              Alumnos que pueden estar registrados dos veces, lado a lado. Si son la misma persona, presiona "Unir"; si solo se llaman parecido, presiona "No son la misma persona" y la pareja ya no volverá a salir.
               Los que no tienen número de cuenta están en "Sin cuenta": se completan cuando el alumno se registra.
             </Text>
           )}

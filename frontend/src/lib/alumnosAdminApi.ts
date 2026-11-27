@@ -57,6 +57,15 @@ export function listarDuplicados(periodo?: string): Promise<ParejaDuplicada[]> {
   return apiFetch<ParejaDuplicada[]>(`${URL_BASE}/duplicados${qs}`);
 }
 
+/** Indica que la pareja no es la misma persona: deja de salir en posibles duplicados. */
+export function descartarDuplicado(alumnoId: number, otroId: number): Promise<void> {
+  return apiFetch<void>(`${URL_BASE}/duplicados/descartar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alumno_id: alumnoId, otro_id: otroId }),
+  });
+}
+
 export function editarDatosAlumno(
   id: number,
   datos: { numero_cuenta: string | null; numero_folio: string | null; ingenieria_id: number | null },

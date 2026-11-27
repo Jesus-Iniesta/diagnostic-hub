@@ -8,6 +8,7 @@ from app.services.alumnos_admin_service import (
     FILTROS,
     DatosAlumnoError,
     actualizar_datos,
+    descartar_duplicado,
     listar_alumnos,
     obtener_alumno,
     posibles_duplicados,
@@ -21,6 +22,11 @@ class DatosAlumnoPayload(BaseModel):
     numero_cuenta: str | None = None
     numero_folio: str | None = None
     ingenieria_id: int | None = None
+
+
+class DescartarDuplicadoPayload(BaseModel):
+    alumno_id: int
+    otro_id: int
 
 
 class UnirAlumnosPayload(BaseModel):
@@ -52,6 +58,24 @@ async def get_duplicados(
     _current_user: User = Depends(require_permission("administrar_sistema")),
 ):
     return await posibles_duplicados(db, periodo)
+
+
+@router.post(
+    "/duplicados/descartar",
+    status_code=204,
+    summary="Marcar que dos posibles duplicados no son la misma persona",
+)
+async def post_descartar_duplicado(
+    payload: DescartarDuplicadoPayload,
+    db: DbSession,
+    _current_user: User = Depends(require_permission("administrar_sistema")),
+) -> None:
+    try:
+        await descartar_duplicado(db, payload.alumno_id, payload.otro_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.patch("/{alumno_id}", summary="Editar cuenta, folio e ingeniería de un alumno")

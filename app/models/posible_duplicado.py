@@ -15,6 +15,10 @@ class PosibleDuplicado(Base):
     se parecen a los de otro alumno (ver emparejar_nombre.py). Salen en
     "Posibles duplicados" (lista de alumnos y "Por revisar") y en el Excel
     "Alumnos por revisar". Si se unen o se borra uno, la fila se borra sola.
+
+    Si el administrador indica que no son la misma persona (p. ej. se llaman
+    parecido), la pareja queda con `descartado_en` y ya no sale en la revisión;
+    la fila se conserva para que una carga posterior no la vuelva a marcar.
     """
 
     __tablename__ = "posible_duplicado"
@@ -30,3 +34,4 @@ class PosibleDuplicado(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, nullable=False
     )
+    descartado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

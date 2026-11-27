@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import io
+from datetime import datetime
+from itertools import combinations
 
 import openpyxl
 from openpyxl.styles import Font
@@ -358,21 +360,31 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
         clave = normalizar_nombre(_nombre(a.usuario))
         if clave:
             por_nombre.setdefault(clave, []).append(a)
-    duplicados = {a.id: a for grupo in por_nombre.values() if len(grupo) > 1 for a in grupo}
-    parejas: dict[frozenset, tuple[int, int, str]] = {}
-    for grupo in por_nombre.values():
-        for otro in grupo[1:]:
-            parejas[frozenset((grupo[0].id, otro.id))] = (grupo[0].id, otro.id, "Mismo nombre")
+    # Todas las parejas de cada nombre repetido: si se descarta una, las demás
+    # del mismo nombre siguen por revisar.
+    parejas: dict[frozenset, tuple[int, int, str]] = {
+        frozenset((x.id, y.id)): (x.id, y.id, "Mismo nombre")
+        for grupo in por_nombre.values()
+        for x, y in combinations(grupo, 2)
+    }
 
-    # Parejas marcadas al registrarse (datos que coincidían con dos provisionales,
-    # o mismo nombre que un provisional): salen las dos si alguna es del periodo.
+    # Parejas marcadas al registrarse o al cargar WebAssign: salen las dos si
+    # alguna es del periodo. Las descartadas por el administrador no salen.
     marcadas = (
         await db.execute(
-            select(PosibleDuplicado.alumno_id, PosibleDuplicado.otro_id, PosibleDuplicado.motivo)
+            select(
+                PosibleDuplicado.alumno_id,
+                PosibleDuplicado.otro_id,
+                PosibleDuplicado.motivo,
+                PosibleDuplicado.descartado_en,
+            )
         )
     ).all()
+    descartadas = {frozenset((a, b)) for a, b, _, descartado in marcadas if descartado}
+    activas = [(a, b, motivo) for a, b, motivo, descartado in marcadas if not descartado]
+
     faltan = {
-        i for a, b, _ in marcadas if {a, b} & por_id.keys() for i in (a, b)
+        i for a, b, _ in activas if {a, b} & por_id.keys() for i in (a, b)
     } - por_id.keys()
     extra: dict[int, Alumno] = {}
     if faltan:
@@ -380,12 +392,15 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
             await db.execute(_con_relaciones(select(Alumno).where(Alumno.id.in_(faltan))))
         ).scalars():
             extra[a.id] = a
-    for a, b, motivo in marcadas:
-        if {a, b} <= (por_id.keys() | extra.keys()):
-            for i in (a, b):
-                duplicados[i] = por_id.get(i) or extra[i]
+    conocidos = por_id | extra
+    for a, b, motivo in activas:
+        if {a, b} <= conocidos.keys():
             # La marca explica mejor el caso que "Mismo nombre".
             parejas[frozenset((a, b))] = (a, b, motivo)
+
+    for clave in descartadas:
+        parejas.pop(clave, None)
+    duplicados = {i: conocidos[i] for a, b, _ in parejas.values() for i in (a, b)}
 
     conds = [] if periodo is None else [FilaNoRegistrada.periodo == periodo]
     no_registradas = (await db.execute(select(FilaNoRegistrada).where(*conds))).scalars().all()
@@ -399,6 +414,34 @@ async def grupos_por_revisar(db: AsyncSession, periodo: str | None) -> dict:
         "sin_ingenieria": [a for a in alumnos if a.ingenieria_id is None],
         "no_registradas": no_registradas,
     }
+
+
+async def descartar_duplicado(db: AsyncSession, alumno_id: int, otro_id: int) -> None:
+    """El administrador indica que dos alumnos no son la misma persona (p. ej. se
+    llaman parecido): la pareja deja de salir en "Posibles duplicados".
+
+    Se guarda aunque la pareja solo saliera por tener el mismo nombre, y una
+    carga posterior no la vuelve a marcar. Lanza LookupError si falta un alumno.
+    """
+    if alumno_id == otro_id:
+        raise ValueError("Elige dos alumnos distintos")
+    encontrados = await db.scalar(
+        select(func.count()).select_from(Alumno).where(Alumno.id.in_((alumno_id, otro_id)))
+    )
+    if encontrados != 2:
+        raise LookupError("Alumno no encontrado")
+
+    pareja = await db.scalar(
+        select(PosibleDuplicado).where(
+            ((PosibleDuplicado.alumno_id == alumno_id) & (PosibleDuplicado.otro_id == otro_id))
+            | ((PosibleDuplicado.alumno_id == otro_id) & (PosibleDuplicado.otro_id == alumno_id))
+        )
+    )
+    if pareja is None:
+        pareja = PosibleDuplicado(alumno_id=alumno_id, otro_id=otro_id, motivo="Mismo nombre")
+        db.add(pareja)
+    pareja.descartado_en = datetime.now()
+    await db.commit()
 
 
 async def contar_por_revisar(db: AsyncSession, periodo: str) -> dict:
