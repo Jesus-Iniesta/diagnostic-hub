@@ -194,11 +194,13 @@ export default function AcreditadorHome() {
 
       {resumen && !cargando && (
         <>
-          <IndiceFiExplicacion
-            indice={resumen.indice}
-            maximo={resumen.maximo}
-            periodo={resumen.periodo}
-          />
+          {resumen.indice && (
+            <IndiceFiExplicacion
+              indice={resumen.indice}
+              maximo={resumen.maximo}
+              periodo={resumen.periodo}
+            />
+          )}
 
           <Card p="lg" radius="lg" className={`${classes.card} ${classes.cardTotal}`}>
             <Group justify="space-between" align="flex-start" wrap="wrap" mb="sm">

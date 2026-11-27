@@ -36,7 +36,8 @@ export interface ExplicacionIndice {
 export interface ResumenCreani {
   periodo: string;
   maximo: number;
-  indice: ExplicacionIndice;
+  /** Puede faltar si el backend es anterior a este campo. */
+  indice?: ExplicacionIndice;
   posibles_duplicados: number;
   total: ResumenGrupoCreani;
   carreras: ResumenCarrera[];
