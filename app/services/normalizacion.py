@@ -64,6 +64,12 @@ DOMINIOS_CORRECTOS: dict[str, str] = {
 }
 
 
+def sin_acentos(texto: str) -> str:
+    """'Hernández Núñez' -> 'Hernandez Nunez'."""
+    nfkd = unicodedata.normalize("NFKD", texto)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
 def normalizar_nombre(raw) -> str:
     """Normaliza un nombre: sin acentos, mayúsculas, sin comas/puntos/dígitos y con las palabras ordenadas."""
 

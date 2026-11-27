@@ -114,6 +114,30 @@ export async function fetchCreaniGrupo(
   return fetchJson<GrupoCreani>(`${API_BASE_URL}/profesor/grupos/${grupoId}/creani${params}`);
 }
 
+/** Nombre del archivo que manda el servidor en Content-Disposition. */
+function nombreArchivo(res: Response, porDefecto: string): string {
+  const match = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/);
+  return match?.[1] ?? porDefecto;
+}
+
+/** Descarga la lista del grupo en PDF (alumnos por apellidos con su Índice FI). */
+export async function descargarGrupoPdf(grupoId: number): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/profesor/grupos/${grupoId}/pdf`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('No se pudo generar el PDF del grupo');
+  }
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombreArchivo(res, `grupo_${grupoId}.pdf`);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export async function cargarAlumnosExcel(
   grupoId: number,
   file: File,

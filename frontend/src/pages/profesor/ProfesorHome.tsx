@@ -12,6 +12,7 @@ import {
 import {
   IconArrowRight,
   IconClipboardList,
+  IconDownload,
   IconUsers,
   IconUsersGroup,
 } from '@tabler/icons-react';
@@ -20,7 +21,7 @@ import { useNavigate } from 'react-router-dom';
 
 import StatCard from '../../components/StatCard/StatCard';
 import { fmtIndice } from '../../lib/categorias';
-import { fetchResumenProfesor } from '../../lib/profesorApi';
+import { descargarGrupoPdf, fetchResumenProfesor } from '../../lib/profesorApi';
 import { dashboardColors } from '../../theme/theme';
 import type { ResumenProfesor } from '../../types/profesor';
 import classes from './ProfesorHome.module.css';
@@ -29,6 +30,8 @@ export default function ProfesorHome() {
   const navigate = useNavigate();
   const [resumen, setResumen] = useState<ResumenProfesor | null>(null);
   const [loading, setLoading] = useState(true);
+  const [descargando, setDescargando] = useState<number | null>(null);
+  const [errorPdf, setErrorPdf] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -46,6 +49,18 @@ export default function ProfesorHome() {
   }, []);
 
   const grupos = resumen?.grupos ?? [];
+
+  const descargarPdf = async (grupoId: number) => {
+    setDescargando(grupoId);
+    setErrorPdf(null);
+    try {
+      await descargarGrupoPdf(grupoId);
+    } catch (e) {
+      setErrorPdf(e instanceof Error ? e.message : 'No se pudo generar el PDF del grupo');
+    } finally {
+      setDescargando(null);
+    }
+  };
 
   return (
     <>
@@ -111,17 +126,34 @@ export default function ProfesorHome() {
                     {fmtIndice(g.promedio_indice, resumen!.maximo)}
                   </Text>
                 </div>
-                <Button
-                  variant="light"
-                  color="indigo"
-                  rightSection={<IconArrowRight size={16} aria-hidden="true" />}
-                  onClick={() => navigate(`/profesor/resultados?grupo=${g.id}`)}
-                >
-                  Ver resultados
-                </Button>
+                <Group gap="xs">
+                  <Button
+                    variant="default"
+                    leftSection={<IconDownload size={16} aria-hidden="true" />}
+                    loading={descargando === g.id}
+                    disabled={descargando !== null && descargando !== g.id}
+                    onClick={() => void descargarPdf(g.id)}
+                    aria-label={`Descargar PDF del grupo ${g.nombre}`}
+                  >
+                    Descargar PDF
+                  </Button>
+                  <Button
+                    variant="light"
+                    color="indigo"
+                    rightSection={<IconArrowRight size={16} aria-hidden="true" />}
+                    onClick={() => navigate(`/profesor/resultados?grupo=${g.id}`)}
+                  >
+                    Ver resultados
+                  </Button>
+                </Group>
               </Group>
             ))}
           </Stack>
+          {errorPdf && (
+            <Text size="sm" c="red" mt="sm" role="alert">
+              {errorPdf}
+            </Text>
+          )}
         </Card>
       ) : (
         <Card className={classes.card} padding="xl" radius="lg" mt="xl">

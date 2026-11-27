@@ -240,3 +240,71 @@ def generar_pdf_resultado(
 
     doc.build(story)
     return buf.getvalue()
+
+
+def _fmt_porcentaje(valor: float | None) -> str:
+    """El índice va de 0 a 10 y se muestra en porcentaje, como en la app: 7.25 -> '72.5%'."""
+    if valor is None:
+        return "—"
+    return f"{round(valor * 10, 1):g}%"
+
+
+def generar_pdf_grupo(
+    grupo: str,
+    materia: str | None,
+    periodo: str | None,
+    promedio_indice: float | None,
+    alumnos: list[dict],
+) -> bytes:
+    """Lista del grupo para el profesor: alumnos por apellidos con su Índice FI y categoría."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter, title=f"Grupo {grupo}",
+        rightMargin=1.8 * cm, leftMargin=1.8 * cm, topMargin=1.6 * cm, bottomMargin=1.6 * cm,
+    )
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle(
+        "Titulo", parent=styles["Title"], fontSize=18, textColor=PRIMARY, leading=22, spaceAfter=4,
+    )
+    normal = ParagraphStyle(
+        "Normal", parent=styles["Normal"], fontSize=10, leading=13,
+        textColor=colors.HexColor("#333333"),
+    )
+    encabezado = ParagraphStyle("Encabezado", parent=normal, alignment=1)
+    celda = ParagraphStyle("Celda", parent=normal, fontSize=TABLA_FONT, leading=11)
+
+    titulo = f"Grupo {escape(grupo)}"
+    if materia:
+        titulo += f" · {escape(materia)}"
+    evaluados = sum(1 for a in alumnos if a["indice"] is not None)
+    resumen = (
+        f"{len(alumnos)} alumnos · {evaluados} evaluados · "
+        f"Índice FI promedio {_fmt_porcentaje(promedio_indice)}"
+    )
+
+    story = [Paragraph(titulo, h1)]
+    if periodo:
+        story.append(Paragraph(f"Periodo {escape(periodo)}", encabezado))
+    story += [Paragraph(resumen, encabezado), Spacer(1, 14)]
+
+    if alumnos:
+        rows = [["#", "Alumno", "No. de cuenta", "Ingeniería", "Índice FI", "Categoría"]]
+        for n, a in enumerate(alumnos, start=1):
+            rows.append([
+                str(n),
+                # Paragraph para que los nombres largos bajen de renglón.
+                Paragraph(escape(a["nombre"]), celda),
+                a["numero_cuenta"] or "—",
+                a["ingenieria_clave"] or "—",
+                _fmt_porcentaje(a["indice"]),
+                Paragraph(escape(a["categoria"] or "—"), celda),
+            ])
+        tabla = Table(rows, colWidths=[a * cm for a in (0.9, 6.4, 2.6, 2.1, 2.0, 4.0)],
+                      hAlign="LEFT", repeatRows=1)
+        tabla.setStyle(_estilo_tabla([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+        story.append(tabla)
+    else:
+        story.append(Paragraph("El grupo aún no tiene alumnos.", normal))
+
+    doc.build(story)
+    return buf.getvalue()

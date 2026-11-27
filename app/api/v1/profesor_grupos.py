@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import re
+
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.upload_utils import leer_archivo
 from app.api.deps import get_db
@@ -8,7 +11,11 @@ from app.core.security import get_current_user, require_permission
 from app.models.grupo import Grupo
 from app.models.materia import Materia
 from app.models.user import User
-from app.repositories.grupo_repository import GrupoRepository, nombre_propio
+from app.repositories.grupo_repository import (
+    GrupoRepository,
+    nombre_por_apellidos,
+    nombre_propio,
+)
 from app.repositories.materia_repository import MateriaRepository, limpiar_nombre_materia
 from app.schemas.grupo import (
     GrupoAlumnoAdd,
@@ -27,7 +34,8 @@ from app.services.indice_fi_service import (
     obtener_config,
     periodo_actual,
 )
-from app.services.normalizacion import normalizar_correo, normalizar_cuenta
+from app.services.normalizacion import normalizar_correo, normalizar_cuenta, sin_acentos
+from app.services.pdf_service import generar_pdf_grupo
 from app.services.reportes_service import resumen_creani_alumnos
 from app.services.upload_diagnostico_service import find_alumno, load_all_alumnos
 from app.services.upload_grupo_service import parse_profesor_excel
@@ -57,6 +65,13 @@ def _materia_nombre(grupo: Grupo) -> str:
 def _promedio_indice(indices: list[dict]) -> float | None:
     evaluados = [i["indice"] for i in indices if i["tiene_resultados"]]
     return round(sum(evaluados) / len(evaluados), 2) if evaluados else None
+
+
+def _nombre_archivo_pdf(grupo: Grupo) -> str:
+    """'grupo_02_Calculo_III_2026B.pdf': solo ASCII para el encabezado HTTP."""
+    partes = (f"grupo {grupo.nombre}", _materia_nombre(grupo), grupo.periodo)
+    texto = sin_acentos(" ".join(p for p in partes if p))
+    return re.sub(r"[^A-Za-z0-9]+", "_", texto).strip("_") + ".pdf"
 
 
 async def _periodo_grupo(db: AsyncSession, grupo_id: int) -> str:
@@ -154,20 +169,14 @@ async def eliminar_grupo(
     await db.commit()
 
 
-@router.get("/grupos/{grupo_id}/alumnos", response_model=list[GrupoAlumnoResponse])
-async def alumnos_grupo(
-    grupo_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    periodo: str | None = None,
+async def _filas_alumnos(
+    db: AsyncSession, alumnos: list, periodo: str | None
 ) -> list[GrupoAlumnoResponse]:
-    repo = GrupoRepository(db)
-    if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
-        raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
+    """Una fila por alumno con su Índice FI, en el orden recibido (por apellidos).
 
-    # Índice del periodo pedido o, si no se indica, el más reciente de cada
-    # alumno (el mismo que ve el alumno en su carta).
-    alumnos = await repo.get_alumnos(grupo_id)
+    Índice del periodo pedido o, si no se indica, el más reciente de cada
+    alumno (el mismo que ve el alumno en su carta).
+    """
     indices = await indices_alumnos(db, [a.id for a in alumnos], periodo)
     rows = []
     for alumno in alumnos:
@@ -176,11 +185,7 @@ async def alumnos_grupo(
         evaluado = indice["tiene_resultados"]
         rows.append(GrupoAlumnoResponse(
             alumno_id=alumno.id,
-            nombre=nombre_propio(
-                alumno.usuario.nombre,
-                alumno.usuario.apellido_paterno,
-                alumno.usuario.apellido_materno,
-            ),
+            nombre=nombre_por_apellidos(alumno.usuario),
             numero_cuenta=alumno.numero_cuenta or "",
             ingenieria_clave=alumno.ingenieria.clave if alumno.ingenieria else "",
             indice=indice["indice"] if evaluado else None,
@@ -200,8 +205,53 @@ async def alumnos_grupo(
                 if evaluado and indice["filas"][clave] is None
             ],
         ))
-    rows.sort(key=lambda r: r.nombre)
     return rows
+
+
+@router.get("/grupos/{grupo_id}/alumnos", response_model=list[GrupoAlumnoResponse])
+async def alumnos_grupo(
+    grupo_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    periodo: str | None = None,
+) -> list[GrupoAlumnoResponse]:
+    repo = GrupoRepository(db)
+    if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
+
+    return await _filas_alumnos(db, await repo.get_alumnos(grupo_id), periodo)
+
+
+@router.get("/grupos/{grupo_id}/pdf", summary="Descargar en PDF la lista del grupo con su Índice FI")
+async def grupo_pdf(
+    grupo_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    periodo: str | None = None,
+) -> Response:
+    repo = GrupoRepository(db)
+    if not await repo.is_profesor_of_grupo(current_user.id, grupo_id):
+        raise HTTPException(status_code=403, detail="No tienes acceso a este grupo")
+    grupo = await db.scalar(
+        select(Grupo).where(Grupo.id == grupo_id).options(selectinload(Grupo.materia))
+    )
+    if not grupo:
+        raise HTTPException(status_code=404, detail="Grupo no encontrado")
+
+    filas = await _filas_alumnos(db, await repo.get_alumnos(grupo_id), periodo)
+    evaluados = [f.indice for f in filas if f.indice is not None]
+    pdf_bytes = generar_pdf_grupo(
+        grupo=grupo.nombre,
+        materia=_materia_nombre(grupo),
+        periodo=periodo or grupo.periodo,
+        promedio_indice=round(sum(evaluados) / len(evaluados), 2) if evaluados else None,
+        alumnos=[f.model_dump() for f in filas],
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{_nombre_archivo_pdf(grupo)}"'},
+    )
 
 
 @router.post("/grupos/{grupo_id}/alumnos", status_code=201)

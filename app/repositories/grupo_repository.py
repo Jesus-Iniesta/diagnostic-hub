@@ -9,6 +9,8 @@ from app.models.grupo import Grupo
 from app.models.grupo_alumno import grupo_alumno
 from app.models.grupo_profesor import grupo_profesor
 from app.models.resultado_diagnostico import ResultadoDiagnostico
+from app.models.user import User
+from app.services.normalizacion import sin_acentos
 from app.services.upload_diagnostico_service import normalizar_periodo
 
 
@@ -16,6 +18,20 @@ def nombre_propio(*partes: str | None) -> str:
     """'FANNY', 'HERNÁNDEZ', 'LÓPEZ' -> 'Fanny Hernández López'."""
     palabras = " ".join(p for p in partes if p).split()
     return " ".join(w.capitalize() for w in palabras)
+
+
+def nombre_por_apellidos(usuario: User) -> str:
+    """Nombre como en las listas escolares: 'Hernández López Fanny'."""
+    return nombre_propio(usuario.apellido_paterno, usuario.apellido_materno, usuario.nombre)
+
+
+def orden_por_apellidos(alumno: Alumno) -> tuple[str, str, str]:
+    """Orden alfabético por apellido paterno, materno y nombre, sin distinguir acentos."""
+    u = alumno.usuario
+    return tuple(
+        sin_acentos(parte or "").casefold()
+        for parte in (u.apellido_paterno, u.apellido_materno, u.nombre)
+    )
 
 
 def _orden_reciente(resultado: ResultadoDiagnostico) -> tuple:
@@ -105,7 +121,7 @@ class GrupoRepository:
                 selectinload(Alumno.ingenieria),
             )
         )
-        return list(result.scalars().all())
+        return sorted(result.scalars().all(), key=orden_por_apellidos)
 
     async def add_alumno(self, grupo_id: int, alumno_id: int, periodo: str) -> bool:
         exists = await self.db.execute(

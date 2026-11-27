@@ -281,7 +281,6 @@ export default function ProfesorResultados() {
                           <Table.Tr>
                             <Table.Th>Alumno</Table.Th>
                             <Table.Th>Número de cuenta</Table.Th>
-                            <Table.Th>Examen final</Table.Th>
                             <Table.Th>Índice FI UAEMex</Table.Th>
                             <Table.Th>Categoría</Table.Th>
                           </Table.Tr>
@@ -301,9 +300,6 @@ export default function ProfesorResultados() {
                                 {alumno.nombre}
                               </Table.Td>
                               <Table.Td>{alumno.numero_cuenta}</Table.Td>
-                              <Table.Td>
-                                {alumno.examen_final != null ? alumno.examen_final.toFixed(2) : '—'}
-                              </Table.Td>
                               <Table.Td>
                                 <IndiceAlumno
                                   indice={alumno.indice}
